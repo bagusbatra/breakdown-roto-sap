@@ -163,3 +163,110 @@ membantu jika dijawab:
 - [ ] Cek apakah ada Web Dynpro/transaksi lain yang juga memproses
   `ZROTO_APP_HIST`/`ZROTO_REJ_HIST` (untuk tahu apakah tabel ini "milik"
   aplikasi ini sepenuhnya atau dipakai bersama report lain).
+
+## 6. Rekomendasi Tambahan & Catatan Lain
+
+Selain temuan teknis di §3, berikut hal-hal lain (keamanan, arsitektur,
+operasional) yang sebaiknya dicatat sebelum membangun fitur kategori PR
+berikutnya.
+
+### 6.1 Keamanan
+
+1. **CSRF / XSRF token untuk request `POST` (`PROCESS`)** — di kode tidak
+   terlihat ada pengiriman/validasi `X-CSRF-Token`. ICF SAP biasanya
+   memblokir POST tanpa token CSRF yang valid kecuali action di-exclude.
+   Perlu dicek di SICF service `zpr_rel_bsp` apakah CSRF protection
+   **dimatikan** untuk service ini (umum dilakukan untuk BSP lama), atau
+   apakah ada mekanisme lain. Untuk aplikasi baru, **sebaiknya aktifkan CSRF
+   protection** dan tambahkan fetch token di awal (`GET` dengan header
+   `X-CSRF-Token: Fetch`, lalu kirim balik di setiap `POST`).
+
+2. **Otorisasi hanya berbasis username hardcode (`KMI-BOD`)**, bukan
+   **authorization object** SAP (`AUTHORITY-CHECK`). Implikasi:
+   - Tidak ada Segregation of Duties (SoD) yang dikelola lewat role —
+     semua akses approve melekat ke 1 user/akun bersama (shared account?).
+   - Jika `KMI-BOD` adalah akun bersama (dipakai >1 orang), audit trail
+     `app_by`/`del_by` akan selalu menampilkan `KMI-BOD`, bukan individu
+     yang sebenarnya menekan tombol — ini bisa jadi **temuan audit/SOX**.
+   - Untuk fitur baru, pertimbangkan: (a) authorization object custom
+     (mis. `Z_PR_REL` dengan field plant/kategori), atau (b) tabel mapping
+     user → role approver per plant/kategori, agar `app_by`/`del_by`
+     mencatat user individu yang sebenarnya.
+
+3. **Tidak ada rate limiting / lock terhadap double-submit** — jika user
+   double-click Approve dengan cepat sebelum `lo` overlay muncul, berpotensi
+   kirim 2 request `PROCESS` untuk PR yang sama (BAPI sendiri kemungkinan
+   akan menolak yang kedua dengan `release_already_posted`, tapi tetap
+   menghasilkan 2 baris di `ZROTO_APP_HIST` jika tidak hati-hati — terkait
+   temuan §3.1).
+
+### 6.2 Logika Release Strategy (Multi-Level)
+
+- Kondisi pending saat ini (`FRGKZ='X' AND FRGZU=' '`) hanya valid untuk
+  **release strategy 1 level** (sekali tekan kode `P2`, langsung selesai).
+- Jika kategori PR baru memakai **release strategy multi-level** (misal
+  butuh kode `P1` dari Manager dulu, baru `P2` dari BOD), maka:
+  - PR yang **sudah di-approve sebagian** (`P1` sudah ditekan) akan punya
+    `FRGZU` **tidak lagi kosong** (berisi kode yang sudah ditekan), sehingga
+    **tidak akan muncul** di query `WHERE frgzu = ' '` — padahal PR tsb
+    justru **butuh approval BOD berikutnya**.
+  - Untuk kasus ini, gunakan field `FRGRE`/`FRGSX` (release indicator/group)
+    atau hasil `BAPI_PO_GETRELEASESTATES`/`BAPI_REQUISITION_GETRELSTATUS`
+    untuk menentukan apakah kode release **tertentu** (mis. `P2`) **belum**
+    ditekan untuk PR ini — bukan sekadar cek `FRGZU=' '`.
+
+### 6.3 Arsitektur & Maintainability
+
+1. **Single-file monolith** — `index.htm` (2065 baris) dan `main.htm`
+   (1011 baris) menggabungkan HTML+CSS+JS / semua action ABAP dalam satu
+   file. Untuk kategori PR baru, pertimbangkan:
+   - Pisahkan CSS/JS ke MIME object terpisah (`style.css`, `app.js`) agar
+     lebih mudah di-diff/di-review di git.
+   - Pisahkan tiap `action` ABAP ke **include/class method** terpisah
+     (mis. class `ZCL_PR_REL_<KATEGORI>` dengan method per action), supaya
+     `main.htm` hanya jadi router tipis.
+
+2. **JSON dibangun manual via `CONCATENATE`** — rawan salah escape (lihat
+   §3.5) dan sulit maintain saat field bertambah. Untuk implementasi baru,
+   pertimbangkan pakai `/ui2/cl_json=>serialize` (tersedia di NetWeaver 7.0
+   EHP2+) dengan struktur ABAP yang jelas, supaya escaping JSON otomatis dan
+   konsisten.
+
+3. **`ESTKZ_MAP` hanya ada di JS (`index.htm`)** — jika SAP customizing
+   menambah/mengubah kode `ESTKZ` (domain value), label di UI tidak akan
+   sinkron otomatis. Pertimbangkan ambil label dari tabel domain SAP
+   (`DD07T` untuk domain `ESTKZ`) via backend, atau minimal dokumentasikan
+   bahwa mapping ini perlu di-update manual jika domain berubah.
+
+4. **Semua label/teks UI hardcode Bahasa Indonesia** — jika nantinya
+   aplikasi dipakai user non-Indonesia (atau perlu multi-bahasa), perlu
+   ekstraksi string ke layer terpisah (mis. tabel teks `T100`-style atau
+   JSON i18n).
+
+5. **Tidak ada source code aplikasi BSP asli (development class/transport)
+   yang ikut di-clone** — folder `ZPR_REL_BSP` hanya berisi *hasil render*
+   (`index.htm`, `main.htm`, MIME). Untuk kerja kolaboratif via git,
+   pertimbangkan pakai **abapGit** untuk sinkronisasi source BSP
+   (page fragments, layout, scripts) supaya histori perubahan ABAP asli
+   ikut terlacak — bukan hanya hasil copy-paste.
+
+### 6.4 Operasional / Sebelum Go-Live Fitur Baru
+
+- Belum ada **automated test**. Sebelum go-live kategori PR baru,
+  siapkan minimal **checklist smoke test manual**:
+  - Login sebagai approver vs non-approver → cek visibility
+    checkbox/FAB.
+  - Approve 1 PR dengan banyak item, sebagian item sengaja dibuat gagal
+    release (mis. PR sudah direlease via transaksi lain) → cek isi
+    `ZROTO_APP_HIST` (terkait §3.1).
+  - Reject PR lalu cek `ZROTO_REJ_HIST` + pastikan PR benar hilang dari
+    daftar pending (`LOEKZ`).
+  - Uji search & filter dengan data yang mengandung karakter spesial
+    (`"`, `<`, `&`, koma) di `txz01`/`reason` → cek tidak merusak tampilan
+    (terkait §3.5).
+  - Uji currency selain IDR/USD (jika relevan) untuk validasi `fmtAmt`
+    (terkait §3.3).
+- Dokumentasikan **mapping plant ↔ kode** dan **mapping kategori ↔ BSART**
+  di satu tempat (mis. tabel di README) supaya saat menambah plant/kategori
+  baru, semua titik yang perlu diubah (frontend `PLANT_LABELS`, backend
+  `SELECT ... WHERE werks/bsart`) bisa di-checklist.
