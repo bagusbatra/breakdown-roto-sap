@@ -72,42 +72,42 @@ TYPES: BEGIN OF ty_uname_nm,
        END OF ty_uname_nm.
 
 TYPES: BEGIN OF ty_hist_rej,
-         banfn  TYPE zpr_rej_hist-banfn,
-         bnfpo  TYPE zpr_rej_hist-bnfpo,
-         werks  TYPE zpr_rej_hist-werks,
-         bsart  TYPE zpr_rej_hist-bsart,
-         txz01  TYPE zpr_rej_hist-txz01,
-         ernam  TYPE zpr_rej_hist-ernam,
-         erdat  TYPE zpr_rej_hist-erdat,
-         menge  TYPE zpr_rej_hist-menge,
-         meins  TYPE zpr_rej_hist-meins,
-         preis  TYPE zpr_rej_hist-preis,
-         peinh  TYPE zpr_rej_hist-peinh,
-         waers  TYPE zpr_rej_hist-waers,
-         ekgrp  TYPE zpr_rej_hist-ekgrp,
-         del_by TYPE zpr_rej_hist-del_by,
-         del_at TYPE zpr_rej_hist-del_at,
-         del_tm TYPE zpr_rej_hist-del_tm,
-         reason TYPE zpr_rej_hist-reason,
+         banfn  TYPE zroto_rej_hist-banfn,
+         bnfpo  TYPE zroto_rej_hist-bnfpo,
+         werks  TYPE zroto_rej_hist-werks,
+         bsart  TYPE zroto_rej_hist-bsart,
+         txz01  TYPE zroto_rej_hist-txz01,
+         ernam  TYPE zroto_rej_hist-ernam,
+         erdat  TYPE zroto_rej_hist-erdat,
+         menge  TYPE zroto_rej_hist-menge,
+         meins  TYPE zroto_rej_hist-meins,
+         preis  TYPE zroto_rej_hist-preis,
+         peinh  TYPE zroto_rej_hist-peinh,
+         waers  TYPE zroto_rej_hist-waers,
+         ekgrp  TYPE zroto_rej_hist-ekgrp,
+         del_by TYPE zroto_rej_hist-del_by,
+         del_at TYPE zroto_rej_hist-del_at,
+         del_tm TYPE zroto_rej_hist-del_tm,
+         reason TYPE zroto_rej_hist-reason,
        END OF ty_hist_rej.
 
 TYPES: BEGIN OF ty_hist_app,
-         banfn  TYPE zpr_app_hist-banfn,
-         bnfpo  TYPE zpr_app_hist-bnfpo,
-         werks  TYPE zpr_app_hist-werks,
-         bsart  TYPE zpr_app_hist-bsart,
-         txz01  TYPE zpr_app_hist-txz01,
-         ernam  TYPE zpr_app_hist-ernam,
-         erdat  TYPE zpr_app_hist-erdat,
-         menge  TYPE zpr_app_hist-menge,
-         meins  TYPE zpr_app_hist-meins,
-         preis  TYPE zpr_app_hist-preis,
-         peinh  TYPE zpr_app_hist-peinh,
-         waers  TYPE zpr_app_hist-waers,
-         ekgrp  TYPE zpr_app_hist-ekgrp,
-         app_by TYPE zpr_app_hist-app_by,
-         app_at TYPE zpr_app_hist-app_at,
-         app_tm TYPE zpr_app_hist-app_tm,
+         banfn  TYPE zroto_app_hist-banfn,
+         bnfpo  TYPE zroto_app_hist-bnfpo,
+         werks  TYPE zroto_app_hist-werks,
+         bsart  TYPE zroto_app_hist-bsart,
+         txz01  TYPE zroto_app_hist-txz01,
+         ernam  TYPE zroto_app_hist-ernam,
+         erdat  TYPE zroto_app_hist-erdat,
+         menge  TYPE zroto_app_hist-menge,
+         meins  TYPE zroto_app_hist-meins,
+         preis  TYPE zroto_app_hist-preis,
+         peinh  TYPE zroto_app_hist-peinh,
+         waers  TYPE zroto_app_hist-waers,
+         ekgrp  TYPE zroto_app_hist-ekgrp,
+         app_by TYPE zroto_app_hist-app_by,
+         app_at TYPE zroto_app_hist-app_at,
+         app_tm TYPE zroto_app_hist-app_tm,
        END OF ty_hist_app.
 
 DATA: lt_head      TYPE STANDARD TABLE OF ty_eban_head,
@@ -213,8 +213,8 @@ CASE lv_action.
 *======================================================================
     DATA: lv_is_app_s TYPE string.
     DATA: lt_sb_uniq  TYPE STANDARD TABLE OF eban,
-          lt_rj_uniq  TYPE STANDARD TABLE OF zpr_rej_hist,
-          lt_ra_uniq  TYPE STANDARD TABLE OF zpr_app_hist.
+          lt_rj_uniq  TYPE STANDARD TABLE OF zroto_rej_hist,
+          lt_ra_uniq  TYPE STANDARD TABLE OF zroto_app_hist.
     DATA: lv_sb_cnt      TYPE i,
           lv_s_1200_roto TYPE string,
           lv_s_1200_rsb7 TYPE string,
@@ -238,7 +238,7 @@ CASE lv_action.
 
     " History Reject Surabaya
     CLEAR lt_rj_uniq.
-    SELECT banfn FROM zpr_rej_hist
+    SELECT banfn FROM zroto_rej_hist
       INTO CORRESPONDING FIELDS OF TABLE lt_rj_uniq
       WHERE werks = '1200'.
     lv_rj_1200 = lines( lt_rj_uniq ).
@@ -247,7 +247,7 @@ CASE lv_action.
 
     " History Reject Semarang
     CLEAR lt_rj_uniq.
-    SELECT banfn FROM zpr_rej_hist
+    SELECT banfn FROM zroto_rej_hist
       INTO CORRESPONDING FIELDS OF TABLE lt_rj_uniq
       WHERE werks = '1300'.
     lv_rj_1300 = lines( lt_rj_uniq ).
@@ -256,7 +256,7 @@ CASE lv_action.
 
     " History Approve Surabaya
     CLEAR lt_ra_uniq.
-    SELECT banfn FROM zpr_app_hist
+    SELECT banfn FROM zroto_app_hist
       INTO CORRESPONDING FIELDS OF TABLE lt_ra_uniq
       WHERE werks = '1200'.
     lv_ra_1200 = lines( lt_ra_uniq ).
@@ -265,7 +265,7 @@ CASE lv_action.
 
     " History Approve Semarang
     CLEAR lt_ra_uniq.
-    SELECT banfn FROM zpr_app_hist
+    SELECT banfn FROM zroto_app_hist
       INTO CORRESPONDING FIELDS OF TABLE lt_ra_uniq
       WHERE werks = '1300'.
     lv_ra_1300 = lines( lt_ra_uniq ).
@@ -632,7 +632,7 @@ CASE lv_action.
     SELECT banfn bnfpo werks bsart txz01 ernam erdat
            menge meins preis peinh waers ekgrp
            del_by del_at del_tm reason
-      FROM zpr_rej_hist
+      FROM zroto_rej_hist
       INTO CORRESPONDING FIELDS OF TABLE lt_hist_rej
       WHERE werks = lv_werks
       ORDER BY del_at DESCENDING del_tm DESCENDING.
@@ -723,7 +723,7 @@ CASE lv_action.
     SELECT banfn bnfpo werks bsart txz01 ernam erdat
            menge meins preis peinh waers ekgrp
            app_by app_at app_tm
-      FROM zpr_app_hist
+      FROM zroto_app_hist
       INTO CORRESPONDING FIELDS OF TABLE lt_hist_app
       WHERE werks = lv_werks
       ORDER BY app_at DESCENDING app_tm DESCENDING.
@@ -905,9 +905,9 @@ CASE lv_action.
         CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
           EXPORTING wait = 'X'.
 
-        " Simpan ke ZPR_APP_HIST — hanya item yang sukses
+        " Simpan ke ZROTO_APP_HIST — hanya item yang sukses
         " release (fix §3.1, lihat development-to-roto.md §8.3)
-        DATA: ls_zapp TYPE zpr_app_hist.
+        DATA: ls_zapp TYPE zroto_app_hist.
         LOOP AT lt_items_ok INTO ls_item.
           CLEAR ls_zapp.
           ls_zapp-banfn  = ls_item-banfn.
@@ -926,7 +926,7 @@ CASE lv_action.
           ls_zapp-app_by = sy-uname.
           ls_zapp-app_at = sy-datum.
           ls_zapp-app_tm = sy-uzeit.
-          MODIFY zpr_app_hist FROM ls_zapp.
+          MODIFY zroto_app_hist FROM ls_zapp.
         ENDLOOP.
         COMMIT WORK AND WAIT.
 
@@ -949,7 +949,7 @@ CASE lv_action.
 *--- DELETE / REJECT ---------------------------------------------------
     ELSEIF lv_pr_action = 'delete'.
 
-      DATA: ls_zrej    TYPE zpr_rej_hist,
+      DATA: ls_zrej    TYPE zroto_rej_hist,
             lv_del_err TYPE string.
 
       " Fix §3.6 (development-to-roto.md §8.3): BAPI delete
@@ -995,7 +995,7 @@ CASE lv_action.
           ls_zrej-del_at = sy-datum.
           ls_zrej-del_tm = sy-uzeit.
           ls_zrej-reason = lv_notes.
-          MODIFY zpr_rej_hist FROM ls_zrej.
+          MODIFY zroto_rej_hist FROM ls_zrej.
         ENDLOOP.
         COMMIT WORK AND WAIT.
 

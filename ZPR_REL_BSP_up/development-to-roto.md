@@ -6,6 +6,26 @@ Mengembangkan aplikasi BSP yang bisa handle **2 kategori PR** (ROTO dan
 Jasa/RSB7) dalam satu aplikasi. Folder `ZPR_REL_BSP_up` adalah tempat
 pengembangan, di-copy manual ke SE80 saat deploy.
 
+## 1.1 Prinsip Pengembangan (REVISI 2026-06-12, mengacu `ZPO_REL_BSP`)
+
+Mengikuti standar fitur PO (`ZPO_REL_BSP`, sudah live multi kategori):
+
+1. **Fokus pada pengembangan & pemanfaatan BSP** — semua perubahan hidup
+   di dalam file BSP (`main.htm`/`index.htm`).
+2. **TIDAK mengubah konfigurasi SAP** — tidak buat tabel SE11 baru,
+   tidak ubah release strategy, tidak buat report/FM baru.
+3. **TIDAK mengubah ABAP backend di luar BSP** — manfaatkan objek yang
+   sudah ada (tabel `ZROTO_*_HIST` existing, BAPI standar).
+4. Konsekuensi: keputusan tabel `ZPR_APP_HIST`/`ZPR_REJ_HIST` **DIBATALKAN**
+   → kembali pakai **`ZROTO_APP_HIST`/`ZROTO_REJ_HIST` existing** (kolom
+   `BSART` sudah ada & sudah terisi `'ROTO'` — temuan Screening #1).
+   Tanpa SE11, tanpa migrasi, tanpa report `ZPR_MIGRATE_HIST`; seluruh
+   history lama langsung tampil.
+5. Pola `ZPO_REL_BSP` yang bisa diadopsi nanti (opsional, bukan iterasi
+   ini): kategori = array BSART di JS map (`POTYPE_MAP`-style), history
+   dgn filter rentang tanggal + paginasi server-side, alasan reject via
+   header text (`SAVE_TEXT`/`READ_TEXT`) sebagai alternatif tabel Z.
+
 ## 2. Pendekatan
 
 **Navigasi sidebar:** Setiap plant punya 4 menu:
@@ -27,7 +47,7 @@ di-bookmark/dibagikan (state kategori hidup di JS, `curBsart`).
 | Backend | ABAP scriptlet (`main.htm`) |
 | Komunikasi | `fetch()` → `main.htm?action=...&bsart=...` |
 | BAPI | `BAPI_REQUISITION_RELEASE`, `BAPI_REQUISITION_DELETE` |
-| Tabel history | **Unified** `ZPR_APP_HIST`, `ZPR_REJ_HIST` (+ kolom `bsart`) |
+| Tabel history | **Pakai ulang** `ZROTO_APP_HIST`, `ZROTO_REJ_HIST` existing (kolom `BSART` sudah ada — revisi §1.1) |
 | Deploy | Copy manual file ke SE80 (BSP aplikasi) |
 
 ## 4. Arsitektur
@@ -40,10 +60,10 @@ Browser (index.htm)
 main.htm (ABAP)
   │ SELECT EBAN WHERE bsart = lv_bsart AND ...
   │ CALL BAPI_REQUISITION_RELEASE / DELETE
-  │ MODIFY ZPR_APP_HIST / ZPR_REJ_HIST (isi bsart)
+  │ MODIFY ZROTO_APP_HIST / ZROTO_REJ_HIST (bsart dari item EBAN)
   ▼
 SAP Tables: EBAN, MAKT, USR21, ADRP,
-           ZPR_APP_HIST, ZPR_REJ_HIST
+           ZROTO_APP_HIST, ZROTO_REJ_HIST
 ```
 
 ## 5. Navigasi Sidebar (Baru)
@@ -69,7 +89,7 @@ Setiap plant punya badge jumlah pending per kategori.
 | Item | Sebelum (ROTO only) | Sesudah (Multi) |
 |------|---------------------|-----------------|
 | BSART | Hardcode `'ROTO'` | Parameter `lv_bsart` dari frontend |
-| Tabel history | `ZROTO_APP_HIST`, `ZROTO_REJ_HIST` | `ZPR_APP_HIST`, `ZPR_REJ_HIST` + kolom `bsart` |
+| Tabel history | `ZROTO_APP_HIST`, `ZROTO_REJ_HIST` (isi ROTO saja) | Tabel SAMA, kolom `bsart` existing mulai diisi per kategori (revisi §1.1) |
 | Sidebar per plant | 3 menu (PR, Hist App, Hist Rej) | 4 menu (+ PR Jasa) |
 | History | Hanya ROTO | ROTO + Jasa, ditandai kolom `bsart` |
 | Release code | `P2` | `P2` (sama) |
@@ -77,7 +97,12 @@ Setiap plant punya badge jumlah pending per kategori.
 | Plant | `1200`, `1300` | `1200`, `1300` (sama) |
 | Filter ESTKZ | MRP/Non-MRP | MRP/Non-MRP (sama) |
 
-## 7. Tabel Unified — Siap SE11
+## 7. ~~Tabel Unified — Siap SE11~~ (DIBATALKAN — lihat §1.1)
+
+> **SELURUH bagian §7 DIBATALKAN per revisi 2026-06-12.** Sesuai prinsip
+> "tanpa perubahan konfigurasi", tidak ada tabel baru & tidak ada
+> migrasi — pakai `ZROTO_APP_HIST`/`ZROTO_REJ_HIST` existing (kolom
+> `BSART` sudah ada & terisi). Konten di bawah dibiarkan sebagai arsip.
 
 ### ZPR_APP_HIST
 
@@ -127,9 +152,9 @@ Sama seperti ZPR_APP_HIST + kolom berikut:
 REPORT zpr_migrate_hist.
 
 DATA: lt_app_old TYPE STANDARD TABLE OF zroto_app_hist,
-      lt_app_new TYPE STANDARD TABLE OF zpr_app_hist,
+      lt_app_new TYPE STANDARD TABLE OF zroto_app_hist,
       ls_app_old TYPE zroto_app_hist,
-      ls_app_new TYPE zpr_app_hist.
+      ls_app_new TYPE zroto_app_hist.
 
 SELECT * FROM zroto_app_hist INTO TABLE lt_app_old.
 LOOP AT lt_app_old INTO ls_app_old.
@@ -140,11 +165,11 @@ LOOP AT lt_app_old INTO ls_app_old.
   ENDIF.
   APPEND ls_app_new TO lt_app_new.
 ENDLOOP.
-MODIFY zpr_app_hist FROM TABLE lt_app_new.
+MODIFY zroto_app_hist FROM TABLE lt_app_new.
 WRITE: / 'APP_HIST:', lines( lt_app_old ), '->', sy-dbcnt.
 
 " Blok yang sama untuk reject:
-" zroto_rej_hist -> zpr_rej_hist (ikut copy del_by/del_at/del_tm/reason)
+" zroto_rej_hist -> zroto_rej_hist (ikut copy del_by/del_at/del_tm/reason)
 
 COMMIT WORK.
 ```
@@ -190,17 +215,17 @@ history tetap satu angka per plant (gabungan semua kategori):
 | TYPES ty_hist_app | Tambah field `bsart TYPE bsart` |
 | TYPES ty_hist_rej | Tambah field `bsart TYPE bsart` |
 | GET_SIDEBAR | SELECT EBAN: `WHERE bsart = lv_bsart AND ...` (2x SELECT untuk tiap plant, untuk tiap kategori) |
-| GET_SIDEBAR | SELECT `zpr_app_hist` tanpa filter bsart (jumlah semua) |
-| GET_SIDEBAR | SELECT `zpr_rej_hist` tanpa filter bsart (jumlah semua) |
+| GET_SIDEBAR | SELECT `zroto_app_hist` tanpa filter bsart (jumlah semua) |
+| GET_SIDEBAR | SELECT `zroto_rej_hist` tanpa filter bsart (jumlah semua) |
 | GET_LIST | `WHERE bsart = lv_bsart AND ...` |
-| GET_HIST_APP | SELECT dari `zpr_app_hist` (tanpa filter bsart, tampil semua) |
-| GET_HIST_REJ | SELECT dari `zpr_rej_hist` (tanpa filter bsart, tampil semua) |
+| GET_HIST_APP | SELECT dari `zroto_app_hist` (tanpa filter bsart, tampil semua) |
+| GET_HIST_REJ | SELECT dari `zroto_rej_hist` (tanpa filter bsart, tampil semua) |
 | GET_HIST_APP | Tambah `bsart` ke output JSON: `'"bsart":"' ls_hist_app-bsart '",'` (sumber kolom "Kategori") |
 | GET_HIST_REJ | Tambah `bsart` ke output JSON: `'"bsart":"' ls_hist_rej-bsart '",'` (sumber kolom "Kategori") |
 | TYPES ty_eban_item | Tambah field `bsart TYPE eban-bsart` (aman — semua SELECT existing sebut field eksplisit) |
 | PROCESS (select item) | Tambah `bsart` ke daftar field SELECT item EBAN |
-| PROCESS approve | `MODIFY zpr_app_hist` dengan `bsart = ls_item-bsart` (dari EBAN, ganti hardcode `'ROTO'` di ~line 901 — JANGAN pakai `lv_bsart` dari frontend) |
-| PROCESS reject | `MODIFY zpr_rej_hist` dengan `bsart = ls_item-bsart` (dari EBAN, ganti hardcode `'ROTO'` di ~line 944) |
+| PROCESS approve | `MODIFY zroto_app_hist` dengan `bsart = ls_item-bsart` (dari EBAN, ganti hardcode `'ROTO'` di ~line 901 — JANGAN pakai `lv_bsart` dari frontend) |
+| PROCESS reject | `MODIFY zroto_rej_hist` dengan `bsart = ls_item-bsart` (dari EBAN, ganti hardcode `'ROTO'` di ~line 944) |
 
 ### 8.2 `index.htm` — Frontend
 
@@ -223,9 +248,9 @@ Keputusan 2026-06-12 atas temuan `notes/investigation.md` §3:
 
 | Bug | Keputusan | Perbaikan |
 |-----|-----------|-----------|
-| §3.1 History approve mencatat semua item walau sebagian gagal release | **Fix** | Tandai per item saat loop `BAPI_REQUISITION_RELEASE`; tulis ke `zpr_app_hist` hanya item yang sukses |
+| §3.1 History approve mencatat semua item walau sebagian gagal release | **Fix** | Tandai per item saat loop `BAPI_REQUISITION_RELEASE`; tulis ke `zroto_app_hist` hanya item yang sukses |
 | §3.5 XSS/quote-bug: `JSON.stringify(data)` ditanam ke atribut `oninput` di `renderHistTable` | **Fix** | Simpan data history ke variabel JS global (mis. `histData`), `oninput` cukup panggil `onHistSearch(this.value)` tanpa membawa data |
-| §3.6 Reject tidak transaksional (history di-commit sebelum BAPI delete) | **Fix** | Balik urutan: `BAPI_REQUISITION_DELETE` dulu → jika tidak ada error type `E`, baru tulis history + satu `COMMIT WORK` → rollback manual `DELETE FROM zpr_rej_hist` tidak diperlukan lagi |
+| §3.6 Reject tidak transaksional (history di-commit sebelum BAPI delete) | **Fix** | Balik urutan: `BAPI_REQUISITION_DELETE` dulu → jika tidak ada error type `E`, baru tulis history + satu `COMMIT WORK` → rollback manual `DELETE FROM zroto_rej_hist` tidak diperlukan lagi |
 | §3.2 Pesan error approve hanya item terakhir | **Ditunda** | Tetap perilaku lama; kandidat iterasi berikutnya |
 
 ## 9. Task Checklist
@@ -241,29 +266,31 @@ Keputusan 2026-06-12 atas temuan `notes/investigation.md` §3:
 
 ### ⏳ Persiapan di SAP
 - [x] ~~[BLOCKER]~~ **TERVERIFIKASI 2026-06-12 (oleh user, langsung di SAP):** strategi release RSB7 = **single-level** (hanya `P2`) → kriteria pending `FRGKZ='X' AND FRGZU=' '` valid untuk RSB7. Kontinjensi multi-level di §12 tidak diperlukan.
-- [ ] Buat tabel `ZPR_APP_HIST` di SE11 (gambar struktur di atas)
-- [ ] Buat tabel `ZPR_REJ_HIST` di SE11
-- [ ] Aktivasi tabel + generate maintenance dialog (opsional)
-- [ ] Buat report `ZPR_MIGRATE_HIST` (lihat §7) di SE38
-- [ ] Jalankan migrasi `ZROTO_*_HIST` → `ZPR_*_HIST` + verifikasi row count (output report)
+- [x] ~~Buat tabel `ZPR_APP_HIST`/`ZPR_REJ_HIST` di SE11~~ **DIBATALKAN** (revisi §1.1 — pakai `ZROTO_*` existing)
+- [x] ~~Buat & jalankan report migrasi `ZPR_MIGRATE_HIST`~~ **DIBATALKAN** (tidak ada migrasi)
+- [ ] (Disarankan, read-only — bukan perubahan config) *Where-Used List* `ZROTO_APP_HIST`/`ZROTO_REJ_HIST` di SE11: pastikan tidak ada report lain yang baca tabel ini dengan asumsi isinya hanya ROTO
 
 ### ✅ Coding — `main.htm` (SELESAI 2026-06-12)
 - [x] Update TYPES (`ty_hist_app`, `ty_hist_rej`) — referensi tabel diganti ke `zpr_*_hist` (field `bsart` memang sudah ada)
 - [x] Validasi `lv_bsart` di branch **GET_LIST** saja: kosong → `'ROTO'`; selain `ROTO`/`RSB7` → error `{"status":"E","message":"bsart tidak valid"}` (jangan default global)
 - [x] **GET_SIDEBAR**: pending per kategori via macro `count_pending` (4x: 2 plant × 2 kategori), JSON sesuai §8.0
-- [x] **GET_SIDEBAR**: ganti `zroto_app_hist` → `zpr_app_hist` (tanpa filter bsart)
-- [x] **GET_SIDEBAR**: ganti `zroto_rej_hist` → `zpr_rej_hist` (tanpa filter bsart)
+- [x] **GET_SIDEBAR**: ganti `zroto_app_hist` → `zroto_app_hist` (tanpa filter bsart)
+- [x] **GET_SIDEBAR**: ganti `zroto_rej_hist` → `zroto_rej_hist` (tanpa filter bsart)
 - [x] **GET_LIST**: `WHERE bsart = lv_bsart`
-- [x] **GET_HIST_APP**: SELECT dari `zpr_app_hist` (tanpa filter bsart)
-- [x] **GET_HIST_REJ**: SELECT dari `zpr_rej_hist` (tanpa filter bsart)
+- [x] **GET_HIST_APP**: SELECT dari `zroto_app_hist` (tanpa filter bsart)
+- [x] **GET_HIST_REJ**: SELECT dari `zroto_rej_hist` (tanpa filter bsart)
 - [x] **GET_HIST_APP**: tambah `bsart` ke output JSON (`'"bsart":"' ls_hist_app-bsart '",'`)
 - [x] **GET_HIST_REJ**: tambah `bsart` ke output JSON (`'"bsart":"' ls_hist_rej-bsart '",'`)
 - [x] **TYPES `ty_eban_item`**: tambah field `bsart TYPE eban-bsart`
 - [x] **PROCESS**: tambah `bsart` ke SELECT item EBAN
-- [x] **PROCESS approve**: `MODIFY zpr_app_hist` + isi `bsart = ls_item-bsart` (dari EBAN, bukan param frontend)
+- [x] **PROCESS approve**: `MODIFY zroto_app_hist` + isi `bsart = ls_item-bsart` (dari EBAN, bukan param frontend)
 - [x] **PROCESS approve**: history hanya item sukses release — item sukses dikumpulkan ke `lt_items_ok` (§8.3 / bug §3.1)
-- [x] **PROCESS reject**: `MODIFY zpr_rej_hist` + isi `bsart = ls_item-bsart` (dari EBAN, bukan param frontend)
+- [x] **PROCESS reject**: `MODIFY zroto_rej_hist` + isi `bsart = ls_item-bsart` (dari EBAN, bukan param frontend)
 - [x] **PROCESS reject**: balik urutan — BAPI delete dulu, sukses baru tulis history + 1 commit (`ls_zrej`); rollback manual & `DELETE FROM` dihapus (§8.3 / bug §3.6)
+
+### ✅ Revisi Coding — `main.htm` (revert tabel, revisi §1.1 — SELESAI 2026-06-12)
+- [x] Ganti SEMUA referensi tabel `ZPR_*_HIST` kembali ke `ZROTO_*_HIST` (TYPES, DATA, SELECT, MODIFY); logic lain TIDAK berubah
+- [x] Self-review: nol sisa `zpr_` di file (verifikasi grep)
 
 ### ✅ Coding — `index.htm` (SELESAI 2026-06-12)
 - [x] Tambah konstanta `PR_CATEGORIES` (label/short/icon per kategori) + helper `getBsartLabel()`
@@ -283,10 +310,10 @@ Keputusan 2026-06-12 atas temuan `notes/investigation.md` §3:
 - [ ] Sidebar: badge pending ROTO vs RSB7 terpisah
 - [ ] Klik PR One Time Off → tampil PR ROTO saja
 - [ ] Klik PR Jasa → tampil PR RSB7 saja
-- [ ] Approve PR ROTO → masuk `ZPR_APP_HIST` dgn `bsart='ROTO'`
-- [ ] Approve PR Jasa → masuk `ZPR_APP_HIST` dgn `bsart='RSB7'`
-- [ ] Reject PR ROTO → masuk `ZPR_REJ_HIST` dgn `bsart='ROTO'`
-- [ ] Reject PR Jasa → masuk `ZPR_REJ_HIST` dgn `bsart='RSB7'`
+- [ ] Approve PR ROTO → masuk `ZROTO_APP_HIST` dgn `bsart='ROTO'`
+- [ ] Approve PR Jasa → masuk `ZROTO_APP_HIST` dgn `bsart='RSB7'`
+- [ ] Reject PR ROTO → masuk `ZROTO_REJ_HIST` dgn `bsart='ROTO'`
+- [ ] Reject PR Jasa → masuk `ZROTO_REJ_HIST` dgn `bsart='RSB7'`
 - [ ] History Approve: tampil data ROTO + Jasa, kolom kategori terbaca
 - [ ] History Reject: tampil data ROTO + Jasa, kolom kategori terbaca
 - [ ] Search/filter history masih berfungsi
@@ -296,25 +323,19 @@ Keputusan 2026-06-12 atas temuan `notes/investigation.md` §3:
 - [ ] Reason reject berisi tanda kutip `"` / `<` / `&` → tampilan & search history tidak rusak (§8.3)
 - [ ] `GET_LIST` dengan `bsart=NB` (manual via URL) → return error, bukan data (§8.1 whitelist)
 
-## 10. Urutan Cutover (Deploy + Migrasi)
+## 10. Urutan Cutover (Deploy) — DISEDERHANAKAN (revisi §1.1)
 
-Aplikasi lama terus menulis ke `ZROTO_*_HIST` sampai file baru ter-deploy —
-migrasi yang dijalankan sebelum deploy akan kehilangan transaksi di
-antaranya. Urutan wajib:
+Tanpa tabel baru & tanpa migrasi, cutover tinggal deploy file:
 
-1. **Kapan saja sebelum cutover:** buat & aktivasi tabel `ZPR_*` (SE11),
-   buat report `ZPR_MIGRATE_HIST` (SE38), selesaikan verifikasi RSB7
-   (blocker di §9 Persiapan). Tabel kosong tidak mengganggu aplikasi lama.
-2. **Sesi cutover** (saat BOD tidak sedang memproses PR):
-   1. **Deploy dulu** — copy `index.htm` + `main.htm` ke SE80.
-      Sejak ini semua tulisan masuk `ZPR_*`; `ZROTO_*` beku.
-   2. **Baru jalankan `ZPR_MIGRATE_HIST`** — sumber sudah beku, tidak ada
-      transaksi nyelip. (Jika urutan terlanjur terbalik: jalankan ulang
-      report setelah deploy — idempotent.)
-   3. **Verifikasi:** row count dari output report + buka UI History
-      (data lama tampil) + smoke test approve 1 PR.
-3. **`ZROTO_*` jangan langsung di-drop** — arsip read-only 2–4 minggu
-   sebagai pembanding, baru di-retire.
+1. Selesaikan **revert tabel** di `main.htm` (checklist "Revisi Coding"
+   §9) — referensi kembali ke `zroto_*_hist`.
+2. **Deploy kedua file BERSAMAAN** (`index.htm` + `main.htm`) ke SE80 —
+   kontrak JSON sidebar berubah, frontend/backend lama-baru tidak
+   kompatibel silang.
+3. **Verifikasi:** buka UI → History Approve/Reject langsung menampilkan
+   seluruh riwayat lama (tabel sama, tanpa migrasi) + smoke test sesuai
+   checklist 🧪 §9.
+4. Tidak ada tabel yang di-retire — `ZROTO_*_HIST` tetap dipakai.
 
 ## 11. Standar Kode — SE80 Copy-Paste Ready (WAJIB)
 
@@ -337,10 +358,11 @@ langsung aktif tanpa error. Aturan yang mengikat semua perubahan kode:
    `response->append_cdata( )` + `_m_navigation->response_complete( )`.
 5. **Frontend vanilla** — tanpa library eksternal/CDN, tanpa sintaks ES6+
    yang berisiko (tetap `var`, string concatenation, gaya kode existing).
-6. **Urutan aktivasi di SE80**: tabel `ZPR_APP_HIST` & `ZPR_REJ_HIST` HARUS
-   sudah dibuat & aktif di SE11 **sebelum** paste `main.htm` — kode
-   mereferensi tabel ini di TYPES/SELECT/MODIFY; tanpa tabel, syntax check
-   gagal. Urutan: SE11 tabel → SE38 report migrasi → SE80 paste page.
+6. ~~Urutan aktivasi SE11 → SE38 → SE80~~ **TIDAK BERLAKU lagi** (revisi
+   §1.1): kode mereferensi `ZROTO_*_HIST` yang sudah ada & aktif —
+   langsung paste ke SE80. Catatan: `ZPO_REL_BSP` membuktikan sistem
+   mendukung ABAP 7.40+ (`DATA(...)`, `VALUE`), tapi standar klasik di
+   butir 2 tetap dipertahankan untuk konsistensi dengan baseline PR.
 7. Setiap selesai satu blok perubahan, lakukan **self-review syntax**
    (simulasi syntax check: deklarasi, tipe, panjang nama ≤30, koma/titik
    ABAP) sebelum menyerahkan file ke user.

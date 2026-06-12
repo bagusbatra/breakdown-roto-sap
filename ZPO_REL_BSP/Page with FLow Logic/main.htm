@@ -1,0 +1,4085 @@
+<%@page language="abap"%>
+
+<%
+*------------------------------------------------------------------
+* DECLARATION
+*------------------------------------------------------------------
+DATA: lv_plant        TYPE werks_d,
+      lv_potype       TYPE string,
+      lv_action       TYPE string,
+      lv_comment      TYPE tline-tdline,
+      lv_message      TYPE string,
+      lv_msgtype      TYPE c LENGTH 1,
+
+      lt_data1        TYPE STANDARD TABLE OF ztymmr068,
+      lt_data2        TYPE STANDARD TABLE OF ztymmr068po,
+      lt_return       TYPE STANDARD TABLE OF bapiret2,
+      lt_return_rel   TYPE STANDARD TABLE OF bapireturn,
+
+      lt_selected     TYPE STANDARD TABLE OF string,
+
+      lv_idx          TYPE i,
+      lv_idx_char     TYPE string,
+      lv_fieldname    TYPE string,
+      lv_po           TYPE string,
+      lv_po_ebeln     TYPE ebeln,
+
+      lv_count_rel    TYPE i,
+      lv_count_rej    TYPE i,
+      lv_count_char   TYPE string,
+
+      ls_data         TYPE ztymmr068,
+      ls_item         TYPE ztymmr068po,
+      ls_ret          TYPE bapireturn,
+
+      lt_data1_1200   TYPE STANDARD TABLE OF ztymmr068,
+      lt_data2_1200   TYPE STANDARD TABLE OF ztymmr068po,
+      lt_data1_1300   TYPE STANDARD TABLE OF ztymmr068,
+      lt_data2_1300   TYPE STANDARD TABLE OF ztymmr068po,
+      lt_return_tmp   TYPE STANDARD TABLE OF bapiret2,
+
+      lv_sep          TYPE string,
+      lv_json1        TYPE string,
+      lv_json2        TYPE string,
+      lv_name1_esc    TYPE string,
+      lv_stats_esc    TYPE string,
+      lv_totpr_str    TYPE string,
+      lv_maktx_esc    TYPE string,
+      lv_text_esc     TYPE string,
+      lv_menge_str    TYPE string,
+      lv_nettt_str    TYPE string,
+      lv_netwr_str    TYPE string,
+      lv_cur_plant    TYPE string,
+
+      lv_total        TYPE i,
+      lv_total_s      TYPE string.
+
+*------------------------------------------------------------------
+* GET PARAMETER
+*------------------------------------------------------------------
+lv_plant   = request->get_form_field( 'plant' ).
+lv_potype  = request->get_form_field( 'potype' ).
+lv_action  = request->get_form_field( 'action' ).
+lv_comment = request->get_form_field( 'comment' ).
+
+*------------------------------------------------------------------
+* GET_HISTORY_REL
+*------------------------------------------------------------------
+IF lv_action = 'GET_HISTORY_REL'.
+
+  DATA: lv_hr_werks   TYPE werks_d,
+        lv_hr_from    TYPE dats,
+        lv_hr_to      TYPE dats,
+        lv_hr_search  TYPE string,
+        lv_hr_offset  TYPE int4,
+        lv_hr_limit   TYPE int4.
+
+  lv_hr_werks  = request->get_form_field( 'werks' ).
+  lv_hr_from   = request->get_form_field( 'date_from' ).
+  lv_hr_to     = request->get_form_field( 'date_to' ).
+  lv_hr_search = request->get_form_field( 'search' ).
+  lv_hr_offset = request->get_form_field( 'offset' ).
+  lv_hr_limit  = request->get_form_field( 'limit' ).
+
+  IF lv_hr_from IS INITIAL. lv_hr_from = sy-datum. ENDIF.
+  IF lv_hr_to   IS INITIAL. lv_hr_to   = sy-datum. ENDIF.
+  IF lv_hr_limit = 0.       lv_hr_limit = 20.      ENDIF.
+
+  TYPES: BEGIN OF ty_rel_log,
+           ebeln TYPE ekko-ebeln,
+           bsart TYPE ekko-bsart,
+           lifnr TYPE ekko-lifnr,
+           name1 TYPE lfa1-name1,
+           werks TYPE ekpo-werks,
+           frgco TYPE char4,
+           uname TYPE cdhdr-username,
+           udate TYPE cdhdr-udate,
+           utime TYPE cdhdr-utime,
+         END OF ty_rel_log.
+
+  DATA: lt_rel_log  TYPE STANDARD TABLE OF ty_rel_log,
+        ls_rel_log  TYPE ty_rel_log,
+        lt_cdhdr_r  TYPE STANDARD TABLE OF cdhdr,
+        ls_cdhdr_r  TYPE cdhdr,
+        lt_cdpos_r  TYPE STANDARD TABLE OF cdpos,
+        ls_cdpos_r  TYPE cdpos,
+        lv_werks_r  TYPE ekpo-werks,
+        lv_rel_tot  TYPE i,
+        lv_rel_tots TYPE string.
+
+  SELECT * FROM cdhdr INTO TABLE lt_cdhdr_r
+    WHERE objectclas = 'EINKBELEG'
+      AND udate      GE lv_hr_from
+      AND udate      LE lv_hr_to
+      AND ( tcode = 'ME28' OR tcode = 'ME29N' )
+    ORDER BY udate DESCENDING utime DESCENDING.
+
+  IF lt_cdhdr_r IS INITIAL.
+    response->set_header_field(
+      name = 'Content-Type' value = 'application/json' ).
+    response->append_cdata( '{"status":"S","total":0,"data":[]}' ).
+    _m_navigation->response_complete( ).
+    EXIT.
+  ENDIF.
+
+  SELECT * FROM cdpos INTO TABLE lt_cdpos_r
+    FOR ALL ENTRIES IN lt_cdhdr_r
+    WHERE objectclas = lt_cdhdr_r-objectclas
+      AND objectid   = lt_cdhdr_r-objectid
+      AND changenr   = lt_cdhdr_r-changenr
+      AND tabname    = 'EKKO'
+      AND ( fname = 'FRGZU' OR fname = 'FRGKE' ).
+
+  LOOP AT lt_cdhdr_r INTO ls_cdhdr_r.
+    CLEAR ls_cdpos_r.
+    READ TABLE lt_cdpos_r INTO ls_cdpos_r
+      WITH KEY objectclas = ls_cdhdr_r-objectclas
+               objectid   = ls_cdhdr_r-objectid
+               changenr   = ls_cdhdr_r-changenr.
+    IF sy-subrc NE 0. CONTINUE. ENDIF.
+
+    CLEAR ls_rel_log.
+    ls_rel_log-ebeln = ls_cdhdr_r-objectid.
+    ls_rel_log-uname = ls_cdhdr_r-username.
+    ls_rel_log-udate = ls_cdhdr_r-udate.
+    ls_rel_log-utime = ls_cdhdr_r-utime.
+    ls_rel_log-frgco = ''.
+
+    SELECT SINGLE bsart lifnr FROM ekko
+      INTO (ls_rel_log-bsart, ls_rel_log-lifnr)
+      WHERE ebeln = ls_cdhdr_r-objectid.
+
+    SELECT SINGLE werks FROM ekpo INTO lv_werks_r
+      WHERE ebeln = ls_cdhdr_r-objectid.
+    ls_rel_log-werks = lv_werks_r.
+
+    IF lv_hr_werks IS NOT INITIAL
+       AND ls_rel_log-werks NE lv_hr_werks.
+      CONTINUE.
+    ENDIF.
+
+    SELECT SINGLE name1 FROM lfa1 INTO ls_rel_log-name1
+      WHERE lifnr = ls_rel_log-lifnr.
+
+    IF lv_hr_search IS NOT INITIAL.
+      DATA: lv_hr_sup TYPE string,
+            lv_hr_eup TYPE string,
+            lv_hr_nup TYPE string.
+      lv_hr_sup = lv_hr_search.
+      lv_hr_eup = ls_rel_log-ebeln.
+      lv_hr_nup = ls_rel_log-name1.
+      TRANSLATE lv_hr_sup TO UPPER CASE.
+      TRANSLATE lv_hr_eup TO UPPER CASE.
+      TRANSLATE lv_hr_nup TO UPPER CASE.
+      IF lv_hr_eup NS lv_hr_sup AND lv_hr_nup NS lv_hr_sup.
+        CONTINUE.
+      ENDIF.
+    ENDIF.
+
+    APPEND ls_rel_log TO lt_rel_log.
+  ENDLOOP.
+
+  DESCRIBE TABLE lt_rel_log LINES lv_rel_tot.
+  lv_rel_tots = lv_rel_tot.
+  CONDENSE lv_rel_tots NO-GAPS.
+
+  IF lv_hr_limit > 0.
+    DATA: lv_rel_end TYPE i.
+    lv_rel_end = lv_hr_offset + lv_hr_limit.
+    DELETE lt_rel_log FROM lv_rel_end + 1.
+    IF lv_hr_offset > 0.
+      DELETE lt_rel_log TO lv_hr_offset.
+    ENDIF.
+  ENDIF.
+
+  DATA: lv_rjson  TYPE string,
+        lv_rsep   TYPE string,
+        ls_rl     TYPE ty_rel_log,
+        lv_rn1    TYPE string,
+        lv_rfrgco TYPE string,
+        lv_rline  TYPE string.
+
+  CONCATENATE '{"status":"S","total":' lv_rel_tots ',"data":['
+    INTO lv_rjson.
+  response->set_header_field(
+    name = 'Content-Type' value = 'application/json' ).
+  response->append_cdata( lv_rjson ).
+
+  CLEAR lv_rsep.
+  LOOP AT lt_rel_log INTO ls_rl.
+    IF lv_rsep IS NOT INITIAL.
+      response->append_cdata( ',' ).
+    ENDIF.
+    lv_rn1    = ls_rl-name1.
+    lv_rfrgco = ls_rl-frgco.
+    REPLACE ALL OCCURRENCES OF '"' IN lv_rn1   WITH ''.
+    REPLACE ALL OCCURRENCES OF '"' IN lv_rfrgco WITH ''.
+    CONCATENATE
+      '{"ebeln":"'  ls_rl-ebeln  '",'
+      '"bsart":"'   ls_rl-bsart  '",'
+      '"lifnr":"'   ls_rl-lifnr  '",'
+      '"name1":"'   lv_rn1       '",'
+      '"werks":"'   ls_rl-werks  '",'
+      '"frgco":"'   lv_rfrgco    '",'
+      '"uname":"'   ls_rl-uname  '",'
+      '"udate":"'   ls_rl-udate  '",'
+      '"utime":"'   ls_rl-utime  '"}'
+    INTO lv_rline.
+    response->append_cdata( lv_rline ).
+    lv_rsep = 'X'.
+  ENDLOOP.
+  response->append_cdata( ']}' ).
+  _m_navigation->response_complete( ).
+  EXIT.
+
+ENDIF.
+
+*------------------------------------------------------------------
+* GET_HISTORY_REJ
+*------------------------------------------------------------------
+IF lv_action = 'GET_HISTORY_REJ'.
+
+  DATA: lv_hj_werks   TYPE werks_d,
+        lv_hj_from    TYPE dats,
+        lv_hj_to      TYPE dats,
+        lv_hj_search  TYPE string,
+        lv_hj_offset  TYPE int4,
+        lv_hj_limit   TYPE int4.
+
+  lv_hj_werks  = request->get_form_field( 'werks' ).
+  lv_hj_from   = request->get_form_field( 'date_from' ).
+  lv_hj_to     = request->get_form_field( 'date_to' ).
+  lv_hj_search = request->get_form_field( 'search' ).
+  lv_hj_offset = request->get_form_field( 'offset' ).
+  lv_hj_limit  = request->get_form_field( 'limit' ).
+
+  IF lv_hj_from IS INITIAL. lv_hj_from = sy-datum. ENDIF.
+  IF lv_hj_to   IS INITIAL. lv_hj_to   = sy-datum. ENDIF.
+  IF lv_hj_limit = 0.       lv_hj_limit = 20.      ENDIF.
+
+  TYPES: BEGIN OF ty_rej_log,
+           ebeln   TYPE ekko-ebeln,
+           bsart   TYPE ekko-bsart,
+           lifnr   TYPE ekko-lifnr,
+           name1   TYPE lfa1-name1,
+           werks   TYPE ekpo-werks,
+           uname   TYPE cdhdr-username,
+           udate   TYPE cdhdr-udate,
+           utime   TYPE cdhdr-utime,
+           comment TYPE string,
+         END OF ty_rej_log.
+
+  DATA: lt_rej_log   TYPE STANDARD TABLE OF ty_rej_log,
+        ls_rej_log   TYPE ty_rej_log,
+        lt_cdhdr_j   TYPE STANDARD TABLE OF cdhdr,
+        ls_cdhdr_j   TYPE cdhdr,
+        lt_cdpos_j   TYPE STANDARD TABLE OF cdpos,
+        ls_cdpos_j   TYPE cdpos,
+        lv_werks_j   TYPE ekpo-werks,
+        lv_rej_tot   TYPE i,
+        lv_rej_tots  TYPE string,
+        lt_txt_line  TYPE STANDARD TABLE OF tline,
+        ls_txt_line  TYPE tline,
+        lv_txt_name  TYPE thead-tdname,
+        lv_txt_cmt   TYPE string.
+
+  SELECT * FROM cdhdr INTO TABLE lt_cdhdr_j
+    WHERE objectclas = 'EINKBELEG'
+      AND udate      GE lv_hj_from
+      AND udate      LE lv_hj_to
+    ORDER BY udate DESCENDING utime DESCENDING.
+
+  IF lt_cdhdr_j IS INITIAL.
+    response->set_header_field(
+      name = 'Content-Type' value = 'application/json' ).
+    response->append_cdata( '{"status":"S","total":0,"data":[]}' ).
+    _m_navigation->response_complete( ).
+    EXIT.
+  ENDIF.
+
+  SELECT * FROM cdpos INTO TABLE lt_cdpos_j
+    FOR ALL ENTRIES IN lt_cdhdr_j
+    WHERE objectclas = lt_cdhdr_j-objectclas
+      AND objectid   = lt_cdhdr_j-objectid
+      AND changenr   = lt_cdhdr_j-changenr
+      AND tabname    = 'EKKO'
+      AND fname      = 'PROCSTAT'
+      AND value_new  = '08'.
+
+  LOOP AT lt_cdhdr_j INTO ls_cdhdr_j.
+    CLEAR ls_cdpos_j.
+    READ TABLE lt_cdpos_j INTO ls_cdpos_j
+      WITH KEY objectclas = ls_cdhdr_j-objectclas
+               objectid   = ls_cdhdr_j-objectid
+               changenr   = ls_cdhdr_j-changenr.
+    IF sy-subrc NE 0. CONTINUE. ENDIF.
+
+    CLEAR ls_rej_log.
+    ls_rej_log-ebeln = ls_cdhdr_j-objectid.
+    ls_rej_log-uname = ls_cdhdr_j-username.
+    ls_rej_log-udate = ls_cdhdr_j-udate.
+    ls_rej_log-utime = ls_cdhdr_j-utime.
+
+    SELECT SINGLE bsart lifnr FROM ekko
+      INTO (ls_rej_log-bsart, ls_rej_log-lifnr)
+      WHERE ebeln = ls_cdhdr_j-objectid.
+
+    SELECT SINGLE werks FROM ekpo INTO lv_werks_j
+      WHERE ebeln = ls_cdhdr_j-objectid.
+    ls_rej_log-werks = lv_werks_j.
+
+    IF lv_hj_werks IS NOT INITIAL
+       AND ls_rej_log-werks NE lv_hj_werks.
+      CONTINUE.
+    ENDIF.
+
+    SELECT SINGLE name1 FROM lfa1 INTO ls_rej_log-name1
+      WHERE lifnr = ls_rej_log-lifnr.
+
+    CLEAR: lt_txt_line, lv_txt_cmt.
+    lv_txt_name = ls_cdhdr_j-objectid.
+    CALL FUNCTION 'READ_TEXT'
+      EXPORTING
+        id       = 'F01'
+        language = sy-langu
+        name     = lv_txt_name
+        object   = 'EKKO'
+      TABLES
+        lines    = lt_txt_line
+      EXCEPTIONS
+        OTHERS   = 8.
+    IF sy-subrc = 0.
+      LOOP AT lt_txt_line INTO ls_txt_line.
+        IF lv_txt_cmt IS NOT INITIAL.
+          CONCATENATE lv_txt_cmt ' ' ls_txt_line-tdline
+            INTO lv_txt_cmt.
+        ELSE.
+          lv_txt_cmt = ls_txt_line-tdline.
+        ENDIF.
+      ENDLOOP.
+      CONDENSE lv_txt_cmt.
+    ENDIF.
+    ls_rej_log-comment = lv_txt_cmt.
+
+    IF lv_hj_search IS NOT INITIAL.
+      DATA: lv_hj_sup TYPE string,
+            lv_hj_eup TYPE string,
+            lv_hj_nup TYPE string.
+      lv_hj_sup = lv_hj_search.
+      lv_hj_eup = ls_rej_log-ebeln.
+      lv_hj_nup = ls_rej_log-name1.
+      TRANSLATE lv_hj_sup TO UPPER CASE.
+      TRANSLATE lv_hj_eup TO UPPER CASE.
+      TRANSLATE lv_hj_nup TO UPPER CASE.
+      IF lv_hj_eup NS lv_hj_sup AND lv_hj_nup NS lv_hj_sup.
+        CONTINUE.
+      ENDIF.
+    ENDIF.
+
+    APPEND ls_rej_log TO lt_rej_log.
+  ENDLOOP.
+
+  DESCRIBE TABLE lt_rej_log LINES lv_rej_tot.
+  lv_rej_tots = lv_rej_tot.
+  CONDENSE lv_rej_tots NO-GAPS.
+
+  IF lv_hj_limit > 0.
+    DATA: lv_rej_end TYPE i.
+    lv_rej_end = lv_hj_offset + lv_hj_limit.
+    DELETE lt_rej_log FROM lv_rej_end + 1.
+    IF lv_hj_offset > 0.
+      DELETE lt_rej_log TO lv_hj_offset.
+    ENDIF.
+  ENDIF.
+
+  DATA: lv_jjson  TYPE string,
+        lv_jsep   TYPE string,
+        ls_jl     TYPE ty_rej_log,
+        lv_jn1    TYPE string,
+        lv_jcmt   TYPE string,
+        lv_jline  TYPE string.
+
+  CONCATENATE '{"status":"S","total":' lv_rej_tots ',"data":['
+    INTO lv_jjson.
+  response->set_header_field(
+    name = 'Content-Type' value = 'application/json' ).
+  response->append_cdata( lv_jjson ).
+
+  CLEAR lv_jsep.
+  LOOP AT lt_rej_log INTO ls_jl.
+    IF lv_jsep IS NOT INITIAL.
+      response->append_cdata( ',' ).
+    ENDIF.
+    lv_jn1  = ls_jl-name1.
+    lv_jcmt = ls_jl-comment.
+    REPLACE ALL OCCURRENCES OF '"' IN lv_jn1  WITH ''.
+    REPLACE ALL OCCURRENCES OF '"' IN lv_jcmt WITH ''.
+    REPLACE ALL OCCURRENCES OF cl_abap_char_utilities=>newline
+      IN lv_jcmt WITH ' '.
+    REPLACE ALL OCCURRENCES OF cl_abap_char_utilities=>cr_lf
+      IN lv_jcmt WITH ' '.
+    CONCATENATE
+      '{"ebeln":"'   ls_jl-ebeln  '",'
+      '"bsart":"'    ls_jl-bsart  '",'
+      '"lifnr":"'    ls_jl-lifnr  '",'
+      '"name1":"'    lv_jn1       '",'
+      '"werks":"'    ls_jl-werks  '",'
+      '"uname":"'    ls_jl-uname  '",'
+      '"udate":"'    ls_jl-udate  '",'
+      '"utime":"'    ls_jl-utime  '",'
+      '"comment":"'  lv_jcmt      '"}'
+    INTO lv_jline.
+    response->append_cdata( lv_jline ).
+    lv_jsep = 'X'.
+  ENDLOOP.
+  response->append_cdata( ']}' ).
+  _m_navigation->response_complete( ).
+  EXIT.
+
+ENDIF.
+
+*------------------------------------------------------------------
+* GET_HISTORY_COUNT
+*------------------------------------------------------------------
+IF lv_action = 'GET_HISTORY_COUNT'.
+
+  DATA: lv_hc_werks  TYPE werks_d,
+        lv_hc_from   TYPE dats,
+        lv_hc_to     TYPE dats,
+        lv_count_r   TYPE i,
+        lv_count_j   TYPE i,
+        lv_count_r_s TYPE string,
+        lv_count_j_s TYPE string,
+        lt_cdhdr_cnt TYPE STANDARD TABLE OF cdhdr,
+        ls_cdhdr_cnt TYPE cdhdr,
+        lt_cdpos_cnt TYPE STANDARD TABLE OF cdpos,
+        ls_cdpos_cnt TYPE cdpos,
+        lv_werks_cnt TYPE ekpo-werks,
+        lv_hc_resp   TYPE string.
+
+  lv_hc_werks = request->get_form_field( 'werks' ).
+  lv_hc_from  = request->get_form_field( 'date_from' ).
+  lv_hc_to    = request->get_form_field( 'date_to' ).
+
+  IF lv_hc_from IS INITIAL. lv_hc_from = sy-datum. ENDIF.
+  IF lv_hc_to   IS INITIAL. lv_hc_to   = sy-datum. ENDIF.
+
+  "-- Count Release --
+  CLEAR: lt_cdhdr_cnt, lt_cdpos_cnt, lv_count_r.
+  SELECT * FROM cdhdr INTO TABLE lt_cdhdr_cnt
+    WHERE objectclas = 'EINKBELEG'
+      AND udate      GE lv_hc_from
+      AND udate      LE lv_hc_to
+      AND ( tcode = 'ME28' OR tcode = 'ME29N' ).
+
+  IF lt_cdhdr_cnt IS NOT INITIAL.
+    SELECT * FROM cdpos INTO TABLE lt_cdpos_cnt
+      FOR ALL ENTRIES IN lt_cdhdr_cnt
+      WHERE objectclas = lt_cdhdr_cnt-objectclas
+        AND objectid   = lt_cdhdr_cnt-objectid
+        AND changenr   = lt_cdhdr_cnt-changenr
+        AND tabname    = 'EKKO'
+        AND ( fname = 'FRGZU' OR fname = 'FRGKE' ).
+
+    LOOP AT lt_cdhdr_cnt INTO ls_cdhdr_cnt.
+      CLEAR ls_cdpos_cnt.
+      READ TABLE lt_cdpos_cnt INTO ls_cdpos_cnt
+        WITH KEY objectclas = ls_cdhdr_cnt-objectclas
+                 objectid   = ls_cdhdr_cnt-objectid
+                 changenr   = ls_cdhdr_cnt-changenr.
+      IF sy-subrc NE 0. CONTINUE. ENDIF.
+      IF lv_hc_werks IS NOT INITIAL.
+        CLEAR lv_werks_cnt.
+        SELECT SINGLE werks FROM ekpo INTO lv_werks_cnt
+          WHERE ebeln = ls_cdhdr_cnt-objectid.
+        IF lv_werks_cnt NE lv_hc_werks. CONTINUE. ENDIF.
+      ENDIF.
+      lv_count_r = lv_count_r + 1.
+    ENDLOOP.
+  ENDIF.
+
+  "-- Count Reject --
+  CLEAR: lt_cdhdr_cnt, lt_cdpos_cnt, lv_count_j.
+  SELECT * FROM cdhdr INTO TABLE lt_cdhdr_cnt
+    WHERE objectclas = 'EINKBELEG'
+      AND udate      GE lv_hc_from
+      AND udate      LE lv_hc_to.
+
+  IF lt_cdhdr_cnt IS NOT INITIAL.
+    SELECT * FROM cdpos INTO TABLE lt_cdpos_cnt
+      FOR ALL ENTRIES IN lt_cdhdr_cnt
+      WHERE objectclas = lt_cdhdr_cnt-objectclas
+        AND objectid   = lt_cdhdr_cnt-objectid
+        AND changenr   = lt_cdhdr_cnt-changenr
+        AND tabname    = 'EKKO'
+        AND fname      = 'PROCSTAT'
+        AND value_new  = '08'.
+
+    LOOP AT lt_cdhdr_cnt INTO ls_cdhdr_cnt.
+      CLEAR ls_cdpos_cnt.
+      READ TABLE lt_cdpos_cnt INTO ls_cdpos_cnt
+        WITH KEY objectclas = ls_cdhdr_cnt-objectclas
+                 objectid   = ls_cdhdr_cnt-objectid
+                 changenr   = ls_cdhdr_cnt-changenr.
+      IF sy-subrc NE 0. CONTINUE. ENDIF.
+      IF lv_hc_werks IS NOT INITIAL.
+        CLEAR lv_werks_cnt.
+        SELECT SINGLE werks FROM ekpo INTO lv_werks_cnt
+          WHERE ebeln = ls_cdhdr_cnt-objectid.
+        IF lv_werks_cnt NE lv_hc_werks. CONTINUE. ENDIF.
+      ENDIF.
+      lv_count_j = lv_count_j + 1.
+    ENDLOOP.
+  ENDIF.
+
+  lv_count_r_s = lv_count_r. CONDENSE lv_count_r_s NO-GAPS.
+  lv_count_j_s = lv_count_j. CONDENSE lv_count_j_s NO-GAPS.
+
+  CONCATENATE '{"status":"S","count_rel":' lv_count_r_s
+              ',"count_rej":' lv_count_j_s '}'
+    INTO lv_hc_resp.
+  response->set_header_field(
+    name = 'Content-Type' value = 'application/json' ).
+  response->append_cdata( lv_hc_resp ).
+  _m_navigation->response_complete( ).
+  EXIT.
+
+ENDIF.
+
+*------------------------------------------------------------------
+* GET_HISTORY_ITEMS — ambil item detail PO dari EKPO + MAKT
+*------------------------------------------------------------------
+IF lv_action = 'GET_HISTORY_ITEMS'.
+
+  DATA: lv_hi_ebeln_raw TYPE string,
+        lt_hi_ebelns    TYPE STANDARD TABLE OF string,
+        lv_hi_ebeln     TYPE string,
+        lv_hi_ebeln_po  TYPE ekko-ebeln.
+
+  lv_hi_ebeln_raw = request->get_form_field( 'ebelns' ).
+
+  IF lv_hi_ebeln_raw IS INITIAL.
+    response->set_header_field(
+      name = 'Content-Type' value = 'application/json' ).
+    response->append_cdata(
+      '{"status":"E","message":"ebelns kosong","data":[]}' ).
+    _m_navigation->response_complete( ).
+    EXIT.
+  ENDIF.
+
+  SPLIT lv_hi_ebeln_raw AT ',' INTO TABLE lt_hi_ebelns.
+
+  TYPES: BEGIN OF ty_hi_item,
+           ebeln TYPE ekpo-ebeln,
+           ebelp TYPE ekpo-ebelp,
+           matnr TYPE ekpo-matnr,
+           txz01 TYPE ekpo-txz01,
+           maktx TYPE makt-maktx,
+           menge TYPE ekpo-menge,
+           meins TYPE ekpo-meins,
+           netpr TYPE ekpo-netpr,
+           netwr TYPE ekpo-netwr,
+           waers TYPE ekko-waers,
+         END OF ty_hi_item.
+
+  DATA: lt_hi_items    TYPE STANDARD TABLE OF ty_hi_item,
+        ls_hi_item     TYPE ty_hi_item,
+        lt_hi_ekpo     TYPE STANDARD TABLE OF ekpo,
+        ls_hi_ekpo     TYPE ekpo,
+        lt_hi_ekko     TYPE STANDARD TABLE OF ekko,
+        ls_hi_ekko     TYPE ekko,
+        lt_hi_makt     TYPE STANDARD TABLE OF makt,
+        ls_hi_makt     TYPE makt,
+        lt_hi_ebn_rng  TYPE RANGE OF ekpo-ebeln,
+        ls_hi_ebn_rng  LIKE LINE OF lt_hi_ebn_rng,
+        lt_hi_mtn_rng  TYPE RANGE OF makt-matnr,
+        ls_hi_mtn_rng  LIKE LINE OF lt_hi_mtn_rng.
+
+  LOOP AT lt_hi_ebelns INTO lv_hi_ebeln.
+    CONDENSE lv_hi_ebeln NO-GAPS.
+    IF lv_hi_ebeln IS INITIAL. CONTINUE. ENDIF.
+    lv_hi_ebeln_po = lv_hi_ebeln.
+    CLEAR ls_hi_ebn_rng.
+    ls_hi_ebn_rng-sign   = 'I'.
+    ls_hi_ebn_rng-option = 'EQ'.
+    ls_hi_ebn_rng-low    = lv_hi_ebeln_po.
+    APPEND ls_hi_ebn_rng TO lt_hi_ebn_rng.
+  ENDLOOP.
+
+  IF lt_hi_ebn_rng IS INITIAL.
+    response->set_header_field(
+      name = 'Content-Type' value = 'application/json' ).
+    response->append_cdata( '{"status":"S","data":[]}' ).
+    _m_navigation->response_complete( ).
+    EXIT.
+  ENDIF.
+
+  SELECT ebeln ebelp matnr txz01 menge meins netpr netwr loekz
+    FROM ekpo INTO CORRESPONDING FIELDS OF TABLE lt_hi_ekpo
+    WHERE ebeln IN lt_hi_ebn_rng
+      AND loekz NE 'L'.
+
+  IF lt_hi_ekpo IS INITIAL.
+    response->set_header_field(
+      name = 'Content-Type' value = 'application/json' ).
+    response->append_cdata( '{"status":"S","data":[]}' ).
+    _m_navigation->response_complete( ).
+    EXIT.
+  ENDIF.
+
+  SELECT ebeln waers FROM ekko
+    INTO CORRESPONDING FIELDS OF TABLE lt_hi_ekko
+    WHERE ebeln IN lt_hi_ebn_rng.
+
+  LOOP AT lt_hi_ekpo INTO ls_hi_ekpo.
+    IF ls_hi_ekpo-matnr IS NOT INITIAL.
+      READ TABLE lt_hi_mtn_rng WITH KEY low = ls_hi_ekpo-matnr
+        TRANSPORTING NO FIELDS.
+      IF sy-subrc NE 0.
+        CLEAR ls_hi_mtn_rng.
+        ls_hi_mtn_rng-sign   = 'I'.
+        ls_hi_mtn_rng-option = 'EQ'.
+        ls_hi_mtn_rng-low    = ls_hi_ekpo-matnr.
+        APPEND ls_hi_mtn_rng TO lt_hi_mtn_rng.
+      ENDIF.
+    ENDIF.
+  ENDLOOP.
+
+  IF lt_hi_mtn_rng IS NOT INITIAL.
+    SELECT matnr maktx FROM makt
+      INTO CORRESPONDING FIELDS OF TABLE lt_hi_makt
+      WHERE matnr IN lt_hi_mtn_rng
+        AND spras = sy-langu.
+  ENDIF.
+
+  LOOP AT lt_hi_ekpo INTO ls_hi_ekpo.
+    CLEAR ls_hi_item.
+    ls_hi_item-ebeln = ls_hi_ekpo-ebeln.
+    ls_hi_item-ebelp = ls_hi_ekpo-ebelp.
+    ls_hi_item-matnr = ls_hi_ekpo-matnr.
+    ls_hi_item-txz01 = ls_hi_ekpo-txz01.
+    ls_hi_item-menge = ls_hi_ekpo-menge.
+    ls_hi_item-meins = ls_hi_ekpo-meins.
+    ls_hi_item-netpr = ls_hi_ekpo-netpr.
+    ls_hi_item-netwr = ls_hi_ekpo-netwr.
+
+    READ TABLE lt_hi_ekko INTO ls_hi_ekko
+      WITH KEY ebeln = ls_hi_ekpo-ebeln.
+    IF sy-subrc = 0.
+      ls_hi_item-waers = ls_hi_ekko-waers.
+    ENDIF.
+
+    IF ls_hi_ekpo-matnr IS NOT INITIAL.
+      READ TABLE lt_hi_makt INTO ls_hi_makt
+        WITH KEY matnr = ls_hi_ekpo-matnr.
+      IF sy-subrc = 0.
+        ls_hi_item-maktx = ls_hi_makt-maktx.
+      ENDIF.
+    ENDIF.
+
+    IF ls_hi_item-maktx IS INITIAL.
+      ls_hi_item-maktx = ls_hi_ekpo-txz01.
+    ENDIF.
+
+    APPEND ls_hi_item TO lt_hi_items.
+  ENDLOOP.
+
+  DATA: lv_hi_sep   TYPE string,
+        ls_hii      TYPE ty_hi_item,
+        lv_hi_maktx TYPE string,
+        lv_hi_txz01 TYPE string,
+        lv_hi_menge TYPE string,
+        lv_hi_netpr TYPE string,
+        lv_hi_netwr TYPE string,
+        lv_hi_line  TYPE string.
+
+  response->set_header_field(
+    name = 'Content-Type' value = 'application/json' ).
+  response->append_cdata( '{"status":"S","data":[' ).
+
+  CLEAR lv_hi_sep.
+  LOOP AT lt_hi_items INTO ls_hii.
+    IF lv_hi_sep IS NOT INITIAL.
+      response->append_cdata( ',' ).
+    ENDIF.
+    lv_hi_maktx = ls_hii-maktx.
+    lv_hi_txz01 = ls_hii-txz01.
+    lv_hi_menge = ls_hii-menge. CONDENSE lv_hi_menge NO-GAPS.
+    lv_hi_netpr = ls_hii-netpr. CONDENSE lv_hi_netpr NO-GAPS.
+    lv_hi_netwr = ls_hii-netwr. CONDENSE lv_hi_netwr NO-GAPS.
+    REPLACE ALL OCCURRENCES OF '"' IN lv_hi_maktx WITH ''.
+    REPLACE ALL OCCURRENCES OF '"' IN lv_hi_txz01 WITH ''.
+    CONCATENATE
+      '{"ebeln":"'  ls_hii-ebeln  '",'
+      '"ebelp":"'   ls_hii-ebelp  '",'
+      '"matnr":"'   ls_hii-matnr  '",'
+      '"txz01":"'   lv_hi_txz01   '",'
+      '"maktx":"'   lv_hi_maktx   '",'
+      '"menge":"'   lv_hi_menge   '",'
+      '"meins":"'   ls_hii-meins  '",'
+      '"netpr":"'   lv_hi_netpr   '",'
+      '"netwr":"'   lv_hi_netwr   '",'
+      '"waers":"'   ls_hii-waers  '"}'
+    INTO lv_hi_line.
+    response->append_cdata( lv_hi_line ).
+    lv_hi_sep = 'X'.
+  ENDLOOP.
+
+  response->append_cdata( ']}' ).
+  _m_navigation->response_complete( ).
+  EXIT.
+
+ENDIF.
+
+*------------------------------------------------------------------
+* GET_OGR — Outstanding Goods Receipt per Plant
+*------------------------------------------------------------------
+IF lv_action = 'GET_OGR'.
+
+  DATA: lv_ogr_werks TYPE werks_d.
+  lv_ogr_werks = request->get_form_field( 'werks' ).
+
+  IF lv_ogr_werks IS INITIAL.
+    response->set_header_field(
+      name = 'Content-Type' value = 'application/json' ).
+    response->append_cdata(
+      '{"status":"E","message":"werks kosong","data":[]}' ).
+    _m_navigation->response_complete( ).
+    EXIT.
+  ENDIF.
+
+  " Bsart list KMI per plant
+  TYPES: BEGIN OF ty_bsart_entry,
+           bsart TYPE ekko-bsart,
+         END OF ty_bsart_entry.
+
+  DATA: lt_ogr_bsart     TYPE STANDARD TABLE OF ty_bsart_entry,
+        ls_ogr_bsart     TYPE ty_bsart_entry,
+        lt_bsart_rng_ogr TYPE RANGE OF ekko-bsart,
+        ls_bsart_rng_ogr LIKE LINE OF lt_bsart_rng_ogr.
+
+  IF lv_ogr_werks = '1200'.
+    DATA(lv_bsarts_ogr) = VALUE string_table(
+      ( `PSB7` ) ( `POK1` )
+      ( `PSB1` ) ( `PSB3` ) ( `PSB4` )
+      ( `PSB2` )
+      ( `PSB8` ) ( `PSB9` ) ( `PSBT` )
+      ( `PSB5` ) ( `PSB6` )
+      ( `PSBI` ) ( `POK9` )
+    ).
+  ELSE.
+    lv_bsarts_ogr = VALUE string_table(
+      ( `PSM7` )
+      ( `PSM1` ) ( `PSM3` ) ( `PSM4` )
+      ( `PSM2` )
+      ( `PSM8` ) ( `PSM9` ) ( `PSMT` )
+      ( `PSM5` ) ( `PSM6` )
+      ( `PSMI` ) ( `POK9` )
+    ).
+  ENDIF.
+
+  LOOP AT lv_bsarts_ogr INTO DATA(lv_bs_ogr).
+    CLEAR ls_bsart_rng_ogr.
+    ls_bsart_rng_ogr-sign   = 'I'.
+    ls_bsart_rng_ogr-option = 'EQ'.
+    ls_bsart_rng_ogr-low    = lv_bs_ogr.
+    APPEND ls_bsart_rng_ogr TO lt_bsart_rng_ogr.
+  ENDLOOP.
+
+  " Werks range
+  DATA: lt_werks_rng_ogr TYPE RANGE OF ekpo-werks,
+        ls_werks_rng_ogr LIKE LINE OF lt_werks_rng_ogr.
+
+  ls_werks_rng_ogr-sign   = 'I'.
+  ls_werks_rng_ogr-option = 'EQ'.
+  ls_werks_rng_ogr-low    = lv_ogr_werks.
+  APPEND ls_werks_rng_ogr TO lt_werks_rng_ogr.
+
+  " Struktur data OGR
+  TYPES: BEGIN OF ty_ogr_kmi,
+           ebeln   TYPE ekko-ebeln,
+           ebelp   TYPE ekpo-ebelp,
+           bsart   TYPE ekko-bsart,
+           bedat   TYPE ekko-bedat,
+           lifnr   TYPE ekko-lifnr,
+           waers   TYPE ekko-waers,
+           matnr   TYPE ekpo-matnr,
+           txz01   TYPE ekpo-txz01,
+           werks   TYPE ekpo-werks,
+           menge   TYPE ekpo-menge,
+           meins   TYPE ekpo-meins,
+           netpr   TYPE ekpo-netpr,
+         END OF ty_ogr_kmi.
+
+  DATA: lt_ogr_kmi   TYPE STANDARD TABLE OF ty_ogr_kmi,
+        ls_ogr_kmi   TYPE ty_ogr_kmi.
+
+  " Select PO yang sudah full release tapi belum GR
+  SELECT a~ebeln a~bsart a~bedat a~lifnr a~waers
+         b~ebelp b~matnr b~txz01 b~werks
+         b~menge b~meins b~netpr
+    FROM ekko AS a
+    INNER JOIN ekpo AS b ON b~ebeln = a~ebeln
+    INTO CORRESPONDING FIELDS OF TABLE lt_ogr_kmi
+    WHERE a~frgke   EQ 'R'
+      AND a~bsart   IN lt_bsart_rng_ogr
+      AND a~bedat   GE '20260101'
+      AND b~loekz   NE 'L'
+      AND b~elikz   EQ ' '
+      AND b~werks   IN lt_werks_rng_ogr
+    ORDER BY a~ebeln a~bedat b~ebelp.
+
+  IF lt_ogr_kmi IS INITIAL.
+    response->set_header_field(
+      name = 'Content-Type' value = 'application/json' ).
+    response->append_cdata(
+      '{"status":"S","message":"OK","data":[]}' ).
+    _m_navigation->response_complete( ).
+    EXIT.
+  ENDIF.
+
+  " Build ebeln range untuk cek EKBE
+  DATA: lt_ebn_rng_ogr TYPE RANGE OF ekbe-ebeln,
+        ls_ebn_rng_ogr LIKE LINE OF lt_ebn_rng_ogr.
+
+  LOOP AT lt_ogr_kmi ASSIGNING FIELD-SYMBOL(<ogr_eb>).
+    READ TABLE lt_ebn_rng_ogr WITH KEY low = <ogr_eb>-ebeln
+      TRANSPORTING NO FIELDS.
+    IF sy-subrc NE 0.
+      CLEAR ls_ebn_rng_ogr.
+      ls_ebn_rng_ogr-sign   = 'I'.
+      ls_ebn_rng_ogr-option = 'EQ'.
+      ls_ebn_rng_ogr-low    = <ogr_eb>-ebeln.
+      APPEND ls_ebn_rng_ogr TO lt_ebn_rng_ogr.
+    ENDIF.
+  ENDLOOP.
+
+  " Cek EKBE — item yang sudah ada GR
+  TYPES: BEGIN OF ty_gr_done_kmi,
+           ebeln TYPE ekbe-ebeln,
+           ebelp TYPE ekbe-ebelp,
+         END OF ty_gr_done_kmi.
+
+  DATA: lt_gr_done_kmi TYPE STANDARD TABLE OF ty_gr_done_kmi,
+        ls_gr_done_kmi TYPE ty_gr_done_kmi.
+
+  SELECT ebeln ebelp
+    FROM ekbe
+    INTO CORRESPONDING FIELDS OF TABLE lt_gr_done_kmi
+    WHERE ebeln IN lt_ebn_rng_ogr
+      AND bwart IN ('101','103','105','107')
+    GROUP BY ebeln ebelp.
+
+  " Delete item yang sudah GR
+  LOOP AT lt_ogr_kmi ASSIGNING FIELD-SYMBOL(<ogr_del>).
+    READ TABLE lt_gr_done_kmi WITH KEY
+      ebeln = <ogr_del>-ebeln
+      ebelp = <ogr_del>-ebelp
+      TRANSPORTING NO FIELDS.
+    IF sy-subrc EQ 0.
+      DELETE lt_ogr_kmi.
+    ENDIF.
+  ENDLOOP.
+
+  IF lt_ogr_kmi IS INITIAL.
+    response->set_header_field(
+      name = 'Content-Type' value = 'application/json' ).
+    response->append_cdata(
+      '{"status":"S","message":"OK","data":[]}' ).
+    _m_navigation->response_complete( ).
+    EXIT.
+  ENDIF.
+
+  " Ambil vendor name dari LFA1
+  DATA: lt_lifnr_rng_ogr TYPE RANGE OF lfa1-lifnr,
+        ls_lifnr_rng_ogr LIKE LINE OF lt_lifnr_rng_ogr.
+
+  LOOP AT lt_ogr_kmi ASSIGNING FIELD-SYMBOL(<ogr_lf>).
+    READ TABLE lt_lifnr_rng_ogr WITH KEY low = <ogr_lf>-lifnr
+      TRANSPORTING NO FIELDS.
+    IF sy-subrc NE 0.
+      CLEAR ls_lifnr_rng_ogr.
+      ls_lifnr_rng_ogr-sign   = 'I'.
+      ls_lifnr_rng_ogr-option = 'EQ'.
+      ls_lifnr_rng_ogr-low    = <ogr_lf>-lifnr.
+      APPEND ls_lifnr_rng_ogr TO lt_lifnr_rng_ogr.
+    ENDIF.
+  ENDLOOP.
+
+  TYPES: BEGIN OF ty_lfa1_ogr,
+           lifnr TYPE lfa1-lifnr,
+           name1 TYPE lfa1-name1,
+         END OF ty_lfa1_ogr.
+
+  DATA: lt_lfa1_ogr TYPE STANDARD TABLE OF ty_lfa1_ogr,
+        ls_lfa1_ogr TYPE ty_lfa1_ogr.
+
+  SELECT lifnr name1 FROM lfa1
+    INTO CORRESPONDING FIELDS OF TABLE lt_lfa1_ogr
+    WHERE lifnr IN lt_lifnr_rng_ogr.
+
+  " Ambil item text dari EKPO (READ_TEXT object EKPO)
+  DATA: lv_ogr_tname   TYPE thead-tdname,
+        lv_ogr_ebelp5  TYPE c LENGTH 5,
+        lt_ogr_tlines  TYPE STANDARD TABLE OF tline,
+        ls_ogr_tline   TYPE tline,
+        lv_ogr_itext   TYPE string.
+
+  LOOP AT lt_ogr_kmi ASSIGNING FIELD-SYMBOL(<ogr_txt>).
+    CLEAR: lv_ogr_tname, lv_ogr_itext.
+    REFRESH lt_ogr_tlines.
+    lv_ogr_ebelp5 = <ogr_txt>-ebelp.
+    CONCATENATE <ogr_txt>-ebeln lv_ogr_ebelp5
+      INTO lv_ogr_tname.
+    IF lv_ogr_tname IS NOT INITIAL.
+      CALL FUNCTION 'READ_TEXT'
+        EXPORTING
+          id       = 'F01'
+          language = sy-langu
+          name     = lv_ogr_tname
+          object   = 'EKPO'
+        TABLES
+          lines    = lt_ogr_tlines
+        EXCEPTIONS
+          OTHERS   = 1.
+      IF sy-subrc EQ 0.
+        LOOP AT lt_ogr_tlines INTO ls_ogr_tline.
+          CONCATENATE lv_ogr_itext ls_ogr_tline-tdline
+            INTO lv_ogr_itext SEPARATED BY ' '.
+        ENDLOOP.
+        CONDENSE lv_ogr_itext.
+      ENDIF.
+    ENDIF.
+
+    " Simpan text ke field txz01 jika txz01 kosong
+    IF <ogr_txt>-txz01 IS INITIAL AND lv_ogr_itext IS NOT INITIAL.
+      <ogr_txt>-txz01 = lv_ogr_itext.
+    ENDIF.
+  ENDLOOP.
+
+  " Serialize ke JSON
+  DATA: lv_ogr_sep    TYPE string,
+        lv_ogr_json   TYPE string,
+        lv_ogr_n1     TYPE string,
+        lv_ogr_txz01  TYPE string,
+        lv_ogr_menge  TYPE string,
+        lv_ogr_netpr  TYPE string,
+        lv_ogr_line   TYPE string,
+        lv_ogr_bedat  TYPE string.
+
+  response->set_header_field(
+    name = 'Content-Type' value = 'application/json' ).
+  response->append_cdata( '{"status":"S","message":"OK","data":[' ).
+
+  CLEAR lv_ogr_sep.
+
+  LOOP AT lt_ogr_kmi INTO ls_ogr_kmi.
+    IF lv_ogr_sep IS NOT INITIAL.
+      response->append_cdata( ',' ).
+    ENDIF.
+
+    " Format tanggal DD/MM/YYYY
+    CONCATENATE ls_ogr_kmi-bedat+6(2) '/'
+                ls_ogr_kmi-bedat+4(2) '/'
+                ls_ogr_kmi-bedat(4)
+      INTO lv_ogr_bedat.
+
+    " Vendor name
+    CLEAR lv_ogr_n1.
+    READ TABLE lt_lfa1_ogr INTO ls_lfa1_ogr
+      WITH KEY lifnr = ls_ogr_kmi-lifnr.
+    IF sy-subrc EQ 0.
+      lv_ogr_n1 = ls_lfa1_ogr-name1.
+    ENDIF.
+
+    lv_ogr_txz01 = ls_ogr_kmi-txz01.
+    lv_ogr_menge = ls_ogr_kmi-menge.
+    lv_ogr_netpr = ls_ogr_kmi-netpr.
+    CONDENSE lv_ogr_menge NO-GAPS.
+    CONDENSE lv_ogr_netpr NO-GAPS.
+
+    " Escape karakter berbahaya
+    REPLACE ALL OCCURRENCES OF '"' IN lv_ogr_n1    WITH ''.
+    REPLACE ALL OCCURRENCES OF '"' IN lv_ogr_txz01 WITH ''.
+    REPLACE ALL OCCURRENCES OF cl_abap_char_utilities=>newline
+      IN lv_ogr_n1    WITH ' '.
+    REPLACE ALL OCCURRENCES OF cl_abap_char_utilities=>newline
+      IN lv_ogr_txz01 WITH ' '.
+    REPLACE ALL OCCURRENCES OF cl_abap_char_utilities=>cr_lf
+      IN lv_ogr_n1    WITH ' '.
+    REPLACE ALL OCCURRENCES OF cl_abap_char_utilities=>cr_lf
+      IN lv_ogr_txz01 WITH ' '.
+    REPLACE ALL OCCURRENCES OF '\' IN lv_ogr_n1    WITH ''.
+    REPLACE ALL OCCURRENCES OF '\' IN lv_ogr_txz01 WITH ''.
+
+    CONCATENATE
+      '{"ebeln":"'  ls_ogr_kmi-ebeln   '",'
+      '"ebelp":"'   ls_ogr_kmi-ebelp   '",'
+      '"bsart":"'   ls_ogr_kmi-bsart   '",'
+      '"bedat":"'   lv_ogr_bedat        '",'
+      '"lifnr":"'   ls_ogr_kmi-lifnr   '",'
+      '"name1":"'   lv_ogr_n1           '",'
+      '"werks":"'   ls_ogr_kmi-werks   '",'
+      '"matnr":"'   ls_ogr_kmi-matnr   '",'
+      '"txz01":"'   lv_ogr_txz01        '",'
+      '"menge":"'   lv_ogr_menge        '",'
+      '"meins":"'   ls_ogr_kmi-meins   '",'
+      '"netpr":"'   lv_ogr_netpr        '",'
+      '"waers":"'   ls_ogr_kmi-waers   '"}'
+    INTO lv_ogr_line.
+
+    response->append_cdata( lv_ogr_line ).
+    lv_ogr_sep = 'X'.
+  ENDLOOP.
+
+  response->append_cdata( ']}' ).
+  _m_navigation->response_complete( ).
+  EXIT.
+
+ENDIF.
+
+*------------------------------------------------------------------
+* FETCH DATA — ALWAYS LOAD FIRST
+*------------------------------------------------------------------
+CALL FUNCTION 'Z_FM_YMMR068'
+  EXPORTING
+    p_werks = '1200'
+  TABLES
+    t_data1 = lt_data1_1200
+    t_data2 = lt_data2_1200
+    return  = lt_return_tmp.
+
+CLEAR lt_return_tmp.
+
+CALL FUNCTION 'Z_FM_YMMR068'
+  EXPORTING
+    p_werks = '1300'
+  TABLES
+    t_data1 = lt_data1_1300
+    t_data2 = lt_data2_1300
+    return  = lt_return_tmp.
+
+APPEND LINES OF lt_data1_1200 TO lt_data1.
+APPEND LINES OF lt_data1_1300 TO lt_data1.
+APPEND LINES OF lt_data2_1200 TO lt_data2.
+APPEND LINES OF lt_data2_1300 TO lt_data2.
+
+*------------------------------------------------------------------
+* GET CHECKBOX
+*------------------------------------------------------------------
+CLEAR lt_selected.
+lv_idx = 1.
+DO 500 TIMES.
+  lv_idx_char = lv_idx.
+  CONDENSE lv_idx_char NO-GAPS.
+  CONCATENATE 'po_selected_' lv_idx_char INTO lv_fieldname.
+  lv_po = request->get_form_field( lv_fieldname ).
+  IF lv_po IS NOT INITIAL.
+    APPEND lv_po TO lt_selected.
+  ENDIF.
+  lv_idx = lv_idx + 1.
+ENDDO.
+
+*------------------------------------------------------------------
+* BULK RELEASE
+*------------------------------------------------------------------
+IF lv_action = 'BULK_REL' AND lt_selected IS NOT INITIAL.
+
+  CLEAR lv_count_rel.
+
+  LOOP AT lt_selected INTO lv_po.
+    lv_po_ebeln = lv_po.
+    READ TABLE lt_data1 INTO ls_data WITH KEY ebeln = lv_po_ebeln.
+    IF sy-subrc = 0.
+      CLEAR lt_return_rel.
+      CALL FUNCTION 'Z_PO_RELEASE2'
+        EXPORTING
+          purchaseorder = ls_data-ebeln
+          po_rel_code   = ls_data-frgco
+        TABLES
+          return        = lt_return_rel.
+      READ TABLE lt_return_rel INTO ls_ret INDEX 1.
+      IF ls_ret-type = 'E' OR ls_ret-type = 'A'.
+        lv_message = ls_ret-message.
+        lv_msgtype = 'E'.
+        EXIT.
+      ENDIF.
+      lv_count_rel = lv_count_rel + 1.
+    ENDIF.
+  ENDLOOP.
+
+  IF lv_msgtype IS INITIAL.
+    CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+      EXPORTING wait = 'X'.
+    lv_count_char = lv_count_rel.
+    CONDENSE lv_count_char NO-GAPS.
+    CONCATENATE 'Bulk Release Success (' lv_count_char ' PO)'
+      INTO lv_message SEPARATED BY space.
+    lv_msgtype = 'S'.
+  ENDIF.
+
+ENDIF.
+
+*------------------------------------------------------------------
+* BULK REJECT
+*------------------------------------------------------------------
+IF lv_action = 'BULK_REJ'
+   AND lt_selected IS NOT INITIAL
+   AND lv_comment IS NOT INITIAL.
+
+  CLEAR lv_count_rej.
+
+  DATA: lt_return_rej TYPE STANDARD TABLE OF bapiret2,
+        ls_ret_rej    TYPE bapiret2.
+
+  LOOP AT lt_selected INTO lv_po.
+    lv_po_ebeln = lv_po.
+
+    CALL FUNCTION 'Z_PO_COMMENT_UPDATE'
+      EXPORTING
+        purchaseorder = lv_po_ebeln
+        comment_text  = lv_comment
+        text_id       = 'F01'
+        text_langu    = sy-langu
+        header_level  = 'X'
+        item_number   = '00000'.
+
+    CLEAR lt_return_rej.
+    CALL FUNCTION 'Z_PO_REJECT'
+      EXPORTING
+        i_ebeln  = lv_po_ebeln
+      TABLES
+        t_return = lt_return_rej.
+
+    READ TABLE lt_return_rej INTO ls_ret_rej WITH KEY type = 'E'.
+    IF sy-subrc = 0.
+      lv_message = ls_ret_rej-message.
+      lv_msgtype = 'E'.
+      EXIT.
+    ENDIF.
+
+    READ TABLE lt_return_rej INTO ls_ret_rej WITH KEY type = 'A'.
+    IF sy-subrc = 0.
+      lv_message = ls_ret_rej-message.
+      lv_msgtype = 'E'.
+      EXIT.
+    ENDIF.
+
+    lv_count_rej = lv_count_rej + 1.
+  ENDLOOP.
+
+  IF lv_msgtype IS INITIAL.
+    lv_count_char = lv_count_rej.
+    CONDENSE lv_count_char NO-GAPS.
+    CONCATENATE 'Bulk Reject Success (' lv_count_char ' PO)'
+      INTO lv_message SEPARATED BY space.
+    lv_msgtype = 'S'.
+  ENDIF.
+
+ENDIF.
+
+*------------------------------------------------------------------
+* IF ACTION → RETURN JSON AND EXIT
+*------------------------------------------------------------------
+IF lv_action IS NOT INITIAL
+   AND ( lv_action = 'BULK_REL' OR lv_action = 'BULK_REJ' ).
+
+  DATA: lv_resp     TYPE string,
+        lv_sel_json TYPE string,
+        lv_sel_sep  TYPE string,
+        lv_msg_esc  TYPE string.
+
+  lv_msg_esc = lv_message.
+  REPLACE ALL OCCURRENCES OF '\' IN lv_msg_esc WITH '\\'.
+  REPLACE ALL OCCURRENCES OF '"' IN lv_msg_esc WITH '\"'.
+
+  CLEAR lv_sel_sep.
+  lv_sel_json = '['.
+  LOOP AT lt_selected INTO lv_po.
+    IF lv_sel_sep IS NOT INITIAL.
+      CONCATENATE lv_sel_json ',' INTO lv_sel_json.
+    ENDIF.
+    CONCATENATE lv_sel_json '"' lv_po '"' INTO lv_sel_json.
+    lv_sel_sep = 'X'.
+  ENDLOOP.
+  CONCATENATE lv_sel_json ']' INTO lv_sel_json.
+
+  CONCATENATE '{"status":"' lv_msgtype
+              '","message":"' lv_msg_esc
+              '","processed":' lv_sel_json '}'
+    INTO lv_resp.
+
+  _m_navigation->response_complete( ).
+  response->set_header_field(
+    name = 'Content-Type' value = 'application/json' ).
+  response->set_cdata( lv_resp ).
+  EXIT.
+
+ENDIF.
+
+*------------------------------------------------------------------
+* SERIALIZE DATA TO JSON
+*------------------------------------------------------------------
+CLEAR lv_sep.
+lv_json1 = '['.
+
+lv_cur_plant = '1200'.
+LOOP AT lt_data1_1200 INTO ls_data.
+  IF lv_sep IS NOT INITIAL.
+    CONCATENATE lv_json1 ',' INTO lv_json1.
+  ENDIF.
+  lv_name1_esc = ls_data-name1.
+  REPLACE ALL OCCURRENCES OF '\' IN lv_name1_esc WITH '\\'.
+  REPLACE ALL OCCURRENCES OF '"' IN lv_name1_esc WITH '\"'.
+  REPLACE ALL OCCURRENCES OF cl_abap_char_utilities=>cr_lf
+    IN lv_name1_esc WITH ' '.
+  REPLACE ALL OCCURRENCES OF cl_abap_char_utilities=>newline
+    IN lv_name1_esc WITH ' '.
+  lv_stats_esc = ls_data-stats.
+  REPLACE ALL OCCURRENCES OF '\' IN lv_stats_esc WITH '\\'.
+  REPLACE ALL OCCURRENCES OF '"' IN lv_stats_esc WITH '\"'.
+  lv_totpr_str = ls_data-totpr.
+  CONDENSE lv_totpr_str NO-GAPS.
+  CONCATENATE lv_json1
+    '{"ebeln":"' ls_data-ebeln
+    '","bsart":"' ls_data-bsart
+    '","name1":"' lv_name1_esc
+    '","stats":"' lv_stats_esc
+    '","totpr":"' lv_totpr_str
+    '","waerk":"' ls_data-waerk
+    '","frgco":"' ls_data-frgco
+    '","plant":"' lv_cur_plant '"}'
+  INTO lv_json1.
+  lv_sep = 'X'.
+ENDLOOP.
+
+lv_cur_plant = '1300'.
+LOOP AT lt_data1_1300 INTO ls_data.
+  IF lv_sep IS NOT INITIAL.
+    CONCATENATE lv_json1 ',' INTO lv_json1.
+  ENDIF.
+  lv_name1_esc = ls_data-name1.
+  REPLACE ALL OCCURRENCES OF '\' IN lv_name1_esc WITH '\\'.
+  REPLACE ALL OCCURRENCES OF '"' IN lv_name1_esc WITH '\"'.
+  REPLACE ALL OCCURRENCES OF cl_abap_char_utilities=>cr_lf
+    IN lv_name1_esc WITH ' '.
+  REPLACE ALL OCCURRENCES OF cl_abap_char_utilities=>newline
+    IN lv_name1_esc WITH ' '.
+  lv_stats_esc = ls_data-stats.
+  REPLACE ALL OCCURRENCES OF '\' IN lv_stats_esc WITH '\\'.
+  REPLACE ALL OCCURRENCES OF '"' IN lv_stats_esc WITH '\"'.
+  lv_totpr_str = ls_data-totpr.
+  CONDENSE lv_totpr_str NO-GAPS.
+  CONCATENATE lv_json1
+    '{"ebeln":"' ls_data-ebeln
+    '","bsart":"' ls_data-bsart
+    '","name1":"' lv_name1_esc
+    '","stats":"' lv_stats_esc
+    '","totpr":"' lv_totpr_str
+    '","waerk":"' ls_data-waerk
+    '","frgco":"' ls_data-frgco
+    '","plant":"' lv_cur_plant '"}'
+  INTO lv_json1.
+  lv_sep = 'X'.
+ENDLOOP.
+
+CONCATENATE lv_json1 ']' INTO lv_json1.
+
+CLEAR lv_sep.
+lv_json2 = '['.
+
+LOOP AT lt_data2 INTO ls_item.
+  IF lv_sep IS NOT INITIAL.
+    CONCATENATE lv_json2 ',' INTO lv_json2.
+  ENDIF.
+  lv_maktx_esc = ls_item-maktx.
+  REPLACE ALL OCCURRENCES OF '\' IN lv_maktx_esc WITH '\\'.
+  REPLACE ALL OCCURRENCES OF '"' IN lv_maktx_esc WITH '\"'.
+  REPLACE ALL OCCURRENCES OF cl_abap_char_utilities=>cr_lf
+    IN lv_maktx_esc WITH ' '.
+  REPLACE ALL OCCURRENCES OF cl_abap_char_utilities=>newline
+    IN lv_maktx_esc WITH ' '.
+  lv_text_esc = ls_item-text.
+  REPLACE ALL OCCURRENCES OF '\' IN lv_text_esc WITH '\\'.
+  REPLACE ALL OCCURRENCES OF '"' IN lv_text_esc WITH '\"'.
+  REPLACE ALL OCCURRENCES OF cl_abap_char_utilities=>cr_lf
+    IN lv_text_esc WITH ' '.
+  REPLACE ALL OCCURRENCES OF cl_abap_char_utilities=>newline
+    IN lv_text_esc WITH ' '.
+  lv_menge_str = ls_item-menge.
+  lv_nettt_str = ls_item-nettt.
+  lv_netwr_str = ls_item-netwr.
+  CONDENSE: lv_menge_str NO-GAPS,
+            lv_nettt_str NO-GAPS,
+            lv_netwr_str NO-GAPS.
+  CONCATENATE lv_json2
+    '{"ebeln":"' ls_item-ebeln
+    '","ebelp":"' ls_item-ebelp
+    '","maktx":"' lv_maktx_esc
+    '","menge":"' lv_menge_str
+    '","meins":"' ls_item-meins
+    '","nettt":"' lv_nettt_str
+    '","netwr":"' lv_netwr_str
+    '","waerk":"' ls_item-waerk
+    '","text":"'  lv_text_esc '"}'
+  INTO lv_json2.
+  lv_sep = 'X'.
+ENDLOOP.
+
+CONCATENATE lv_json2 ']' INTO lv_json2.
+%>
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PO Release System</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --primary:    #1a56db;
+  --primary-lt: #eff6ff;
+  --success:    #057a55;
+  --danger:     #c81e1e;
+  --bg:         #f3f4f8;
+  --border:     #e5e7eb;
+  --text:       #111827;
+  --muted:      #6b7280;
+  --sidebar-w:  256px;
+  --header-h:   60px;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'DM Sans', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+}
+
+/* ── HEADER ── */
+.hdr {
+  position: fixed; top:0; left:0; right:0;
+  height: var(--header-h);
+  background: #fff;
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center;
+  padding: 0 22px; gap: 12px;
+  z-index: 300;
+}
+.hdr-logo {
+  width:34px; height:34px; border-radius:9px;
+  background: #f3f4f6;
+  display:flex; align-items:center; justify-content:center;
+  flex-shrink:0; overflow:hidden;
+}
+.hdr-brand { font-size:15px; font-weight:700; }
+.hdr-corp  { font-size:11px; color:var(--muted); }
+.hdr-user  {
+  margin-left:auto; display:flex; align-items:center; gap:10px;
+  font-size:13px; font-weight:600; color:#374151;
+}
+.hdr-avatar {
+  width:32px; height:32px; border-radius:50%;
+  background: var(--primary); color:#fff;
+  display:flex; align-items:center; justify-content:center;
+  font-size:13px; font-weight:700;
+}
+
+/* ── SIDEBAR ── */
+.sidebar {
+  position: fixed;
+  top: var(--header-h); left:0; bottom:0;
+  width: var(--sidebar-w);
+  background: #fff;
+  border-right: 1px solid var(--border);
+  overflow-y: auto; z-index:200;
+  padding: 14px 0;
+  transition: transform .22s ease;
+}
+.sb-section { margin-bottom: 2px; }
+.sb-plant {
+  padding: 8px 18px 6px;
+  font-size: 11px; font-weight:700;
+  letter-spacing:.08em; text-transform:uppercase;
+  color: var(--muted);
+  display:flex; align-items:center; justify-content:space-between;
+  cursor:pointer; transition: background .12s; user-select:none;
+}
+.sb-plant:hover { background:#f9fafb; }
+.sb-plant-chevron { font-size:12px; color:#9ca3af; transition:transform .2s; }
+.sb-section.open .sb-plant-chevron { transform:rotate(180deg); }
+.sb-section.open .sb-plant { color:#374151; }
+.sb-submenu { max-height:0; overflow:hidden; transition: max-height .28s ease; }
+.sb-section.open .sb-submenu { max-height:800px; }
+.sb-link {
+  display:flex; align-items:center; justify-content:space-between;
+  padding: 8px 18px 8px 24px;
+  font-size:13px; font-weight:500; color:#374151;
+  text-decoration:none; cursor:pointer; transition: background .12s;
+}
+.sb-link:hover { background:#f9fafb; }
+.sb-link.active {
+  background: var(--primary-lt); color: var(--primary);
+  font-weight:600; border-left: 3px solid var(--primary); padding-left: 21px;
+}
+.sb-link.active-rel {
+  background: #f0fdf4; color: #057a55;
+  font-weight:600; border-left: 3px solid #057a55; padding-left: 29px;
+}
+.sb-link.active-rej {
+  background: #fff5f5; color: #c81e1e;
+  font-weight:600; border-left: 3px solid #c81e1e; padding-left: 29px;
+}
+.sb-cnt {
+  font-size:11px; font-weight:700; padding: 2px 8px; border-radius:5px;
+  background:#def7ec; color:#057a55; min-width:22px; text-align:center;
+}
+.sb-link.active .sb-cnt { background:var(--primary); color:#fff; }
+.sb-cnt-total {
+  font-size:11px; font-weight:700; padding: 2px 8px; border-radius:5px;
+  background:#057a55; color:#fff; min-width:24px; text-align:center;
+}
+.sb-divider { height:1px; background:var(--border); margin:10px 0; }
+
+/* ── History sidebar ── */
+.sb-hist-parent { margin: 2px 0; }
+.sb-hist-toggle {
+  display:flex; align-items:center; justify-content:space-between;
+  padding: 8px 18px 8px 20px;
+  font-size:13px; font-weight:600; color:#374151;
+  cursor:pointer; transition: background .12s; user-select:none;
+}
+.sb-hist-toggle:hover { background:#f9fafb; }
+.sb-hist-chevron { font-size:10px; color:#9ca3af; transition: transform .2s; }
+.sb-hist-parent.open .sb-hist-chevron { transform:rotate(180deg); }
+.sb-hist-sub { max-height:0; overflow:hidden; transition: max-height .25s ease; }
+.sb-hist-parent.open .sb-hist-sub { max-height:200px; }
+.sb-hist-sub .sb-link { padding-left: 36px; font-size:12px; }
+.sb-hist-sub .sb-link:hover { background:#f9fafb; }
+.sb-cnt-rel {
+  font-size:11px; font-weight:700; padding: 2px 8px; border-radius:5px;
+  background:#def7ec; color:#057a55; min-width:22px; text-align:center;
+}
+.sb-cnt-rej {
+  font-size:11px; font-weight:700; padding: 2px 8px; border-radius:5px;
+  background:#fde8e8; color:#c81e1e; min-width:22px; text-align:center;
+}
+.sb-cnt-ogr {
+  font-size:11px; font-weight:700; padding: 2px 8px; border-radius:5px;
+  background:#fef3c7; color:#b45309; min-width:22px; text-align:center;
+}
+.sb-link.active-ogr {
+  background: #fffbeb; color: #b45309;
+  font-weight:600; border-left: 3px solid #b45309; padding-left: 21px;
+}
+.sb-link.active-ogr .sb-cnt-ogr { background:#b45309; color:#fff; }
+
+/* Badge potype di OGR card */
+.badge-potype {
+  display:inline-flex; align-items:center;
+  padding:3px 9px; border-radius:20px;
+  font-size:11px; font-weight:600;
+}
+
+/* OGR Table */
+.ogr-table-wrap { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+.ogr-table {
+  width:100%; border-collapse:collapse;
+  font-size:13px; min-width:780px;
+}
+.ogr-table th {
+  background:#f9fafb; padding:9px 10px; text-align:left;
+  font-size:11px; text-transform:uppercase;
+  letter-spacing:.05em; color:var(--muted);
+  font-weight:600; border-bottom:2px solid var(--border);
+  white-space:nowrap;
+}
+.ogr-table th.num { text-align:right; }
+.ogr-table td {
+  padding:9px 10px; border-bottom:1px solid #f3f4f6;
+  color:#374151; vertical-align:middle;
+}
+.ogr-table td.num { text-align:right; }
+.ogr-table tr:hover td { background:#fafafa; }
+.ogr-table tr:last-child td { border-bottom:none; }
+
+/* OGR Summary cards */
+.ogr-summary {
+  display:flex; gap:12px; margin-bottom:16px; flex-wrap:wrap;
+}
+.ogr-summary-card {
+  background:#fff; border:1px solid var(--border);
+  border-radius:10px; padding:14px 18px; flex:1; min-width:140px;
+}
+.ogr-summary-label {
+  font-size:11px; color:var(--muted);
+  font-weight:600; text-transform:uppercase;
+  letter-spacing:.05em; margin-bottom:4px;
+}
+.ogr-summary-value {
+  font-size:22px; font-weight:700; color:var(--text);
+}
+.ogr-summary-sub {
+  font-size:11px; color:var(--muted); margin-top:2px;
+}
+.sb-link.active-rel .sb-cnt-rel { background:#057a55; color:#fff; }
+.sb-link.active-rej .sb-cnt-rej { background:#c81e1e; color:#fff; }
+
+/* ── MAIN ── */
+.main {
+  margin-left: var(--sidebar-w);
+  margin-top: var(--header-h);
+  padding: 24px 24px 120px;
+  transition: margin-left .22s ease;
+}
+.pg-hdr { margin-bottom:18px; }
+.pg-title { font-size:20px; font-weight:700; }
+.pg-sub   { font-size:13px; color:var(--muted); margin-top:2px; }
+
+/* ── TOOLBAR ── */
+.toolbar {
+  display:flex; align-items:center; gap:10px;
+  margin-bottom:14px; flex-wrap:wrap;
+}
+.search-wrap {
+  display:flex; align-items:center;
+  background:#fff; border:1px solid var(--border);
+  border-radius:8px; padding:0 12px; gap:7px; height:38px;
+}
+.search-wrap input {
+  border:none; outline:none; font-family:inherit;
+  font-size:13px; width:220px; color:#374151; background:transparent;
+}
+.btn-selall {
+  height:38px; padding:0 16px;
+  border:1px solid var(--border); background:#fff;
+  border-radius:8px; font-family:inherit;
+  font-size:13px; font-weight:600; color:#374151;
+  cursor:pointer; display:flex; align-items:center; gap:6px;
+  transition:background .12s;
+}
+.btn-selall:hover { background:#f9fafb; }
+.pg-count { margin-left:auto; font-size:13px; color:var(--muted); }
+
+/* ── PAGE SIZE ── */
+.page-size-wrap { display:flex; align-items:center; gap:6px; height:38px; }
+.page-size-wrap label {
+  font-size:12px; font-weight:600; color:var(--muted); white-space:nowrap;
+}
+.page-size-select {
+  height:34px; padding:0 28px 0 10px;
+  border:1px solid var(--border); background:#fff;
+  border-radius:8px; font-family:inherit;
+  font-size:13px; font-weight:600; color:#374151;
+  cursor:pointer; appearance:none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236b7280' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 9px center;
+  outline:none; transition: border-color .15s, box-shadow .15s;
+}
+.page-size-select:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(26,86,219,.12);
+}
+.page-size-select:hover { border-color: #9ca3af; }
+
+/* ── PAGINATION ── */
+.pagination-bar {
+  display:flex; align-items:center; justify-content:center;
+  gap:6px; padding:16px 0 4px; flex-wrap:wrap;
+}
+.pg-btn {
+  height:34px; min-width:34px; padding:0 10px;
+  border:1px solid var(--border); background:#fff;
+  border-radius:8px; font-family:inherit;
+  font-size:13px; font-weight:600; color:#374151;
+  cursor:pointer; transition:all .12s;
+  display:flex; align-items:center; justify-content:center;
+}
+.pg-btn:hover { background:#f9fafb; }
+.pg-btn.active { background:var(--primary); color:#fff; border-color:var(--primary); }
+.pg-btn:disabled { opacity:.4; cursor:default; background:#fff; }
+.pg-info { font-size:12px; color:var(--muted); font-weight:500; padding:0 8px; }
+
+/* ── PO CARDS ── */
+.po-card {
+  background:#fff; border:1px solid var(--border);
+  border-radius:12px; margin-bottom:10px; overflow:hidden;
+  transition: box-shadow .18s, opacity .3s, max-height .4s;
+}
+.po-card:hover { box-shadow:0 3px 14px rgba(0,0,0,.07); }
+.po-card.removing {
+  opacity:0; max-height:0 !important;
+  margin-bottom:0; padding:0; overflow:hidden;
+}
+.card-top {
+  display:flex; align-items:center; padding: 15px 18px; gap:12px;
+}
+.card-cb {
+  width:18px; height:18px; flex-shrink:0;
+  accent-color:var(--primary); cursor:pointer;
+}
+.card-num {
+  font-family:'DM Mono',monospace;
+  font-size:15px; font-weight:600; color:var(--primary); cursor:pointer;
+}
+.card-num:hover { text-decoration:underline; }
+.badge {
+  display:inline-flex; align-items:center;
+  padding:3px 9px; border-radius:20px; font-size:11px; font-weight:600;
+}
+.b-rel  { background:#def7ec; color:#057a55; }
+.b-rej  { background:#fde8e8; color:#c81e1e; }
+.card-amount { margin-left:auto; text-align:right; font-size:16px; font-weight:700; color:#057a55; }
+.card-amount-lbl { font-size:10px; color:var(--muted); font-weight:400; display:block; }
+.card-chevron {
+  font-size:16px; color:#9ca3af;
+  transition:transform .2s; margin-left:6px; cursor:pointer;
+}
+.po-card.expanded .card-chevron { transform:rotate(180deg); }
+.card-meta {
+  display:grid; grid-template-columns:repeat(4,1fr);
+  gap:10px; padding:0 18px 14px 48px;
+}
+.card-meta.hist-meta {
+  grid-template-columns:repeat(3,1fr); padding-left: 18px;
+}
+.meta-lbl {
+  font-size:10px; text-transform:uppercase;
+  letter-spacing:.06em; color:var(--muted); font-weight:600; margin-bottom:2px;
+}
+.meta-val { font-size:13px; font-weight:600; }
+.card-detail {
+  display:none; border-top:1px solid #f3f4f6; padding:0 18px 16px;
+}
+.po-card.expanded .card-detail { display:block; }
+.card-detail table {
+  width:100%; border-collapse:collapse; margin-top:12px; font-size:13px;
+}
+.card-detail th {
+  text-align:left; padding:7px 10px;
+  font-size:11px; text-transform:uppercase;
+  letter-spacing:.05em; color:var(--muted);
+  font-weight:600; border-bottom:1px solid var(--border);
+}
+.card-detail td {
+  padding:9px 10px; border-bottom:1px solid #f9fafb;
+  color:#374151; font-size:13px;
+}
+.card-detail tr:last-child td { border-bottom:none; }
+.card-detail td.num-col,
+.card-detail th.num-col { text-align:right; }
+
+/* ── ADD INFO ── */
+.add-info {
+  margin-top:12px; padding:11px 14px;
+  background:var(--primary-lt); border-left:3px solid var(--primary);
+  border-radius:6px; display:flex; gap:9px; align-items:flex-start;
+}
+.add-info.rej-info { background:#fff5f5; border-left-color:#c81e1e; }
+.add-info-icon { color:var(--primary); font-size:14px; flex-shrink:0; margin-top:1px; }
+.add-info.rej-info .add-info-icon { color:#c81e1e; }
+.add-info-lbl {
+  font-size:10px; font-weight:700; text-transform:uppercase;
+  letter-spacing:.06em; color:var(--primary); margin-bottom:3px;
+}
+.add-info.rej-info .add-info-lbl { color:#c81e1e; }
+.add-info-txt { font-size:13px; color:#1e40af; font-weight:500; line-height:1.5; }
+.add-info.rej-info .add-info-txt { color:#7f1d1d; }
+.add-info-empty { font-size:13px; color:var(--muted); font-style:italic; }
+
+/* ── HISTORY FILTER BAR ── */
+.hist-filter-bar {
+  display:flex; align-items:center; gap:10px;
+  margin-bottom:14px; flex-wrap:wrap;
+  background:#fff; border:1px solid var(--border);
+  border-radius:10px; padding:12px 16px;
+}
+.hist-filter-group { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.hist-filter-label { font-size:12px; font-weight:600; color:var(--muted); white-space:nowrap; }
+.hist-date-inp {
+  height:34px; padding:0 10px;
+  border:1px solid var(--border); border-radius:8px;
+  font-family:inherit; font-size:13px; color:var(--text);
+  outline:none; background:#fff; transition:border-color .15s;
+}
+.hist-date-inp:focus { border-color:var(--primary); }
+
+/* ── HISTORY ITEM TABLE ── */
+.hist-item-section {
+  margin-top:14px;
+  border:1px solid var(--border);
+  border-radius:8px; overflow:hidden;
+}
+.hist-item-header {
+  background:#f9fafb; padding:9px 14px;
+  display:flex; align-items:center; justify-content:space-between;
+}
+.hist-item-header-lbl {
+  font-size:11px; font-weight:700; text-transform:uppercase;
+  letter-spacing:.06em; color:var(--muted);
+}
+.hist-item-loading {
+  padding:16px; text-align:center;
+  font-size:13px; color:var(--muted);
+  display:flex; align-items:center; justify-content:center; gap:8px;
+}
+.hist-item-table {
+  width:100%; border-collapse:collapse; font-size:13px;
+}
+.hist-item-table th {
+  background:#f9fafb; padding:8px 10px; text-align:left;
+  font-size:11px; text-transform:uppercase; letter-spacing:.05em;
+  color:var(--muted); font-weight:600; border-bottom:1px solid var(--border);
+  white-space:nowrap;
+}
+.hist-item-table th.num { text-align:right; }
+.hist-item-table td {
+  padding:9px 10px; border-bottom:1px solid #f9fafb; color:#374151;
+}
+.hist-item-table td.num { text-align:right; }
+.hist-item-table tr:last-child td { border-bottom:none; }
+.hist-item-table tr:hover td { background:#fafafa; }
+
+/* ── FAB ── */
+.fab {
+  position:fixed; bottom:20px; right:20px;
+  display:none; align-items:center; gap:8px;
+  background:#fff; border:1px solid var(--border);
+  border-radius:14px; padding:10px 12px;
+  box-shadow:0 8px 28px rgba(0,0,0,.14); z-index:400;
+}
+.fab.show { display:flex; }
+.fab input {
+  border:1px solid var(--border); border-radius:8px;
+  padding:8px 12px; font-family:inherit;
+  font-size:13px; width:210px; outline:none; transition:border .15s;
+}
+.fab input:focus { border-color:var(--primary); }
+.fab-btn {
+  height:38px; padding:0 16px; border:none;
+  border-radius:8px; font-family:inherit;
+  font-size:13px; font-weight:600; color:#fff;
+  cursor:pointer; display:flex; align-items:center; gap:6px;
+  transition:opacity .15s, transform .1s; white-space:nowrap;
+}
+.fab-btn:hover  { opacity:.87; }
+.fab-btn:active { transform:scale(.97); }
+.fab-rel { background:var(--success); }
+.fab-rej { background:var(--danger);  }
+
+/* ── TOAST ── */
+.toast {
+  position:fixed; top:70px; right:20px; background:#fff;
+  border-radius:10px; padding:13px 18px;
+  box-shadow:0 4px 20px rgba(0,0,0,.13);
+  font-size:14px; font-weight:600;
+  display:flex; align-items:center; gap:10px;
+  z-index:9999; max-width:360px; animation:slideIn .28s ease;
+}
+.toast-s { border-left:4px solid var(--success); color:var(--success); }
+.toast-e { border-left:4px solid var(--danger);  color:var(--danger);  }
+@keyframes slideIn {
+  from { opacity:0; transform:translateX(16px); }
+  to   { opacity:1; transform:translateX(0); }
+}
+
+/* ── LOADING OVERLAY ── */
+#lo {
+  position:fixed; inset:0; background:rgba(0,0,0,.4);
+  display:none; align-items:center; justify-content:center; z-index:10000;
+}
+#lo.show { display:flex; }
+.lo-box {
+  background:#fff; padding:26px 34px; border-radius:14px;
+  text-align:center; font-weight:600; font-size:14px; color:#374151;
+  box-shadow:0 8px 32px rgba(0,0,0,.18);
+}
+.lo-spin {
+  width:34px; height:34px; margin:12px auto 0;
+  border:4px solid #e5e7eb; border-top-color:var(--primary);
+  border-radius:50%; animation:spin .7s linear infinite;
+}
+@keyframes spin { to { transform:rotate(360deg); } }
+
+/* ── MODAL ── */
+.modal {
+  display:none; position:fixed; inset:0;
+  background:rgba(0,0,0,.48); z-index:999;
+  align-items:center; justify-content:center;
+}
+.modal.show { display:flex; }
+.modal-box {
+  background:#fff; border-radius:16px; padding:26px;
+  width:90%; max-width:820px; max-height:88vh; overflow-y:auto;
+  box-shadow:0 20px 56px rgba(0,0,0,.22); position:relative;
+}
+.modal-close {
+  position:absolute; top:16px; right:16px;
+  width:30px; height:30px; border-radius:50%;
+  background:#f3f4f6; border:none; cursor:pointer;
+  font-size:15px; display:flex; align-items:center; justify-content:center;
+  color:var(--muted); transition:background .12s;
+}
+.modal-close:hover { background:var(--border); }
+.modal-title {
+  font-size:17px; font-weight:700;
+  font-family:'DM Mono',monospace; margin-bottom:18px;
+}
+
+/* ── STICKY ── */
+.sticky-top {
+  position:sticky; top:var(--header-h); z-index:150;
+  background:var(--bg); padding-top:20px; margin-bottom:0;
+}
+.sticky-toolbar {
+  position:sticky; top:calc(var(--header-h) + 74px);
+  z-index:149; background:var(--bg); padding-bottom:10px;
+}
+
+/* ── EXPAND BAR ── */
+.expand-bar { display:flex; align-items:center; gap:8px; }
+.btn-exp {
+  height:34px; padding:0 14px;
+  border:1px solid var(--border); background:#fff;
+  border-radius:8px; font-family:inherit;
+  font-size:12px; font-weight:600; color:#374151;
+  cursor:pointer; display:flex; align-items:center; gap:5px;
+  transition:background .12s;
+}
+.btn-exp:hover { background:#f3f4f6; }
+
+/* ── SIDEBAR TOGGLE ── */
+.btn-toggle-sb {
+  width:32px; height:32px; border:none; background:transparent;
+  border-radius:7px; cursor:pointer;
+  display:flex; align-items:center; justify-content:center;
+  color:#6b7280; font-size:18px; transition:background .12s; flex-shrink:0;
+}
+.btn-toggle-sb:hover { background:#f3f4f6; }
+body.sb-collapsed .sidebar { transform:translateX(-100%); }
+body.sb-collapsed .main    { margin-left:0; }
+
+/* ── EMPTY STATE ── */
+.empty { text-align:center; padding:80px 20px; color:var(--muted); }
+.empty-ico { font-size:46px; margin-bottom:10px; }
+.empty-txt { font-size:15px; font-weight:500; }
+</style>
+</head>
+<body>
+
+<header class="hdr">
+  <button class="btn-toggle-sb" onclick="toggleSidebar()"
+          title="Toggle Sidebar">&#9776;</button>
+  <div class="hdr-logo">
+    <img src="logo.png" alt="Logo"
+         style="width:28px;height:28px;object-fit:contain;">
+  </div>
+  <div>
+    <div class="hdr-brand">Release PO</div>
+    <div class="hdr-corp">PT. Kayu Mebel Indonesia</div>
+  </div>
+  <div class="hdr-user" style="position:relative;">
+    <div class="hdr-avatar"><%= sy-uname(1) %></div>
+    <span style="cursor:pointer;"
+          onclick="toggleUserMenu()"><%= sy-uname %> &#8964;</span>
+    <div id="userMenu" style="
+      display:none; position:absolute;
+      top:calc(100% + 10px); right:0;
+      background:#fff; border:1px solid #e5e7eb;
+      border-radius:10px; box-shadow:0 8px 24px rgba(0,0,0,.12);
+      min-width:160px; z-index:9999; overflow:hidden;">
+      <div style="padding:12px 16px;border-bottom:1px solid #f3f4f6;">
+        <div style="font-size:12px;color:#6b7280;">Logged in as</div>
+        <div style="font-size:13px;font-weight:700;color:#111827;">
+          <%= sy-uname %>
+        </div>
+      </div>
+      <a onclick="doLogout()" style="
+        display:flex;align-items:center;gap:9px;
+        padding:11px 16px;font-size:13px;font-weight:600;
+        color:#c81e1e;text-decoration:none;cursor:pointer;
+        transition:background .12s;"
+        onmouseover="this.style.background='#fff5f5'"
+        onmouseout="this.style.background='transparent'">
+        &#10148; Logout
+      </a>
+    </div>
+  </div>
+</header>
+
+<aside class="sidebar" id="sidebar"></aside>
+<main class="main" id="mainContent"></main>
+
+<div class="fab" id="fab">
+  <input type="text" id="commentInput" placeholder="Reject reason...">
+  <button type="button" class="fab-btn fab-rel"
+          onclick="submitAction('BULK_REL')">
+    &#10003; Release Selected
+  </button>
+  <button type="button" class="fab-btn fab-rej"
+          onclick="submitAction('BULK_REJ')">
+    &#10007; Reject Selected
+  </button>
+</div>
+
+<div class="modal" id="poModal"
+     onclick="if(event.target===this)closeModal()">
+  <div class="modal-box">
+    <button class="modal-close" onclick="closeModal()">&#10005;</button>
+    <div id="modalBody"></div>
+  </div>
+</div>
+
+<div id="lo">
+  <div class="lo-box">
+    Processing... Please wait
+    <div class="lo-spin"></div>
+  </div>
+</div>
+<script>
+/* ================================================================
+   DATA FROM ABAP
+   ================================================================ */
+var ALL_DATA1 = <%= lv_json1 %>;
+var ALL_DATA2 = <%= lv_json2 %>;
+
+/* ================================================================
+   CONSTANTS & MAPS
+   ================================================================ */
+var POTYPE_MAP = {
+  '1200': {
+    'JASA':      { label: 'PO Jasa',                          bsart: ['PSB7'] },
+    'JASA_PROD': { label: 'PO Jasa Production',               bsart: ['POK1'] },
+    'BAHAN':     { label: 'PO Bahan Baku',                    bsart: ['PSB1','PSB3','PSB4'] },
+    'PENUNJANG': { label: 'PO Bahan Baku Penunjang',          bsart: ['PSB2'] },
+    'SPAREPART': { label: 'PO Sparepart &amp; Tools',         bsart: ['PSB8','PSB9','PSBT'] },
+    'UTILITY':   { label: 'PO Bahan Penunjang &amp; Utility', bsart: ['PSB5','PSB6'] },
+    'EXIM':      { label: 'PO Exim',                          bsart: ['PSBI','POK9'] }
+  },
+  '1300': {
+    'JASA':      { label: 'PO Jasa',                          bsart: ['PSM7'] },
+    'BAHAN':     { label: 'PO Bahan Baku',                    bsart: ['PSM1','PSM3','PSM4'] },
+    'PENUNJANG': { label: 'PO Bahan Baku Penunjang',          bsart: ['PSM2'] },
+    'SPAREPART': { label: 'PO Sparepart &amp; Tools',         bsart: ['PSM8','PSM9','PSMT'] },
+    'UTILITY':   { label: 'PO Bahan Penunjang &amp; Utility', bsart: ['PSM5','PSM6'] },
+    'EXIM':      { label: 'PO Exim',                          bsart: ['PSMI','POK9'] }
+  }
+};
+
+var PLANT_LABELS = { '1200': 'Surabaya', '1300': 'Semarang' };
+/* Reverse lookup bsart → potype label & color */
+var BSART_POTYPE_MAP = {};
+(function buildBsartMap() {
+  var colorMap = {
+    'JASA':      { label: 'PO Jasa',             color: '#7c3aed', bg: '#ede9fe' },
+    'JASA_PROD': { label: 'PO Jasa Production',  color: '#7c3aed', bg: '#ede9fe' },
+    'BAHAN':     { label: 'PO Bahan Baku',        color: '#057a55', bg: '#def7ec' },
+    'PENUNJANG': { label: 'PO Bahan Penunjang',   color: '#0369a1', bg: '#e0f2fe' },
+    'SPAREPART': { label: 'PO Sparepart & Tools', color: '#b45309', bg: '#fef3c7' },
+    'UTILITY':   { label: 'PO Utility',           color: '#0891b2', bg: '#cffafe' },
+    'EXIM':      { label: 'PO Exim',              color: '#c81e1e', bg: '#fde8e8' }
+  };
+  ['1200','1300'].forEach(function(plant) {
+    var map = POTYPE_MAP[plant];
+    for (var pt in map) {
+      var info = colorMap[pt] || { label: pt, color: '#374151', bg: '#f3f4f6' };
+      map[pt].bsart.forEach(function(bs) {
+        if (!BSART_POTYPE_MAP[bs]) {
+          BSART_POTYPE_MAP[bs] = {
+            potype: pt,
+            label:  info.label,
+            color:  info.color,
+            bg:     info.bg
+          };
+        }
+      });
+    }
+  });
+})();
+var ZERO_DEC_CURRENCIES = [
+  'IDR','JPY','KRW','VND','BIF','CLP','GNF',
+  'ISK','KMF','MGA','PYG','RWF','UGX','XAF','XOF','XPF'
+];
+
+/* ================================================================
+   STATE VARIABLES
+   ================================================================ */
+var curPlant     = '';
+var curPotype    = '';
+var curData      = [];
+var selAll       = false;
+var openSections = {};
+
+/* Pagination PO list */
+var pageSize     = 10;
+var currentPage  = 1;
+var filteredData = [];
+
+/* History state */
+var histMode      = '';
+var histPlant     = '';
+var histDateFrom  = '';
+var histDateTo    = '';
+var histSearch    = '';
+var histOffset    = 0;
+var histLimit     = 20;
+var histTotal     = 0;
+var histData      = [];
+var histSearchTmr = null;
+
+/* History items cache — key: ebeln, value: array of items */
+var histItemsCache = {};
+
+/* OGR state */
+var ogrMode    = '';   // 'OGR'
+var ogrPlant   = '';
+var ogrData    = [];
+var ogrCounts  = { '1200': 0, '1300': 0 };
+var ogrLoaded  = { '1200': false, '1300': false };
+
+/* History badge counts */
+var histCounts = {
+  '1200': { rel: 0, rej: 0 },
+  '1300': { rel: 0, rej: 0 }
+};
+
+/* ================================================================
+   UTILITY FUNCTIONS
+   ================================================================ */
+function todayStr() {
+  var d  = new Date();
+  var mm = ('0' + (d.getMonth() + 1)).slice(-2);
+  var dd = ('0' + d.getDate()).slice(-2);
+  return d.getFullYear() + '' + mm + '' + dd;
+}
+
+function toInputDate(dats) {
+  if (!dats || dats.length < 8) return '';
+  return dats.substr(0,4) + '-' + dats.substr(4,2) + '-' + dats.substr(6,2);
+}
+
+function fromInputDate(val) {
+  if (!val) return '';
+  return val.replace(/-/g, '');
+}
+
+function formatDate(dats) {
+  if (!dats || dats.length < 8) return '-';
+  return dats.substr(6,2) + '/' + dats.substr(4,2) + '/' + dats.substr(0,4);
+}
+
+function formatTime(tims) {
+  if (!tims) return '-';
+  var s = tims.toString().replace(/\s/g,'').padStart(6,'0');
+  return s.substr(0,2) + ':' + s.substr(2,2) + ':' + s.substr(4,2);
+}
+
+function escHtml(s) {
+  if (!s) return '';
+  return String(s)
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;');
+}
+
+function parseAbapNum(rawStr) {
+  if (!rawStr || rawStr === '') return NaN;
+  var s = rawStr.toString().trim();
+  var dotCount = (s.match(/\./g) || []).length;
+  if (dotCount > 1) {
+    return parseFloat(s.replace(/\./g,'').replace(',','.'));
+  }
+  return parseFloat(s);
+}
+
+function formatAmount(rawStr, currency) {
+  if (!rawStr || rawStr === '' || rawStr === '0')
+    return '0 ' + (currency || '');
+  var num  = parseAbapNum(rawStr);
+  if (isNaN(num)) return escHtml(rawStr) + ' ' + (currency || '');
+  var curr = (currency || '').toUpperCase();
+  var isZD = ZERO_DEC_CURRENCIES.indexOf(curr) > -1;
+  var fmt;
+  if (isZD) {
+    fmt = Math.round(num * 100)
+      .toLocaleString('id-ID',
+        { minimumFractionDigits:0, maximumFractionDigits:0 });
+  } else {
+    fmt = num.toLocaleString('id-ID',
+      { minimumFractionDigits:2, maximumFractionDigits:2 });
+  }
+  return fmt + (currency ? ' ' + currency : '');
+}
+
+function formatNum(rawStr, currency) {
+  if (!rawStr || rawStr === '' || rawStr === '0') return '0';
+  var num  = parseAbapNum(rawStr);
+  if (isNaN(num)) return escHtml(rawStr);
+  var curr = (currency || '').toUpperCase();
+  if (currency && ZERO_DEC_CURRENCIES.indexOf(curr) > -1) {
+    return Math.round(num * 100)
+      .toLocaleString('id-ID',
+        { minimumFractionDigits:0, maximumFractionDigits:0 });
+  }
+  if (currency && ZERO_DEC_CURRENCIES.indexOf(curr) === -1) {
+    return num.toLocaleString('id-ID',
+      { minimumFractionDigits:2, maximumFractionDigits:2 });
+  }
+  if (num % 1 === 0) {
+    return num.toLocaleString('id-ID',
+      { minimumFractionDigits:0, maximumFractionDigits:0 });
+  }
+  return num.toLocaleString('id-ID',
+    { minimumFractionDigits:3, maximumFractionDigits:3 });
+}
+
+function formatNumHist(rawStr, currency) {
+  /* Khusus history: netpr & netwr dari EKPO
+     tidak perlu dikali 100 karena langsung dari DB */
+  if (!rawStr || rawStr === '' || rawStr === '0') return '0';
+  var num  = parseAbapNum(rawStr);
+  if (isNaN(num)) return escHtml(rawStr);
+  var curr = (currency || '').toUpperCase();
+  if (currency && ZERO_DEC_CURRENCIES.indexOf(curr) > -1) {
+    return Math.round(num)
+      .toLocaleString('id-ID',
+        { minimumFractionDigits:0, maximumFractionDigits:0 });
+  }
+  if (currency && ZERO_DEC_CURRENCIES.indexOf(curr) === -1) {
+    return num.toLocaleString('id-ID',
+      { minimumFractionDigits:2, maximumFractionDigits:2 });
+  }
+  if (num % 1 === 0) {
+    return num.toLocaleString('id-ID',
+      { minimumFractionDigits:0, maximumFractionDigits:0 });
+  }
+  return num.toLocaleString('id-ID',
+    { minimumFractionDigits:3, maximumFractionDigits:3 });
+}
+
+/* ================================================================
+   SIDEBAR COUNT HELPERS
+   ================================================================ */
+function countByBsart(bsartList, plant) {
+  return ALL_DATA1.filter(function(d) {
+    return d.plant === plant && bsartList.indexOf(d.bsart) > -1;
+  }).length;
+}
+
+function countTotalByPlant(plantCode) {
+  return ALL_DATA1.filter(function(d) {
+    return d.plant === plantCode;
+  }).length;
+}
+
+/* ================================================================
+   HISTORY BADGE COUNT LOADER
+   ================================================================ */
+function loadHistoryCounts(plantCode) {
+  var body = new FormData();
+  body.append('action',    'GET_HISTORY_COUNT');
+  body.append('werks',     plantCode);
+  body.append('date_from', todayStr());
+  body.append('date_to',   todayStr());
+
+  fetch('main.htm', { method: 'POST', body: body })
+    .then(function(r) { return r.json(); })
+    .then(function(res) {
+      if (res.status !== 'S') return;
+      histCounts[plantCode] = {
+        rel: parseInt(res.count_rel) || 0,
+        rej: parseInt(res.count_rej) || 0
+      };
+      renderSidebar();
+    })
+    .catch(function() {});
+}
+
+/* ================================================================
+   RENDER SIDEBAR
+   ================================================================ */
+function renderSidebar() {
+  var html   = '';
+  var plants = [
+    { code:'1200', name:'Surabaya', img:'surabaya.png' },
+    { code:'1300', name:'Semarang', img:'semarang.png' }
+  ];
+
+  plants.forEach(function(p, pi) {
+    if (pi > 0) html += '<div class="sb-divider"></div>';
+
+    var isOpen     = (curPlant === p.code) || (openSections[p.code] === true);
+    var totalPlant = countTotalByPlant(p.code);
+
+    html += '<div class="sb-section' + (isOpen ? ' open' : '') +
+            '" id="sbSec_' + p.code + '">';
+
+    /* ── Plant header ── */
+    html += '<div class="sb-plant" onclick="toggleSection(\'' + p.code + '\')">';
+    html += '<span style="display:flex;align-items:center;gap:7px;">';
+    html += '<img src="' + p.img + '" alt="' + p.name +
+            '" style="width:18px;height:18px;object-fit:cover;border-radius:3px;">';
+    html += p.name + '</span>';
+    html += '<span style="display:flex;align-items:center;gap:8px;">';
+    if (totalPlant > 0) {
+      html += '<span class="sb-cnt-total">' + totalPlant + '</span>';
+    }
+    html += '<span class="sb-plant-chevron">&#9660;</span>';
+    html += '</span></div>';
+
+    /* ── Submenu ── */
+    html += '<div class="sb-submenu">';
+
+    /* PO Type menu items */
+    var map = POTYPE_MAP[p.code];
+    for (var pt in map) {
+      var cnt      = countByBsart(map[pt].bsart, p.code);
+      var isActive = (curPlant === p.code && curPotype === pt && histMode === '' && ogrMode === '');
+      html += '<a class="sb-link' + (isActive ? ' active' : '') +
+              '" onclick="switchView(\'' + p.code + '\',\'' + pt + '\')">';
+      html += map[pt].label;
+      if (cnt > 0) html += ' <span class="sb-cnt">' + cnt + '</span>';
+      html += '</a>';
+    }
+
+    /* ── History section ── */
+    var isHistOpen = (curPlant === p.code && histMode !== '')
+                     || (openSections['hist_' + p.code] === true);
+
+    html += '<div class="sb-hist-parent' + (isHistOpen ? ' open' : '') +
+            '" id="sbHist_' + p.code + '">';
+    html += '<div class="sb-hist-toggle"' +
+            ' onclick="toggleHistSection(\'' + p.code + '\')">';
+    html += '<span style="display:flex;align-items:center;gap:6px;">' +
+            '&#128196; History</span>';
+    html += '<span class="sb-hist-chevron">&#9660;</span>';
+    html += '</div>';
+
+    html += '<div class="sb-hist-sub">';
+
+    var isRelActive = (curPlant === p.code && histMode === 'REL');
+    var isRejActive = (curPlant === p.code && histMode === 'REJ');
+    var cntRel = (histCounts[p.code] && histCounts[p.code].rel > 0)
+                 ? histCounts[p.code].rel : 0;
+    var cntRej = (histCounts[p.code] && histCounts[p.code].rej > 0)
+                 ? histCounts[p.code].rej : 0;
+
+    html += '<a class="sb-link' + (isRelActive ? ' active-rel' : '') +
+            '" onclick="switchHistory(\'' + p.code + '\',\'REL\')">' +
+            '<span style="display:flex;align-items:center;gap:6px;">' +
+            '&#10003; History Release</span>';
+    if (cntRel > 0) {
+      html += '<span class="sb-cnt-rel">' + cntRel + '</span>';
+    }
+    html += '</a>';
+
+    html += '<a class="sb-link' + (isRejActive ? ' active-rej' : '') +
+            '" onclick="switchHistory(\'' + p.code + '\',\'REJ\')">' +
+            '<span style="display:flex;align-items:center;gap:6px;">' +
+            '&#10007; History Reject</span>';
+    if (cntRej > 0) {
+      html += '<span class="sb-cnt-rej">' + cntRej + '</span>';
+    }
+    html += '</a>';
+
+    html += '</div>'; /* tutup sb-hist-sub */
+    html += '</div>'; /* tutup sb-hist-parent */
+
+    /* ── Outstanding GR ── */
+    var isOgrActive = (curPlant === p.code && ogrMode === 'OGR');
+    var ogrCnt      = ogrCounts[p.code] || 0;
+
+    html += '<div class="sb-divider" style="margin:4px 0;"></div>';
+    html += '<a class="sb-link' + (isOgrActive ? ' active-ogr' : '') +
+            '" onclick="switchOGR(\'' + p.code + '\')">';
+    html += '<span style="display:flex;align-items:center;gap:6px;">' +
+            '&#128230; Outstanding GR</span>';
+    if (ogrCnt > 0) {
+      html += '<span class="sb-cnt-ogr">' + ogrCnt + '</span>';
+    }
+    html += '</a>';
+
+    html += '</div>'; /* tutup sb-submenu */
+    html += '</div>'; /* tutup sb-section */
+  });
+
+  document.getElementById('sidebar').innerHTML = html;
+
+  /* Re-apply history open state setelah re-render */
+  ['1200','1300'].forEach(function(pc) {
+    if ((curPlant === pc && histMode !== '')
+        || openSections['hist_' + pc] === true) {
+      var el = document.getElementById('sbHist_' + pc);
+      if (el) {
+        el.classList.add('open');
+        var sub = el.querySelector('.sb-hist-sub');
+        if (sub) sub.style.maxHeight = '200px';
+      }
+    }
+  });
+}
+
+function toggleSection(plantCode) {
+  var sec = document.getElementById('sbSec_' + plantCode);
+  if (!sec) return;
+  sec.classList.toggle('open');
+  openSections[plantCode] = sec.classList.contains('open');
+}
+
+function toggleHistSection(plantCode) {
+  var el = document.getElementById('sbHist_' + plantCode);
+  if (!el) return;
+  var isOpen = el.classList.contains('open');
+  el.classList.toggle('open', !isOpen);
+  var sub = el.querySelector('.sb-hist-sub');
+  if (sub) sub.style.maxHeight = isOpen ? '0' : '200px';
+  openSections['hist_' + plantCode] = !isOpen;
+}
+
+/* ================================================================
+   SWITCH VIEW — PO List
+   ================================================================ */
+function switchView(plant, potype) {
+  curPlant    = plant;
+  curPotype   = potype;
+  histMode    = '';
+  selAll      = false;
+  currentPage = 1;
+
+  var bsartList = POTYPE_MAP[plant][potype].bsart;
+  curData = ALL_DATA1.filter(function(d) {
+    return d.plant === plant && bsartList.indexOf(d.bsart) > -1;
+  });
+
+  document.getElementById('mainContent').innerHTML =
+    renderCards(curData, plant, potype);
+  document.getElementById('fab').className =
+    curData.length > 0 ? 'fab show' : 'fab';
+
+  if (curData.length > 0) renderCardListOnly();
+
+  renderSidebar();
+  history.pushState(
+    { plant: plant, potype: potype }, '',
+    'main.htm?plant=' + plant + '&potype=' + potype
+  );
+  window.scrollTo(0, 0);
+}
+
+/* ================================================================
+   SWITCH VIEW — History
+   ================================================================ */
+function switchHistory(plant, mode) {
+  curPlant  = plant;
+  curPotype = '';
+  histMode  = mode;
+  histPlant = plant;
+  histOffset   = 0;
+  histDateFrom = todayStr();
+  histDateTo   = todayStr();
+  histSearch   = '';
+  histItemsCache = {};
+
+  document.getElementById('fab').className = 'fab';
+  renderSidebar();
+
+  var title = (mode === 'REL')
+    ? '&#10003; History Release &mdash; ' + PLANT_LABELS[plant]
+    : '&#10007; History Reject &mdash; '  + PLANT_LABELS[plant];
+
+  document.getElementById('mainContent').innerHTML =
+    '<div class="pg-hdr" id="histHeader" style="margin-bottom:16px;">' +
+    '<div class="pg-title">' + title + '</div>' +
+    '<div class="pg-sub" id="histSubtitle">Loading...</div>' +
+    '</div>' +
+    '<div id="histContainer">' +
+    '<div style="text-align:center;padding:60px;color:var(--muted);">' +
+    '<div class="lo-spin" style="margin:0 auto 12px;"></div>' +
+    'Loading data...</div></div>';
+
+  loadHistory();
+}
+
+/* ================================================================
+   SWITCH VIEW — Outstanding GR
+   ================================================================ */
+function switchOGR(plant) {
+  curPlant  = plant;
+  curPotype = '';
+  histMode  = '';
+  ogrMode   = 'OGR';
+  ogrPlant  = plant;
+
+  document.getElementById('fab').className = 'fab';
+  renderSidebar();
+
+  var plantName = PLANT_LABELS[plant];
+  document.getElementById('mainContent').innerHTML =
+    '<div class="pg-hdr" id="ogrHeader" style="margin-bottom:16px;">' +
+    '<div class="pg-title">&#128230; Outstanding GR &mdash; ' +
+    plantName + '</div>' +
+    '<div class="pg-sub" id="ogrSubtitle">Loading...</div>' +
+    '</div>' +
+    '<div id="ogrContainer">' +
+    '<div style="text-align:center;padding:60px;color:var(--muted);">' +
+    '<div class="lo-spin" style="margin:0 auto 12px;"></div>' +
+    'Loading outstanding GR...</div></div>';
+
+  loadOGR(plant);
+}
+
+/* ================================================================
+   LOAD OGR DATA
+   ================================================================ */
+function loadOGR(plant) {
+  var body = new FormData();
+  body.append('action', 'GET_OGR');
+  body.append('werks',  plant);
+
+  fetch('main.htm', { method: 'POST', body: body })
+    .then(function(r) { return r.json(); })
+    .then(function(res) {
+      if (res.status !== 'S') {
+        document.getElementById('ogrContainer').innerHTML =
+          '<div style="text-align:center;padding:40px;' +
+          'color:var(--danger);">Error: ' +
+          escHtml(res.message || 'Unknown error') + '</div>';
+        return;
+      }
+      ogrData = res.data || [];
+
+      /* Update badge count — unique PO */
+      var uniquePOs = {};
+      ogrData.forEach(function(r) { uniquePOs[r.ebeln] = true; });
+      ogrCounts[plant] = Object.keys(uniquePOs).length;
+      ogrLoaded[plant] = true;
+
+      renderSidebar();
+      renderOGRPage(plant, ogrData);
+    })
+    .catch(function(e) {
+      document.getElementById('ogrContainer').innerHTML =
+        '<div style="text-align:center;padding:40px;' +
+        'color:var(--danger);">Network error: ' +
+        escHtml(e.message) + '</div>';
+    });
+}
+
+/* ================================================================
+   GET POTYPE INFO dari BSART
+   ================================================================ */
+function getPotypeInfo(bsart) {
+  var info = BSART_POTYPE_MAP[bsart];
+  if (info) return info;
+  return { label: bsart, color: '#374151', bg: '#f3f4f6' };
+}
+
+/* ================================================================
+   RENDER OGR PAGE
+   ================================================================ */
+function renderOGRPage(plant, data) {
+  var plantName = PLANT_LABELS[plant];
+
+  /* Group by ebeln */
+  var grouped = {};
+  var order   = [];
+  data.forEach(function(r) {
+    if (!grouped[r.ebeln]) {
+      grouped[r.ebeln] = {
+        ebeln: r.ebeln,
+        bsart: r.bsart,
+        bedat: r.bedat,
+        lifnr: r.lifnr,
+        name1: r.name1,
+        werks: r.werks,
+        waers: r.waers,
+        items: []
+      };
+      order.push(r.ebeln);
+    }
+    grouped[r.ebeln].items.push({
+      ebelp: r.ebelp,
+      matnr: r.matnr,
+      txz01: r.txz01,
+      menge: r.menge,
+      meins: r.meins,
+      netpr: r.netpr
+    });
+  });
+
+  /* Summary counts */
+  var totalPOs   = order.length;
+  var totalItems = data.length;
+
+  /* Update subtitle */
+  var subEl = document.getElementById('ogrSubtitle');
+  if (subEl) {
+    subEl.innerHTML = plantName +
+      ' &mdash; <strong>' + totalPOs + '</strong> PO, ' +
+      '<strong>' + totalItems + '</strong> line items outstanding';
+  }
+
+  if (totalPOs === 0) {
+    document.getElementById('ogrContainer').innerHTML =
+      '<div class="empty">' +
+      '<div class="empty-ico">&#128230;</div>' +
+      '<div class="empty-txt">Tidak ada Outstanding GR ' +
+      'untuk plant ini</div></div>';
+    return;
+  }
+
+  /* Build HTML */
+  var html = '';
+
+  /* Summary cards */
+  html += '<div class="ogr-summary">';
+  html += '<div class="ogr-summary-card">' +
+          '<div class="ogr-summary-label">Total PO</div>' +
+          '<div class="ogr-summary-value">' + totalPOs + '</div>' +
+          '<div class="ogr-summary-sub">Belum selesai GR</div>' +
+          '</div>';
+  html += '<div class="ogr-summary-card">' +
+          '<div class="ogr-summary-label">Total Line Item</div>' +
+          '<div class="ogr-summary-value">' + totalItems + '</div>' +
+          '<div class="ogr-summary-sub">Item outstanding</div>' +
+          '</div>';
+
+  /* Hitung estimasi total amount per currency */
+  var amtByCurr = {};
+  data.forEach(function(r) {
+    var curr  = r.waers || '';
+    var netpr = parseAbapNum(r.netpr) || 0;
+    var menge = parseAbapNum(r.menge) || 0;
+    var amt   = netpr * menge;
+    if (!amtByCurr[curr]) amtByCurr[curr] = 0;
+    amtByCurr[curr] += amt;
+  });
+  for (var curr in amtByCurr) {
+    var amt    = amtByCurr[curr];
+    var isZero = ZERO_DEC_CURRENCIES.indexOf(curr.toUpperCase()) > -1;
+    var fmtAmt = isZero
+      ? Math.round(amt).toLocaleString('id-ID',
+          { minimumFractionDigits:0, maximumFractionDigits:0 })
+      : amt.toLocaleString('id-ID',
+          { minimumFractionDigits:2, maximumFractionDigits:2 });
+    html += '<div class="ogr-summary-card">' +
+            '<div class="ogr-summary-label">Est. Amount (' +
+            escHtml(curr) + ')</div>' +
+            '<div class="ogr-summary-value" style="font-size:17px;">' +
+            fmtAmt + '</div>' +
+            '<div class="ogr-summary-sub">' +
+            escHtml(curr) + ' outstanding</div>' +
+            '</div>';
+  }
+  html += '</div>';
+
+  /* Toolbar */
+  html += '<div class="toolbar" id="ogrToolbar">';
+  html += '<div class="search-wrap">';
+  html += '<span>&#128269;</span>';
+  html += '<input type="text" id="ogrSearchInp"' +
+          ' placeholder="Cari PO, vendor, material..."' +
+          ' oninput="onOgrSearch(this.value)"' +
+          ' style="width:260px;">';
+  html += '</div>';
+
+  /* Filter by potype */
+  html += '<select id="ogrPotypeFilter"' +
+          ' class="page-size-select"' +
+          ' onchange="onOgrPotypeFilter(this.value)">';
+  html += '<option value="">Semua Tipe PO</option>';
+  var addedPotypes = {};
+  data.forEach(function(r) {
+    var info = getPotypeInfo(r.bsart);
+    if (!addedPotypes[info.potype]) {
+      addedPotypes[info.potype] = info.label;
+    }
+  });
+  for (var pt in addedPotypes) {
+    html += '<option value="' + escHtml(pt) + '">' +
+            escHtml(addedPotypes[pt]) + '</option>';
+  }
+  html += '</select>';
+
+  /* Page size */
+  html += '<div class="page-size-wrap">';
+  html += '<label>Show:</label>';
+  html += '<select id="ogrPageSize" class="page-size-select"' +
+          ' onchange="onOgrPageSize(parseInt(this.value))">';
+  [10, 25, 50, 0].forEach(function(s, si) {
+    var lbl = s === 0 ? 'All' : s + ' per page';
+    html += '<option value="' + s + '"' +
+            (ogrPageSize === s ? ' selected' : '') +
+            '>' + lbl + '</option>';
+  });
+  html += '</select>';
+  html += '</div>';
+
+  /* Expand all / Collapse all */
+  html += '<div class="expand-bar">';
+  html += '<button class="btn-exp"' +
+          ' onclick="ogrExpandAll()">&#9660; Expand All</button>';
+  html += '<button class="btn-exp"' +
+          ' onclick="ogrCollapseAll()">&#9650; Collapse All</button>';
+  html += '</div>';
+
+  html += '<div class="pg-count" id="ogrCount">' +
+          totalPOs + ' POs</div>';
+  html += '</div>'; /* tutup toolbar */
+
+  /* Card container */
+  html += '<div id="ogrCardContainer"></div>';
+
+  document.getElementById('ogrContainer').innerHTML = html;
+
+  /* Render cards */
+  ogrRenderCards(order, grouped);
+}
+
+/* ================================================================
+   OGR STATE untuk filter/pagination
+   ================================================================ */
+var ogrPageSize     = 10;
+var ogrCurrentPage  = 1;
+var ogrSearchKw     = '';
+var ogrPotypeFilter = '';
+var ogrSearchTimer  = null;
+
+/* ================================================================
+   OGR — GET FILTERED & GROUPED DATA
+   ================================================================ */
+function ogrGetFiltered() {
+  /* Group ulang dari ogrData */
+  var grouped = {};
+  var order   = [];
+
+  ogrData.forEach(function(r) {
+    /* Filter potype */
+    if (ogrPotypeFilter) {
+      var info = getPotypeInfo(r.bsart);
+      if (info.potype !== ogrPotypeFilter) return;
+    }
+
+    /* Filter search */
+    if (ogrSearchKw) {
+      var kw = ogrSearchKw.toLowerCase();
+      var match =
+        r.ebeln.toLowerCase().indexOf(kw) > -1 ||
+        (r.name1  && r.name1.toLowerCase().indexOf(kw)  > -1) ||
+        (r.matnr  && r.matnr.toLowerCase().indexOf(kw)  > -1) ||
+        (r.txz01  && r.txz01.toLowerCase().indexOf(kw)  > -1) ||
+        (r.bsart  && r.bsart.toLowerCase().indexOf(kw)  > -1);
+      if (!match) return;
+    }
+
+    if (!grouped[r.ebeln]) {
+      grouped[r.ebeln] = {
+        ebeln: r.ebeln,
+        bsart: r.bsart,
+        bedat: r.bedat,
+        lifnr: r.lifnr,
+        name1: r.name1,
+        werks: r.werks,
+        waers: r.waers,
+        items: []
+      };
+      order.push(r.ebeln);
+    }
+    grouped[r.ebeln].items.push({
+      ebelp: r.ebelp,
+      matnr: r.matnr,
+      txz01: r.txz01,
+      menge: r.menge,
+      meins: r.meins,
+      netpr: r.netpr
+    });
+  });
+
+  return { grouped: grouped, order: order };
+}
+
+/* ================================================================
+   OGR — RENDER CARDS (dengan pagination)
+   ================================================================ */
+function ogrRenderCards(order, grouped) {
+  var totalPOs   = order.length;
+  var totalPages = (ogrPageSize === 0)
+    ? 1
+    : Math.ceil(totalPOs / ogrPageSize) || 1;
+
+  if (ogrCurrentPage > totalPages) ogrCurrentPage = 1;
+
+  var start    = (ogrCurrentPage - 1) * (ogrPageSize || totalPOs);
+  var end      = ogrPageSize === 0
+    ? totalPOs
+    : Math.min(start + ogrPageSize, totalPOs);
+  var pageKeys = order.slice(start, end);
+
+  /* Update count label */
+  var countEl = document.getElementById('ogrCount');
+  if (countEl) {
+    countEl.textContent = totalPOs !== ogrData.length
+      ? totalPOs + ' of ' + ogrGetTotalPOs() + ' POs'
+      : totalPOs + ' POs';
+  }
+
+  var html = '';
+
+  if (totalPOs === 0) {
+    html += '<div class="empty" style="padding:40px 20px;">' +
+            '<div class="empty-ico">&#128270;</div>' +
+            '<div class="empty-txt">Tidak ada hasil ditemukan</div>' +
+            '</div>';
+    document.getElementById('ogrCardContainer').innerHTML = html;
+    return;
+  }
+
+  pageKeys.forEach(function(ebeln) {
+    var po       = grouped[ebeln];
+    var ptInfo   = getPotypeInfo(po.bsart);
+    var cardId   = 'ogr_card_' + ebeln;
+
+    /* Hitung total amount */
+    var totalAmt = 0;
+    po.items.forEach(function(it) {
+      var netpr = parseAbapNum(it.netpr) || 0;
+      var menge = parseAbapNum(it.menge) || 0;
+      totalAmt += netpr * menge;
+    });
+
+    var isZero   = ZERO_DEC_CURRENCIES.indexOf(
+                     (po.waers || '').toUpperCase()) > -1;
+    var fmtTotal = isZero
+      ? Math.round(totalAmt).toLocaleString('id-ID',
+          { minimumFractionDigits:0, maximumFractionDigits:0 })
+      : totalAmt.toLocaleString('id-ID',
+          { minimumFractionDigits:2, maximumFractionDigits:2 });
+
+    html += '<div class="po-card" id="' + cardId + '">';
+
+    /* Card top */
+    html += '<div class="card-top">';
+    html += '<span class="card-num"' +
+            ' style="cursor:default;">' +
+            escHtml(po.ebeln) + '</span>';
+
+    /* Badge potype */
+    html += '<span class="badge-potype"' +
+            ' style="background:' + ptInfo.bg + ';' +
+            'color:' + ptInfo.color + ';' +
+            'padding:3px 9px;border-radius:20px;">' +
+            escHtml(ptInfo.label) + '</span>';
+
+    /* Badge bsart */
+    html += '<span class="badge"' +
+            ' style="background:#e8f0fe;color:#1a56db;margin-left:4px;">' +
+            escHtml(po.bsart) + '</span>';
+
+    /* Badge outstanding */
+    html += '<span class="badge"' +
+            ' style="background:#fef3c7;color:#b45309;margin-left:4px;">' +
+            '&#9888; Outstanding GR</span>';
+
+    /* Amount */
+    html += '<div class="card-amount" style="color:#b45309;">' +
+            fmtTotal +
+            '<span class="card-amount-lbl">' +
+            escHtml(po.waers) + ' Est. Amount</span>' +
+            '</div>';
+
+    /* Chevron */
+    html += '<span class="card-chevron"' +
+            ' onclick="ogrToggleCard(\'' + cardId + '\')">' +
+            '&#8964;</span>';
+    html += '</div>'; /* tutup card-top */
+
+    /* Card meta */
+    html += '<div class="card-meta">';
+    html += '<div><div class="meta-lbl">Vendor</div>' +
+            '<div class="meta-val">' +
+            escHtml(po.name1 || po.lifnr) + '</div></div>';
+    html += '<div><div class="meta-lbl">Doc Date</div>' +
+            '<div class="meta-val">' +
+            escHtml(po.bedat) + '</div></div>';
+    html += '<div><div class="meta-lbl">Plant</div>' +
+            '<div class="meta-val">' +
+            escHtml(po.werks) + ' - ' +
+            escHtml(PLANT_LABELS[po.werks] || po.werks) +
+            '</div></div>';
+    html += '<div><div class="meta-lbl">Items</div>' +
+            '<div class="meta-val">' +
+            po.items.length + ' line</div></div>';
+    html += '</div>'; /* tutup card-meta */
+
+    /* Card detail */
+    html += '<div class="card-detail">';
+    html += '<div class="ogr-table-wrap">';
+    html += '<table class="ogr-table">';
+    html += '<thead><tr>';
+    html += '<th>Item</th>';
+    html += '<th>Material</th>';
+    html += '<th>Description</th>';
+    html += '<th class="num">Qty Outstanding</th>';
+    html += '<th>UOM</th>';
+    html += '<th class="num">Unit Price</th>';
+    html += '<th class="num">Est. Amount</th>';
+    html += '<th>Curr</th>';
+    html += '</tr></thead><tbody>';
+
+    po.items.forEach(function(it) {
+      var netpr    = parseAbapNum(it.netpr) || 0;
+      var menge    = parseAbapNum(it.menge) || 0;
+      var itemAmt  = netpr * menge;
+      var curr     = po.waers || '';
+      var isZeroCu = ZERO_DEC_CURRENCIES.indexOf(
+                       curr.toUpperCase()) > -1;
+
+      var fmtNetpr = isZeroCu
+        ? Math.round(netpr).toLocaleString('id-ID',
+            { minimumFractionDigits:0, maximumFractionDigits:0 })
+        : netpr.toLocaleString('id-ID',
+            { minimumFractionDigits:2, maximumFractionDigits:2 });
+
+      var fmtAmt = isZeroCu
+        ? Math.round(itemAmt).toLocaleString('id-ID',
+            { minimumFractionDigits:0, maximumFractionDigits:0 })
+        : itemAmt.toLocaleString('id-ID',
+            { minimumFractionDigits:2, maximumFractionDigits:2 });
+
+      var fmtMenge = (menge % 1 === 0)
+        ? menge.toLocaleString('id-ID',
+            { minimumFractionDigits:0, maximumFractionDigits:0 })
+        : menge.toLocaleString('id-ID',
+            { minimumFractionDigits:3, maximumFractionDigits:3 });
+
+      html += '<tr>';
+      html += '<td>' + escHtml(it.ebelp) + '</td>';
+      html += '<td style="font-family:\'DM Mono\',monospace;' +
+              'font-size:12px;">' + escHtml(it.matnr) + '</td>';
+      html += '<td>' + escHtml(it.txz01 || '-') + '</td>';
+      html += '<td class="num" style="font-weight:600;' +
+              'color:#b45309;">' + fmtMenge + '</td>';
+      html += '<td>' + escHtml(it.meins) + '</td>';
+      html += '<td class="num">' + fmtNetpr + '</td>';
+      html += '<td class="num" style="font-weight:700;">' +
+              fmtAmt + '</td>';
+      html += '<td>' + escHtml(curr) + '</td>';
+      html += '</tr>';
+    });
+
+    /* Total row */
+    var fmtGrandTotal = isZero
+      ? Math.round(totalAmt).toLocaleString('id-ID',
+          { minimumFractionDigits:0, maximumFractionDigits:0 })
+      : totalAmt.toLocaleString('id-ID',
+          { minimumFractionDigits:2, maximumFractionDigits:2 });
+
+    html += '<tr style="background:#fffbeb;' +
+            'border-top:2px solid #fde68a;">';
+    html += '<td colspan="6"' +
+            ' style="text-align:right;font-weight:700;' +
+            'font-size:13px;color:#374151;padding:10px;">' +
+            'Total Outstanding</td>';
+    html += '<td class="num"' +
+            ' style="font-weight:700;font-size:14px;' +
+            'color:#b45309;">' + fmtGrandTotal + '</td>';
+    html += '<td style="font-size:11px;color:var(--muted);">' +
+            escHtml(po.waers) + '</td>';
+    html += '</tr>';
+
+    html += '</tbody></table>';
+    html += '</div>'; /* tutup ogr-table-wrap */
+    html += '</div>'; /* tutup card-detail */
+    html += '</div>'; /* tutup po-card */
+  });
+
+  /* Pagination */
+  html += ogrRenderPagination(totalPOs);
+
+  document.getElementById('ogrCardContainer').innerHTML = html;
+}
+
+/* ================================================================
+   OGR — RENDER PAGINATION
+   ================================================================ */
+function ogrRenderPagination(totalPOs) {
+  if (ogrPageSize === 0 || totalPOs <= ogrPageSize) {
+    return '<div class="pagination-bar">' +
+           '<span class="pg-info">Showing all ' +
+           totalPOs + ' POs</span></div>';
+  }
+
+  var totalPages = Math.ceil(totalPOs / ogrPageSize);
+  var curPage    = ogrCurrentPage;
+  var startItem  = (curPage - 1) * ogrPageSize + 1;
+  var endItem    = Math.min(curPage * ogrPageSize, totalPOs);
+
+  var html = '<div class="pagination-bar">';
+  html += '<button class="pg-btn" onclick="ogrGoPage(1)"' +
+          (curPage === 1 ? ' disabled' : '') + '>&#171;</button>';
+  html += '<button class="pg-btn"' +
+          ' onclick="ogrGoPage(' + (curPage-1) + ')"' +
+          (curPage === 1 ? ' disabled' : '') + '>&#8249;</button>';
+
+  var sp = Math.max(1, curPage - 2);
+  var ep = Math.min(totalPages, curPage + 2);
+
+  if (sp > 1) {
+    html += '<button class="pg-btn"' +
+            ' onclick="ogrGoPage(1)">1</button>';
+    if (sp > 2) html += '<span class="pg-info">...</span>';
+  }
+  for (var pp = sp; pp <= ep; pp++) {
+    html += '<button class="pg-btn' +
+            (pp === curPage ? ' active' : '') +
+            '" onclick="ogrGoPage(' + pp + ')">' +
+            pp + '</button>';
+  }
+  if (ep < totalPages) {
+    if (ep < totalPages - 1)
+      html += '<span class="pg-info">...</span>';
+    html += '<button class="pg-btn"' +
+            ' onclick="ogrGoPage(' + totalPages + ')">' +
+            totalPages + '</button>';
+  }
+
+  html += '<button class="pg-btn"' +
+          ' onclick="ogrGoPage(' + (curPage+1) + ')"' +
+          (curPage >= totalPages ? ' disabled' : '') +
+          '>&#8250;</button>';
+  html += '<button class="pg-btn"' +
+          ' onclick="ogrGoPage(' + totalPages + ')"' +
+          (curPage >= totalPages ? ' disabled' : '') +
+          '>&#187;</button>';
+  html += '<span class="pg-info">' + startItem +
+          '&ndash;' + endItem + ' of ' + totalPOs +
+          ' POs</span>';
+  html += '</div>';
+  return html;
+}
+
+/* ================================================================
+   OGR — HELPER FUNCTIONS
+   ================================================================ */
+function ogrGetTotalPOs() {
+  var unique = {};
+  ogrData.forEach(function(r) { unique[r.ebeln] = true; });
+  return Object.keys(unique).length;
+}
+
+function ogrToggleCard(cardId) {
+  var card = document.getElementById(cardId);
+  if (card) card.classList.toggle('expanded');
+}
+
+function ogrExpandAll() {
+  document.querySelectorAll('[id^="ogr_card_"]').forEach(function(c) {
+    c.classList.add('expanded');
+  });
+}
+
+function ogrCollapseAll() {
+  document.querySelectorAll('[id^="ogr_card_"]').forEach(function(c) {
+    c.classList.remove('expanded');
+  });
+}
+
+function onOgrSearch(val) {
+  clearTimeout(ogrSearchTimer);
+  ogrSearchTimer = setTimeout(function() {
+    ogrSearchKw    = val.trim();
+    ogrCurrentPage = 1;
+    var result     = ogrGetFiltered();
+    ogrRenderCards(result.order, result.grouped);
+  }, 300);
+}
+
+function onOgrPotypeFilter(val) {
+  ogrPotypeFilter = val;
+  ogrCurrentPage  = 1;
+  var result      = ogrGetFiltered();
+  ogrRenderCards(result.order, result.grouped);
+}
+
+function onOgrPageSize(val) {
+  ogrPageSize    = val;
+  ogrCurrentPage = 1;
+  var result     = ogrGetFiltered();
+  ogrRenderCards(result.order, result.grouped);
+}
+
+function ogrGoPage(pg) {
+  var result     = ogrGetFiltered();
+  var totalPages = ogrPageSize === 0
+    ? 1
+    : Math.ceil(result.order.length / ogrPageSize) || 1;
+  if (pg < 1) pg = 1;
+  if (pg > totalPages) pg = totalPages;
+  ogrCurrentPage = pg;
+  ogrRenderCards(result.order, result.grouped);
+  var container = document.getElementById('ogrCardContainer');
+  if (container) {
+    container.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+}
+
+/* ================================================================
+   LOAD HISTORY
+   ================================================================ */
+function loadHistory() {
+  var action = (histMode === 'REL') ? 'GET_HISTORY_REL' : 'GET_HISTORY_REJ';
+
+  var body = new FormData();
+  body.append('action',    action);
+  body.append('werks',     histPlant);
+  body.append('date_from', histDateFrom);
+  body.append('date_to',   histDateTo);
+  body.append('search',    histSearch);
+  body.append('offset',    String(histOffset));
+  body.append('limit',     String(histLimit));
+
+  fetch('main.htm', { method: 'POST', body: body })
+    .then(function(r) { return r.json(); })
+    .then(function(res) {
+      if (res.status !== 'S') {
+        document.getElementById('histContainer').innerHTML =
+          '<div style="text-align:center;padding:40px;color:var(--danger);">' +
+          'Error: ' + escHtml(res.message || 'Unknown error') + '</div>';
+        return;
+      }
+      histTotal = parseInt(String(res.total).trim()) || 0;
+      histData  = res.data || [];
+      histItemsCache = {};
+      renderHistoryPage();
+    })
+    .catch(function(e) {
+      document.getElementById('histContainer').innerHTML =
+        '<div style="text-align:center;padding:40px;color:var(--danger);">' +
+        'Network error: ' + escHtml(e.message) + '</div>';
+    });
+}
+
+/* ================================================================
+   LOAD HISTORY ITEMS — fetch dari server berdasarkan EBELN list
+   ================================================================ */
+function loadHistoryItems(ebelns, callback) {
+  var toFetch = [];
+  var cached  = {};
+
+  ebelns.forEach(function(ebeln) {
+    if (histItemsCache[ebeln] !== undefined) {
+      cached[ebeln] = histItemsCache[ebeln];
+    } else {
+      toFetch.push(ebeln);
+    }
+  });
+
+  if (toFetch.length === 0) {
+    callback(cached);
+    return;
+  }
+
+  var body = new FormData();
+  body.append('action', 'GET_HISTORY_ITEMS');
+  body.append('ebelns', toFetch.join(','));
+
+  fetch('main.htm', { method: 'POST', body: body })
+    .then(function(r) { return r.json(); })
+    .then(function(res) {
+      var items = res.data || [];
+
+      toFetch.forEach(function(ebeln) {
+        histItemsCache[ebeln] = [];
+      });
+
+      items.forEach(function(item) {
+        if (!histItemsCache[item.ebeln]) {
+          histItemsCache[item.ebeln] = [];
+        }
+        histItemsCache[item.ebeln].push(item);
+      });
+
+      var result = {};
+      ebelns.forEach(function(ebeln) {
+        result[ebeln] = histItemsCache[ebeln] || [];
+      });
+      Object.keys(cached).forEach(function(ebeln) {
+        result[ebeln] = cached[ebeln];
+      });
+
+      callback(result);
+    })
+    .catch(function() {
+      var result = {};
+      ebelns.forEach(function(ebeln) {
+        result[ebeln] = cached[ebeln] || [];
+      });
+      callback(result);
+    });
+}
+
+/* ================================================================
+   RENDER HISTORY ITEMS TABLE
+   ================================================================ */
+function renderHistItemTable(items, waers) {
+  if (!items || items.length === 0) {
+    return '<div style="padding:12px 14px;font-size:13px;' +
+           'color:var(--muted);font-style:italic;">Tidak ada item.</div>';
+  }
+
+  var html = '<table class="hist-item-table">';
+  html += '<thead><tr>';
+  html += '<th>Item</th>';
+  html += '<th>Material</th>';
+  html += '<th>Description</th>';
+  html += '<th class="num">Qty</th>';
+  html += '<th>UOM</th>';
+  html += '<th class="num">Net Price</th>';
+  html += '<th class="num">Total Value</th>';
+  html += '<th>Curr</th>';
+  html += '</tr></thead><tbody>';
+
+  items.forEach(function(it) {
+    var curr = it.waers || waers || '';
+    html += '<tr>';
+    html += '<td>' + escHtml(it.ebelp) + '</td>';
+    html += '<td style="font-family:\'DM Mono\',monospace;font-size:12px;">' +
+            escHtml(it.matnr) + '</td>';
+    html += '<td>' + escHtml(it.maktx || it.txz01 || '-') + '</td>';
+    html += '<td class="num">' +
+            formatNumHist(it.menge, '') + '</td>';
+    html += '<td>' + escHtml(it.meins) + '</td>';
+    html += '<td class="num">' +
+            formatNumHist(it.netpr, curr) + '</td>';
+    html += '<td class="num" style="font-weight:600;">' +
+            formatNumHist(it.netwr, curr) + '</td>';
+    html += '<td>' + escHtml(curr) + '</td>';
+    html += '</tr>';
+  });
+
+  html += '</tbody></table>';
+  return html;
+}
+
+/* ================================================================
+   TOGGLE HISTORY CARD — expand + load items
+   ================================================================ */
+function toggleHistCard(cardId, ebeln) {
+  var card = document.getElementById(cardId);
+  if (!card) return;
+
+  var isExpanded = card.classList.contains('expanded');
+
+  if (isExpanded) {
+    card.classList.remove('expanded');
+    return;
+  }
+
+  card.classList.add('expanded');
+
+  var itemSectionId = 'hist-items-' + cardId;
+  var itemSection   = document.getElementById(itemSectionId);
+  if (!itemSection) return;
+
+  var itemBody = document.getElementById('hist-items-body-' + cardId);
+  if (!itemBody) return;
+
+  if (histItemsCache[ebeln] !== undefined) {
+    itemBody.innerHTML = renderHistItemTable(
+      histItemsCache[ebeln], ''
+    );
+    return;
+  }
+
+  itemBody.innerHTML =
+    '<div class="hist-item-loading">' +
+    '<div class="lo-spin" style="width:16px;height:16px;' +
+    'border-width:2px;margin:0;"></div>' +
+    'Loading items...</div>';
+
+  loadHistoryItems([ebeln], function(result) {
+    var items = result[ebeln] || [];
+    itemBody.innerHTML = renderHistItemTable(items, '');
+  });
+}
+
+/* ================================================================
+   RENDER HISTORY PAGE
+   ================================================================ */
+function renderHistoryPage() {
+  var isRel = (histMode === 'REL');
+
+  var subEl = document.getElementById('histSubtitle');
+  if (subEl) {
+    subEl.innerHTML = PLANT_LABELS[histPlant] +
+      ' &mdash; ' + histTotal + ' records ditemukan';
+  }
+
+  var html = '';
+
+  /* Filter bar */
+  html += '<div class="hist-filter-bar">';
+  html += '<div class="hist-filter-group">';
+  html += '<span class="hist-filter-label">Dari</span>';
+  html += '<input type="date" class="hist-date-inp" id="histFrom"' +
+          ' value="' + toInputDate(histDateFrom) + '"' +
+          ' onchange="onHistDateChange()">';
+  html += '<span class="hist-filter-label">s/d</span>';
+  html += '<input type="date" class="hist-date-inp" id="histTo"' +
+          ' value="' + toInputDate(histDateTo) + '"' +
+          ' onchange="onHistDateChange()">';
+  html += '<button class="btn-selall"' +
+          ' style="height:34px;padding:0 14px;"' +
+          ' onclick="applyHistFilter()">&#128269; Cari</button>';
+  html += '</div>';
+  html += '<div class="search-wrap" style="margin-left:auto;">';
+  html += '<span>&#128269;</span>';
+  html += '<input type="text" id="histSearchInp"' +
+          ' placeholder="Cari No PO atau vendor..."' +
+          ' value="' + escHtml(histSearch) + '"' +
+          ' oninput="onHistSearchInput(this.value)">';
+  html += '</div>';
+  html += '<span class="pg-count">' + histTotal + ' records</span>';
+  html += '</div>';
+
+  /* Cards */
+  if (histData.length === 0) {
+    html += '<div class="empty">';
+    html += '<div class="empty-ico">' +
+            (isRel ? '&#10003;' : '&#10007;') + '</div>';
+    html += '<div class="empty-txt">Tidak ada data untuk periode ini</div>';
+    html += '</div>';
+  } else {
+    histData.forEach(function(d, idx) {
+      var cardId    = 'hcard_' + idx;
+      var plantName = (d.werks === '1200') ? 'Surabaya' : 'Semarang';
+
+      html += '<div class="po-card" id="' + cardId + '">';
+
+      /* Card top */
+      html += '<div class="card-top">';
+      html += '<span class="card-num"' +
+              ' style="cursor:default;font-size:14px;">' +
+              escHtml(d.ebeln) + '</span>';
+
+      if (isRel) {
+        html += '<span class="badge b-rel">&#10003; Released</span>';
+      } else {
+        html += '<span class="badge b-rej">&#10007; Rejected</span>';
+      }
+
+      html += '<span class="badge"' +
+              ' style="background:#e8f0fe;color:#1a56db;margin-left:4px;">' +
+              escHtml(d.bsart) + '</span>';
+      html += '<span class="badge"' +
+              ' style="background:#f3f4f6;color:#374151;margin-left:4px;">' +
+              escHtml(plantName) + '</span>';
+      html += '<span style="margin-left:auto;font-size:12px;' +
+              'font-weight:600;color:var(--muted);white-space:nowrap;">' +
+              formatDate(d.udate) + ' ' + formatTime(d.utime) + '</span>';
+      html += '<span class="card-chevron"' +
+              ' onclick="toggleHistCard(\'' + cardId + '\',\'' +
+              d.ebeln + '\')">&#8964;</span>';
+      html += '</div>';
+
+      /* Card meta */
+      html += '<div class="card-meta hist-meta">';
+      html += '<div><div class="meta-lbl">PO Number</div>' +
+              '<div class="meta-val"' +
+              ' style="font-family:\'DM Mono\',monospace;">' +
+              escHtml(d.ebeln) + '</div></div>';
+      html += '<div><div class="meta-lbl">Vendor</div>' +
+              '<div class="meta-val">' +
+              escHtml(d.name1 || '-') + '</div></div>';
+
+      if (isRel) {
+        html += '<div><div class="meta-lbl">Released By</div>' +
+                '<div class="meta-val" style="color:#057a55;">' +
+                escHtml(d.uname) + '</div></div>';
+      } else {
+        html += '<div><div class="meta-lbl">Rejected By</div>' +
+                '<div class="meta-val" style="color:#c81e1e;">' +
+                escHtml(d.uname) + '</div></div>';
+      }
+      html += '</div>';
+
+      /* Card detail */
+      html += '<div class="card-detail" id="' + cardId + '_det">';
+
+      /* Comment box untuk reject */
+      if (!isRel) {
+        if (d.comment && d.comment.trim() !== '') {
+          html += '<div class="add-info rej-info" style="margin-top:14px;">';
+          html += '<span class="add-info-icon">&#128172;</span>';
+          html += '<div><div class="add-info-lbl">Reject Reason</div>';
+          html += '<div class="add-info-txt">' +
+                  escHtml(d.comment) + '</div>';
+          html += '</div></div>';
+        } else {
+          html += '<div class="add-info rej-info" style="margin-top:14px;">';
+          html += '<span class="add-info-icon">&#128172;</span>';
+          html += '<div><div class="add-info-lbl">Reject Reason</div>';
+          html += '<div class="add-info-empty">' +
+                  '(Tidak ada komentar)</div>';
+          html += '</div></div>';
+        }
+      }
+
+      /* Header info table */
+      html += '<table style="margin-top:14px;width:100%;' +
+              'border-collapse:collapse;font-size:13px;">';
+      html += '<thead><tr>';
+      html += '<th style="text-align:left;padding:7px 10px;font-size:11px;' +
+              'text-transform:uppercase;letter-spacing:.05em;color:var(--muted);' +
+              'font-weight:600;border-bottom:1px solid var(--border);">Field</th>';
+      html += '<th style="text-align:left;padding:7px 10px;font-size:11px;' +
+              'text-transform:uppercase;letter-spacing:.05em;color:var(--muted);' +
+              'font-weight:600;border-bottom:1px solid var(--border);">Value</th>';
+      html += '</tr></thead><tbody>';
+
+      var rows = [
+        ['PO Number',   d.ebeln],
+        ['Doc Type',    d.bsart],
+        ['Vendor Code', d.lifnr],
+        ['Vendor Name', d.name1],
+        ['Plant',       d.werks + ' - ' + plantName],
+        [isRel ? 'Released By' : 'Rejected By', d.uname],
+        ['Date', formatDate(d.udate)],
+        ['Time', formatTime(d.utime)]
+      ];
+      if (isRel) rows.push(['Release Code', d.frgco]);
+      if (!isRel && d.comment) rows.push(['Reject Comment', d.comment]);
+
+      rows.forEach(function(r) {
+        html += '<tr>';
+        html += '<td style="color:var(--muted);font-size:12px;' +
+                'width:160px;padding:8px 10px;' +
+                'border-bottom:1px solid #f9fafb;">' +
+                escHtml(r[0]) + '</td>';
+        html += '<td style="font-weight:500;padding:8px 10px;' +
+                'border-bottom:1px solid #f9fafb;">' +
+                escHtml(r[1] || '-') + '</td>';
+        html += '</tr>';
+      });
+      html += '</tbody></table>';
+
+      /* Item detail section */
+      html += '<div class="hist-item-section"' +
+              ' id="hist-items-' + cardId + '"' +
+              ' style="margin-top:14px;">';
+      html += '<div class="hist-item-header">';
+      html += '<span class="hist-item-header-lbl">' +
+              '&#128230; Item Detail PO</span>';
+      html += '</div>';
+      html += '<div id="hist-items-body-' + cardId + '">';
+      html += '<div class="hist-item-loading">' +
+              '<div class="lo-spin" style="width:16px;height:16px;' +
+              'border-width:2px;margin:0;"></div>' +
+              'Expand card untuk memuat items...</div>';
+      html += '</div>';
+      html += '</div>';
+
+      html += '</div>';  /* tutup card-detail */
+      html += '</div>';  /* tutup po-card */
+    });
+  }
+
+  html += renderHistPagination();
+  document.getElementById('histContainer').innerHTML = html;
+}
+
+function renderHistPagination() {
+  var totalPages = Math.ceil(histTotal / histLimit) || 1;
+  var curPage    = Math.floor(histOffset / histLimit) + 1;
+
+  if (totalPages <= 1 && histTotal <= histLimit) {
+    return '<div class="pagination-bar">' +
+           '<span class="pg-info">Showing ' + histTotal +
+           ' of ' + histTotal + ' records</span></div>';
+  }
+
+  var startItem = histOffset + 1;
+  var endItem   = Math.min(histOffset + histLimit, histTotal);
+  var html      = '<div class="pagination-bar">';
+
+  html += '<button class="pg-btn" onclick="histGoPage(1)"' +
+          (curPage === 1 ? ' disabled' : '') + '>&#171;</button>';
+  html += '<button class="pg-btn" onclick="histGoPage(' + (curPage-1) + ')"' +
+          (curPage === 1 ? ' disabled' : '') + '>&#8249;</button>';
+
+  var sp = Math.max(1, curPage - 2);
+  var ep = Math.min(totalPages, curPage + 2);
+
+  if (sp > 1) {
+    html += '<button class="pg-btn" onclick="histGoPage(1)">1</button>';
+    if (sp > 2) html += '<span class="pg-info">...</span>';
+  }
+  for (var pp = sp; pp <= ep; pp++) {
+    html += '<button class="pg-btn' + (pp === curPage ? ' active' : '') +
+            '" onclick="histGoPage(' + pp + ')">' + pp + '</button>';
+  }
+  if (ep < totalPages) {
+    if (ep < totalPages - 1) html += '<span class="pg-info">...</span>';
+    html += '<button class="pg-btn" onclick="histGoPage(' +
+            totalPages + ')">' + totalPages + '</button>';
+  }
+
+  html += '<button class="pg-btn" onclick="histGoPage(' + (curPage+1) + ')"' +
+          (curPage >= totalPages ? ' disabled' : '') + '>&#8250;</button>';
+  html += '<button class="pg-btn" onclick="histGoPage(' + totalPages + ')"' +
+          (curPage >= totalPages ? ' disabled' : '') + '>&#187;</button>';
+  html += '<span class="pg-info">' + startItem + '&ndash;' +
+          endItem + ' of ' + histTotal + '</span>';
+  html += '</div>';
+  return html;
+}
+
+function onHistDateChange() {
+  var f = document.getElementById('histFrom');
+  var t = document.getElementById('histTo');
+  if (f) histDateFrom = fromInputDate(f.value) || todayStr();
+  if (t) histDateTo   = fromInputDate(t.value) || todayStr();
+}
+
+function applyHistFilter() {
+  onHistDateChange();
+  histOffset = 0;
+  histItemsCache = {};
+  loadHistory();
+}
+
+function onHistSearchInput(val) {
+  clearTimeout(histSearchTmr);
+  histSearchTmr = setTimeout(function() {
+    histSearch = val;
+    histOffset = 0;
+    histItemsCache = {};
+    loadHistory();
+  }, 400);
+}
+
+function histGoPage(pg) {
+  var totalPages = Math.ceil(histTotal / histLimit) || 1;
+  if (pg < 1) pg = 1;
+  if (pg > totalPages) pg = totalPages;
+  histOffset = (pg - 1) * histLimit;
+  histItemsCache = {};
+  loadHistory();
+  window.scrollTo(0, 0);
+}
+
+/* ================================================================
+   PO LIST FUNCTIONS
+   ================================================================ */
+function getItemsForPO(ebeln) {
+  return ALL_DATA2.filter(function(d) { return d.ebeln === ebeln; });
+}
+
+function getRemarkForPO(ebeln) {
+  var items = getItemsForPO(ebeln);
+  for (var i = 0; i < items.length; i++) {
+    if (items[i].text && items[i].text.trim() !== '') return items[i].text;
+  }
+  return '';
+}
+
+function getFilteredData() {
+  var searchEl = document.getElementById('searchPO');
+  var q = searchEl ? searchEl.value.trim().toUpperCase() : '';
+  if (!q) return curData.slice();
+  return curData.filter(function(d) {
+    return d.ebeln.toUpperCase().indexOf(q) > -1 ||
+           (d.name1 && d.name1.toUpperCase().indexOf(q) > -1);
+  });
+}
+
+function getPageData(data) {
+  if (pageSize === 0) return data;
+  var start = (currentPage - 1) * pageSize;
+  return data.slice(start, start + pageSize);
+}
+
+function getTotalPages(dataLen) {
+  if (pageSize === 0 || dataLen === 0) return 1;
+  return Math.ceil(dataLen / pageSize);
+}
+
+function renderPaginationBar(totalFiltered) {
+  if (pageSize === 0) {
+    return '<div class="pagination-bar"><span class="pg-info">Showing all ' +
+           totalFiltered + ' items</span></div>';
+  }
+  var totalPages = getTotalPages(totalFiltered);
+  if (totalPages <= 1 && totalFiltered <= pageSize) {
+    return '<div class="pagination-bar"><span class="pg-info">Showing ' +
+           totalFiltered + ' of ' + totalFiltered + ' items</span></div>';
+  }
+  var startItem = (currentPage - 1) * pageSize + 1;
+  var endItem   = Math.min(currentPage * pageSize, totalFiltered);
+  var html = '<div class="pagination-bar">';
+  html += '<button class="pg-btn" onclick="goToPage(1)"' +
+          (currentPage === 1 ? ' disabled' : '') + '>&#171;</button>';
+  html += '<button class="pg-btn" onclick="goToPage(' + (currentPage-1) + ')"' +
+          (currentPage === 1 ? ' disabled' : '') + '>&#8249;</button>';
+  var startP = Math.max(1, currentPage - 2);
+  var endP   = Math.min(totalPages, currentPage + 2);
+  if (startP > 1) {
+    html += '<button class="pg-btn" onclick="goToPage(1)">1</button>';
+    if (startP > 2) html += '<span class="pg-info">...</span>';
+  }
+  for (var i = startP; i <= endP; i++) {
+    html += '<button class="pg-btn' + (i === currentPage ? ' active' : '') +
+            '" onclick="goToPage(' + i + ')">' + i + '</button>';
+  }
+  if (endP < totalPages) {
+    if (endP < totalPages - 1) html += '<span class="pg-info">...</span>';
+    html += '<button class="pg-btn" onclick="goToPage(' +
+            totalPages + ')">' + totalPages + '</button>';
+  }
+  html += '<button class="pg-btn" onclick="goToPage(' + (currentPage+1) + ')"' +
+          (currentPage === totalPages ? ' disabled' : '') + '>&#8250;</button>';
+  html += '<button class="pg-btn" onclick="goToPage(' + totalPages + ')"' +
+          (currentPage === totalPages ? ' disabled' : '') + '>&#187;</button>';
+  html += '<span class="pg-info">' + startItem + '&ndash;' +
+          endItem + ' of ' + totalFiltered + '</span>';
+  html += '</div>';
+  return html;
+}
+
+function renderCardListOnly() {
+  filteredData = getFilteredData();
+  var pageData = getPageData(filteredData);
+  var html = '';
+
+  if (filteredData.length === 0) {
+    html += '<div class="empty" style="padding:40px 20px;">';
+    html += '<div class="empty-ico">&#128270;</div>';
+    html += '<div class="empty-txt">No results found</div></div>';
+  } else {
+    pageData.forEach(function(d) {
+      var items         = getItemsForPO(d.ebeln);
+      var remark        = getRemarkForPO(d.ebeln);
+      var amountDisplay = formatAmount(d.totpr, d.waerk);
+
+      html += '<div class="po-card" id="card_' + d.ebeln + '">';
+      html += '<div class="card-top">';
+      html += '<input type="checkbox" class="card-cb"' +
+              ' data-ebeln="' + d.ebeln + '"' +
+              ' data-amount="' + escHtml(d.totpr) + '"' +
+              ' data-curr="' + escHtml(d.waerk) + '"' +
+              ' onclick="event.stopPropagation()">';
+      html += '<span class="card-num"' +
+              ' onclick="event.stopPropagation();openModal(\'' +
+              d.ebeln + '\')">' + d.ebeln + '</span>';
+      html += '<span class="badge b-rel">In release</span>';
+      html += '<div class="card-amount">' + amountDisplay;
+      html += '<span class="card-amount-lbl">Total Amount</span></div>';
+      html += '<span class="card-chevron"' +
+              ' onclick="toggleCard(\'' + d.ebeln + '\')">&#8964;</span>';
+      html += '</div>';
+
+      html += '<div class="card-meta">';
+      html += '<div><div class="meta-lbl">Vendor</div>' +
+              '<div class="meta-val">' + escHtml(d.name1) + '</div></div>';
+      html += '<div><div class="meta-lbl">Status</div>' +
+              '<div class="meta-val">' + escHtml(d.stats) + '</div></div>';
+      html += '<div><div class="meta-lbl">Type</div>' +
+              '<div class="meta-val">' + escHtml(d.bsart) + '</div></div>';
+      html += '<div><div class="meta-lbl">Currency</div>' +
+              '<div class="meta-val">' + escHtml(d.waerk) + '</div></div>';
+      html += '</div>';
+
+      html += '<div class="card-detail">';
+      html += '<table><thead><tr>';
+      html += '<th>Item</th><th>Description</th>';
+      html += '<th>Qty</th><th>Unit</th>';
+      html += '<th class="num-col">Net Price</th>';
+      html += '<th class="num-col">Total</th><th>Curr</th>';
+      html += '</tr></thead><tbody>';
+      items.forEach(function(it) {
+        html += '<tr>';
+        html += '<td>' + escHtml(it.ebelp) + '</td>';
+        html += '<td>' + escHtml(it.maktx) + '</td>';
+        html += '<td class="num-col">' + formatNum(it.menge, '') + '</td>';
+        html += '<td>' + escHtml(it.meins) + '</td>';
+        html += '<td class="num-col">' +
+                formatNum(it.nettt, it.waerk) + '</td>';
+        html += '<td class="num-col">' +
+                formatNum(it.netwr, it.waerk) + '</td>';
+        html += '<td>' + escHtml(it.waerk) + '</td>';
+        html += '</tr>';
+      });
+      html += '</tbody></table>';
+
+      html += '<div class="add-info">';
+      html += '<span class="add-info-icon">&#9432;</span><div>';
+      html += '<div class="add-info-lbl">Additional Information</div>';
+      if (remark) {
+        html += '<div class="add-info-txt">' + escHtml(remark) + '</div>';
+      } else {
+        html += '<div class="add-info-empty">' +
+                '(No description / comment available)</div>';
+      }
+      html += '</div></div>';
+      html += '</div>';
+      html += '</div>';
+    });
+  }
+
+  html += renderPaginationBar(filteredData.length);
+  document.getElementById('cardContainer').innerHTML = html;
+
+  var countEl = document.querySelector('.pg-count');
+  if (countEl) {
+    countEl.textContent = filteredData.length !== curData.length
+      ? filteredData.length + ' of ' + curData.length + ' Purchase Orders'
+      : curData.length + ' Purchase Orders';
+  }
+}
+
+function renderCards(data, plant, potype) {
+  if (!data || data.length === 0) {
+    return '<div class="empty">' +
+           '<div class="empty-ico">&#128230;</div>' +
+           '<div class="empty-txt">No Purchase Orders found</div></div>';
+  }
+  var label      = POTYPE_MAP[plant][potype].label;
+  var plantLabel = PLANT_LABELS[plant];
+  var html = '';
+
+  html += '<div class="sticky-top"><div class="pg-hdr">';
+  html += '<div class="pg-title">' + label + '</div>';
+  html += '<div class="pg-sub">' + plantLabel +
+          ' &mdash; ' + data.length + ' Purchase Orders</div>';
+  html += '</div></div>';
+
+  html += '<div class="sticky-toolbar"><div class="toolbar">';
+  html += '<button type="button" class="btn-selall" id="btnSelAll"' +
+          ' onclick="toggleAll()">&#9744; Select All</button>';
+  html += '<div class="search-wrap"><span>&#128269;</span>';
+  html += '<input type="text" id="searchPO"' +
+          ' placeholder="Search PO number or vendor..."' +
+          ' onkeyup="onSearchChange()"></div>';
+
+  html += '<div class="page-size-wrap">';
+  html += '<label for="pageSizeSelect">Show:</label>';
+  html += '<select id="pageSizeSelect" class="page-size-select"' +
+          ' onchange="changePageSize(parseInt(this.value))">';
+  var sizes      = [10, 20, 50, 0];
+  var sizeLabels = ['10 per page', '20 per page', '50 per page', 'All'];
+  for (var si = 0; si < sizes.length; si++) {
+    html += '<option value="' + sizes[si] + '"' +
+            (pageSize === sizes[si] ? ' selected' : '') +
+            '>' + sizeLabels[si] + '</option>';
+  }
+  html += '</select></div>';
+
+  html += '<div class="expand-bar">';
+  html += '<button type="button" class="btn-exp"' +
+          ' onclick="expandAll()">&#9660; Expand All</button>';
+  html += '<button type="button" class="btn-exp"' +
+          ' onclick="collapseAll()">&#9650; Collapse All</button>';
+  html += '</div>';
+  html += '<div class="pg-count">' + data.length + ' Purchase Orders</div>';
+  html += '</div></div>';
+  html += '<div id="cardContainer"></div>';
+  return html;
+}
+
+function changePageSize(size) {
+  pageSize    = size;
+  currentPage = 1;
+  selAll      = false;
+  var btn = document.getElementById('btnSelAll');
+  if (btn) btn.innerHTML = '&#9744; Select All';
+  var sel = document.getElementById('pageSizeSelect');
+  if (sel) sel.value = String(size);
+  renderCardListOnly();
+}
+
+function goToPage(page) {
+  var totalPages = getTotalPages(filteredData.length);
+  if (page < 1) page = 1;
+  if (page > totalPages) page = totalPages;
+  currentPage = page;
+  selAll = false;
+  var btn = document.getElementById('btnSelAll');
+  if (btn) btn.innerHTML = '&#9744; Select All';
+  renderCardListOnly();
+  var container = document.getElementById('cardContainer');
+  if (container) container.scrollIntoView({ behavior:'smooth', block:'start' });
+}
+
+var searchTimeout = null;
+function onSearchChange() {
+  clearTimeout(searchTimeout);
+  searchTimeout = setTimeout(function() {
+    currentPage = 1;
+    selAll = false;
+    var btn = document.getElementById('btnSelAll');
+    if (btn) btn.innerHTML = '&#9744; Select All';
+    renderCardListOnly();
+  }, 200);
+}
+
+function toggleCard(ebeln) {
+  var c = document.getElementById('card_' + ebeln);
+  if (c) c.classList.toggle('expanded');
+}
+
+function expandAll() {
+  document.querySelectorAll('.po-card').forEach(function(c) {
+    c.classList.add('expanded');
+  });
+}
+
+function collapseAll() {
+  document.querySelectorAll('.po-card').forEach(function(c) {
+    c.classList.remove('expanded');
+  });
+}
+
+function toggleAll() {
+  selAll = !selAll;
+  document.querySelectorAll('.card-cb').forEach(function(cb) {
+    var card = cb.closest('.po-card');
+    if (card && card.style.display !== 'none') cb.checked = selAll;
+  });
+  var btn = document.getElementById('btnSelAll');
+  if (btn) btn.innerHTML = selAll
+    ? '&#9745; Deselect All'
+    : '&#9744; Select All';
+}
+
+/* ================================================================
+   MODAL DETAIL
+   ================================================================ */
+function openModal(ebeln) {
+  var d = null;
+  for (var i = 0; i < ALL_DATA1.length; i++) {
+    if (ALL_DATA1[i].ebeln === ebeln) { d = ALL_DATA1[i]; break; }
+  }
+  if (!d) return;
+
+  var items  = getItemsForPO(ebeln);
+  var remark = getRemarkForPO(ebeln);
+
+  var html = '<div class="modal-title">Detail PO: ' + ebeln + '</div>';
+  html += '<div style="display:grid;grid-template-columns:repeat(4,1fr);' +
+          'gap:10px;margin-bottom:16px;">';
+  html += '<div><div class="meta-lbl">Vendor</div>' +
+          '<div class="meta-val">' + escHtml(d.name1) + '</div></div>';
+  html += '<div><div class="meta-lbl">Status</div>' +
+          '<div class="meta-val">' + escHtml(d.stats) + '</div></div>';
+  html += '<div><div class="meta-lbl">Type</div>' +
+          '<div class="meta-val">' + escHtml(d.bsart) + '</div></div>';
+  html += '<div><div class="meta-lbl">Total</div>' +
+          '<div class="meta-val" style="color:#057a55;">' +
+          formatAmount(d.totpr, d.waerk) + '</div></div>';
+  html += '</div>';
+
+  html += '<table style="width:100%;border-collapse:collapse;font-size:13px;">';
+  html += '<thead><tr>';
+  var heads   = ['Item','Description','Qty','Unit',
+                 'Net Price','Total','Curr'];
+  var numCols = [false,false,true,false,true,true,false];
+  heads.forEach(function(h, hi) {
+    html += '<th style="' + (numCols[hi] ? 'text-align:right;' : '') +
+            'padding:7px 10px;font-size:11px;text-transform:uppercase;' +
+            'letter-spacing:.05em;color:#6b7280;font-weight:600;' +
+            'border-bottom:1px solid #e5e7eb;">' + h + '</th>';
+  });
+  html += '</tr></thead><tbody>';
+  items.forEach(function(it) {
+    var tdStyle = 'padding:9px 10px;border-bottom:1px solid #f9fafb;color:#374151;';
+    html += '<tr>';
+    html += '<td style="' + tdStyle + '">' + escHtml(it.ebelp) + '</td>';
+    html += '<td style="' + tdStyle + '">' + escHtml(it.maktx) + '</td>';
+    html += '<td style="' + tdStyle + 'text-align:right;">' +
+            formatNum(it.menge, '') + '</td>';
+    html += '<td style="' + tdStyle + '">' + escHtml(it.meins) + '</td>';
+    html += '<td style="' + tdStyle + 'text-align:right;">' +
+            formatNum(it.nettt, it.waerk) + '</td>';
+    html += '<td style="' + tdStyle + 'text-align:right;">' +
+            formatNum(it.netwr, it.waerk) + '</td>';
+    html += '<td style="' + tdStyle + '">' + escHtml(it.waerk) + '</td>';
+    html += '</tr>';
+  });
+  html += '</tbody></table>';
+
+  html += '<div class="add-info" style="margin-top:12px;">';
+  html += '<span class="add-info-icon">&#9432;</span><div>';
+  html += '<div class="add-info-lbl">Additional Information</div>';
+  if (remark) {
+    html += '<div class="add-info-txt">' + escHtml(remark) + '</div>';
+  } else {
+    html += '<div class="add-info-empty">' +
+            '(No description / comment available)</div>';
+  }
+  html += '</div></div>';
+
+  document.getElementById('modalBody').innerHTML = html;
+  document.getElementById('poModal').classList.add('show');
+}
+
+function closeModal() {
+  document.getElementById('poModal').classList.remove('show');
+}
+
+/* ================================================================
+   TOAST
+   ================================================================ */
+function showToast(type, message) {
+  var existing = document.getElementById('toastMsg');
+  if (existing) existing.remove();
+  var toast       = document.createElement('div');
+  toast.id        = 'toastMsg';
+  toast.className = 'toast ' + (type === 'S' ? 'toast-s' : 'toast-e');
+  toast.innerHTML = (type === 'S' ? '&#10003; ' : '&#10007; ') +
+                    escHtml(message);
+  document.body.appendChild(toast);
+  setTimeout(function() { toast.style.display = 'none'; }, 4000);
+}
+
+/* ================================================================
+   SUBMIT ACTION
+   ================================================================ */
+function submitAction(action) {
+  var cbs = document.querySelectorAll('.card-cb:checked');
+  if (cbs.length === 0) { alert('Select at least one PO.'); return; }
+
+  if (action === 'BULK_REJ') {
+    var cm = document.getElementById('commentInput').value.trim();
+    if (!cm) { alert('Please enter a reject reason.'); return; }
+  }
+
+  var totals = {};
+  cbs.forEach(function(cb) {
+    var rawAmt = cb.dataset.amount || '0';
+    var curr   = (cb.dataset.curr || '').toUpperCase();
+    var a      = parseAbapNum(rawAmt) || 0;
+    if (ZERO_DEC_CURRENCIES.indexOf(curr) > -1) a = Math.round(a * 100);
+    if (!totals[curr]) totals[curr] = 0;
+    totals[curr] += a;
+  });
+
+  var msg = 'Selected: ' + cbs.length + ' PO\nTotal Amount:\n';
+  for (var c in totals) {
+    msg += c + ' : ' +
+      totals[c].toLocaleString('id-ID',
+        { minimumFractionDigits:0, maximumFractionDigits:0 }) + '\n';
+  }
+  msg += '\nProceed with ' +
+         (action === 'BULK_REL' ? 'RELEASE' : 'REJECT') + '?';
+  if (!confirm(msg)) return;
+
+  var formData = new FormData();
+  formData.append('plant',   curPlant);
+  formData.append('potype',  curPotype);
+  formData.append('action',  action);
+  formData.append('comment',
+    (action === 'BULK_REJ')
+      ? document.getElementById('commentInput').value : '');
+
+  var idx = 1;
+  cbs.forEach(function(cb) {
+    formData.append('po_selected_' + idx, cb.dataset.ebeln);
+    idx++;
+  });
+
+  document.getElementById('lo').classList.add('show');
+
+  var xhr = new XMLHttpRequest();
+  xhr.open('POST', 'main.htm', true);
+  xhr.onload = function() {
+    document.getElementById('lo').classList.remove('show');
+    var resp;
+    try { resp = JSON.parse(xhr.responseText); }
+    catch(e) { alert('Error parsing server response.'); return; }
+
+    showToast(resp.status, resp.message);
+
+    if (resp.status === 'S' &&
+        resp.processed && resp.processed.length > 0) {
+      var processed = resp.processed;
+
+      processed.forEach(function(po) {
+        var card = document.getElementById('card_' + po);
+        if (card) card.classList.add('removing');
+      });
+
+      setTimeout(function() {
+        ALL_DATA1 = ALL_DATA1.filter(function(d) {
+          return processed.indexOf(d.ebeln) === -1;
+        });
+        ALL_DATA2 = ALL_DATA2.filter(function(d) {
+          return processed.indexOf(d.ebeln) === -1;
+        });
+
+        var bsartList = POTYPE_MAP[curPlant][curPotype].bsart;
+        curData = ALL_DATA1.filter(function(d) {
+          return d.plant === curPlant &&
+                 bsartList.indexOf(d.bsart) > -1;
+        });
+
+        filteredData = getFilteredData();
+        var totalPages = getTotalPages(filteredData.length);
+        if (currentPage > totalPages)
+          currentPage = Math.max(1, totalPages);
+
+        var subEl = document.querySelector('.pg-sub');
+        if (subEl) {
+          subEl.textContent = PLANT_LABELS[curPlant] +
+            ' \u2014 ' + curData.length + ' Purchase Orders';
+        }
+
+        renderSidebar();
+        selAll = false;
+        var btn = document.getElementById('btnSelAll');
+        if (btn) btn.innerHTML = '&#9744; Select All';
+        document.getElementById('commentInput').value = '';
+
+        if (curData.length === 0) {
+          document.getElementById('mainContent').innerHTML =
+            renderCards([], curPlant, curPotype);
+          document.getElementById('fab').className = 'fab';
+        } else {
+          renderCardListOnly();
+        }
+      }, 400);
+    }
+  };
+
+  xhr.onerror = function() {
+    document.getElementById('lo').classList.remove('show');
+    alert('Network error. Please try again.');
+  };
+
+  xhr.send(formData);
+}
+
+/* ================================================================
+   UI HELPERS
+   ================================================================ */
+function toggleSidebar() {
+  document.body.classList.toggle('sb-collapsed');
+}
+
+function toggleUserMenu() {
+  var m = document.getElementById('userMenu');
+  m.style.display = (m.style.display === 'none') ? 'block' : 'none';
+}
+
+document.addEventListener('click', function(e) {
+  var menu = document.getElementById('userMenu');
+  var user = document.querySelector('.hdr-user');
+  if (menu && user && !user.contains(e.target)) {
+    menu.style.display = 'none';
+  }
+});
+
+/* ================================================================
+   LOGOUT
+   ================================================================ */
+function doLogout() {
+  if (!confirm('Yakin ingin logout?')) return;
+  sessionStorage.setItem('logged_out', '1');
+  fetch('/sap/public/bc/icf/logoff', { credentials:'include' })
+    .finally(function() {
+      var xhr = new XMLHttpRequest();
+      xhr.open('GET', '/sap/bc/bsp/sap/zpo_rel_bsp/main.htm',
+               true, 'logout', 'logout');
+      xhr.onreadystatechange = function() {
+        if (xhr.readyState === 4) {
+          window.location.replace(
+            '/sap/bc/bsp/sap/zpo_rel_bsp/main.htm');
+        }
+      };
+      xhr.send();
+    });
+}
+
+window.addEventListener('pageshow', function(e) {
+  if (e.persisted &&
+      sessionStorage.getItem('logged_out') === '1') {
+    sessionStorage.removeItem('logged_out');
+    window.location.replace('/sap/public/bc/icf/logoff');
+  }
+});
+
+/* ================================================================
+   POPSTATE
+   ================================================================ */
+window.addEventListener('popstate', function() {
+  var params = new URLSearchParams(window.location.search);
+  var p = params.get('plant');
+  var t = params.get('potype');
+  if (p && t && POTYPE_MAP[p] && POTYPE_MAP[p][t]) {
+    histMode    = '';
+    ogrMode     = '';
+    curPlant    = p;
+    curPotype   = t;
+    selAll      = false;
+    currentPage = 1;
+    var bsartList = POTYPE_MAP[p][t].bsart;
+    curData = ALL_DATA1.filter(function(d) {
+      return d.plant === p && bsartList.indexOf(d.bsart) > -1;
+    });
+    document.getElementById('mainContent').innerHTML =
+      renderCards(curData, p, t);
+    document.getElementById('fab').className =
+      curData.length > 0 ? 'fab show' : 'fab';
+    if (curData.length > 0) renderCardListOnly();
+    renderSidebar();
+  }
+});
+
+/* ================================================================
+   INIT
+   ================================================================ */
+(function init() {
+  renderSidebar();
+
+  loadHistoryCounts('1200');
+  loadHistoryCounts('1300');
+
+  var params     = new URLSearchParams(window.location.search);
+  var initPlant  = params.get('plant')  || '';
+  var initPotype = params.get('potype') || '';
+
+  if (initPlant && initPotype &&
+      POTYPE_MAP[initPlant] &&
+      POTYPE_MAP[initPlant][initPotype]) {
+    histMode    = '';
+    curPlant    = initPlant;
+    curPotype   = initPotype;
+    selAll      = false;
+    currentPage = 1;
+    var bsartList = POTYPE_MAP[initPlant][initPotype].bsart;
+    curData = ALL_DATA1.filter(function(d) {
+      return d.plant === initPlant &&
+             bsartList.indexOf(d.bsart) > -1;
+    });
+    document.getElementById('mainContent').innerHTML =
+      renderCards(curData, initPlant, initPotype);
+    document.getElementById('fab').className =
+      curData.length > 0 ? 'fab show' : 'fab';
+    if (curData.length > 0) renderCardListOnly();
+    renderSidebar();
+  } else {
+    document.getElementById('mainContent').innerHTML =
+      '<div class="empty">' +
+      '<img src="background.png" alt="Select PO"' +
+      ' style="max-width:380px;width:80%;opacity:.88;">' +
+      '<div class="empty-txt" style="margin-top:18px;">' +
+      'Select a plant and PO type from the sidebar</div>' +
+      '</div>';
+  }
+})();
+</script>
+
+</body>
+</html>
