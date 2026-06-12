@@ -247,37 +247,37 @@ Keputusan 2026-06-12 atas temuan `notes/investigation.md` §3:
 - [ ] Buat report `ZPR_MIGRATE_HIST` (lihat §7) di SE38
 - [ ] Jalankan migrasi `ZROTO_*_HIST` → `ZPR_*_HIST` + verifikasi row count (output report)
 
-### 🚧 Coding — `main.htm`
-- [ ] Update TYPES (`ty_hist_app`, `ty_hist_rej`) — tambah field `bsart`
-- [ ] Validasi `lv_bsart` di branch **GET_LIST** saja: kosong → `'ROTO'`; selain `ROTO`/`RSB7` → error `{"status":"E","message":"bsart tidak valid"}` (jangan default global)
-- [ ] **GET_SIDEBAR**: loop 2 kategori (ROTO, RSB7) + 2 plant → akumulasi pending count
-- [ ] **GET_SIDEBAR**: ganti `zroto_app_hist` → `zpr_app_hist` (tanpa filter bsart)
-- [ ] **GET_SIDEBAR**: ganti `zroto_rej_hist` → `zpr_rej_hist` (tanpa filter bsart)
-- [ ] **GET_LIST**: `WHERE bsart = lv_bsart`
-- [ ] **GET_HIST_APP**: SELECT dari `zpr_app_hist` (tanpa filter bsart)
-- [ ] **GET_HIST_REJ**: SELECT dari `zpr_rej_hist` (tanpa filter bsart)
-- [ ] **GET_HIST_APP**: tambah `bsart` ke output JSON (`'"bsart":"' ls_hist_app-bsart '",'`) — catatan: `bsart` sudah di-SELECT tapi belum di-output (main.htm ~675-693, 762-779)
-- [ ] **GET_HIST_REJ**: tambah `bsart` ke output JSON (`'"bsart":"' ls_hist_rej-bsart '",'`)
-- [ ] **TYPES `ty_eban_item`**: tambah field `bsart TYPE eban-bsart`
-- [ ] **PROCESS**: tambah `bsart` ke SELECT item EBAN
-- [ ] **PROCESS approve**: `MODIFY zpr_app_hist` + isi `bsart = ls_item-bsart` (dari EBAN, bukan param frontend)
-- [ ] **PROCESS approve**: history hanya item yang sukses release — tandai per item di loop BAPI (§8.3 / bug §3.1)
-- [ ] **PROCESS reject**: `MODIFY zpr_rej_hist` + isi `bsart = ls_item-bsart` (dari EBAN, bukan param frontend)
-- [ ] **PROCESS reject**: balik urutan — BAPI delete dulu, sukses baru tulis history + 1 commit; hapus rollback manual (§8.3 / bug §3.6)
+### ✅ Coding — `main.htm` (SELESAI 2026-06-12)
+- [x] Update TYPES (`ty_hist_app`, `ty_hist_rej`) — referensi tabel diganti ke `zpr_*_hist` (field `bsart` memang sudah ada)
+- [x] Validasi `lv_bsart` di branch **GET_LIST** saja: kosong → `'ROTO'`; selain `ROTO`/`RSB7` → error `{"status":"E","message":"bsart tidak valid"}` (jangan default global)
+- [x] **GET_SIDEBAR**: pending per kategori via macro `count_pending` (4x: 2 plant × 2 kategori), JSON sesuai §8.0
+- [x] **GET_SIDEBAR**: ganti `zroto_app_hist` → `zpr_app_hist` (tanpa filter bsart)
+- [x] **GET_SIDEBAR**: ganti `zroto_rej_hist` → `zpr_rej_hist` (tanpa filter bsart)
+- [x] **GET_LIST**: `WHERE bsart = lv_bsart`
+- [x] **GET_HIST_APP**: SELECT dari `zpr_app_hist` (tanpa filter bsart)
+- [x] **GET_HIST_REJ**: SELECT dari `zpr_rej_hist` (tanpa filter bsart)
+- [x] **GET_HIST_APP**: tambah `bsart` ke output JSON (`'"bsart":"' ls_hist_app-bsart '",'`)
+- [x] **GET_HIST_REJ**: tambah `bsart` ke output JSON (`'"bsart":"' ls_hist_rej-bsart '",'`)
+- [x] **TYPES `ty_eban_item`**: tambah field `bsart TYPE eban-bsart`
+- [x] **PROCESS**: tambah `bsart` ke SELECT item EBAN
+- [x] **PROCESS approve**: `MODIFY zpr_app_hist` + isi `bsart = ls_item-bsart` (dari EBAN, bukan param frontend)
+- [x] **PROCESS approve**: history hanya item sukses release — item sukses dikumpulkan ke `lt_items_ok` (§8.3 / bug §3.1)
+- [x] **PROCESS reject**: `MODIFY zpr_rej_hist` + isi `bsart = ls_item-bsart` (dari EBAN, bukan param frontend)
+- [x] **PROCESS reject**: balik urutan — BAPI delete dulu, sukses baru tulis history + 1 commit (`ls_zrej`); rollback manual & `DELETE FROM` dihapus (§8.3 / bug §3.6)
 
-### 🚧 Coding — `index.htm`
-- [ ] Tambah konstanta `PR_CATEGORIES`
-- [ ] Tambah variabel global `curBsart`
-- [ ] Update `renderSidebar` → 4 menu per plant + badge pending per kategori
-- [ ] Update pembacaan `sbCounts.pending` → per kategori (`pending[plant][bsart] || 0`, lihat §8.0)
-- [ ] Update `switchView` → terima & simpan `bsart`
-- [ ] Update `fetchList` → kirim `bsart`
-- [ ] Update `fetchHistApp` / `fetchHistRej` → kirim `bsart` (kosong = semua)
-- [ ] Update `renderList` → label dinamis sesuai `PR_CATEGORIES`
-- [ ] Update `renderHistTable` → tambah kolom "Kategori"
-- [ ] Update `renderHistTable` → hapus embed `JSON.stringify(data)` di atribut `oninput`; pakai variabel global `histData` (§8.3 / bug §3.5)
-- [ ] ~~Update `processAction` → kirim `bsart`~~ (dibatalkan — backend ambil `bsart` dari EBAN item)
-- [ ] Update title aplikasi dinamis
+### ✅ Coding — `index.htm` (SELESAI 2026-06-12)
+- [x] Tambah konstanta `PR_CATEGORIES` (label/short/icon per kategori) + helper `getBsartLabel()`
+- [x] Tambah variabel global `curBsart` (default `'ROTO'`)
+- [x] Update `renderSidebar` → 4 menu per plant (loop `Object.keys(PR_CATEGORIES)`) + badge pending per kategori; badge total plant = jumlah semua kategori
+- [x] Update pembacaan `sbCounts.pending` → nested per kategori dengan fallback `|| 0` (§8.0)
+- [x] Update `switchView(plant,mode,bsart)` → simpan `curBsart` (hanya saat mode pending)
+- [x] Update `fetchList` → kirim `&bsart=`
+- [x] `fetchHistApp`/`fetchHistRej` → tidak kirim `bsart` (backend memang tidak filter; sama dengan "kosong = semua")
+- [x] Update `renderList` → judul, teks kosong dinamis dari `PR_CATEGORIES[curBsart]`
+- [x] Update `renderHistTable`/`buildHistTable` → kolom "Kategori" (badge warna beda ROTO vs RSB7, fallback `-` utk data lama tanpa bsart)
+- [x] `renderHistTable` → data ke variabel global `histData`/`histType`; `oninput` hanya `onHistSearch(this.value)`; search ikut match kode/label kategori (§8.3 / bug §3.5)
+- [x] ~~`processAction` kirim `bsart`~~ (dibatalkan — backend ambil dari EBAN); `curBsart` ikut disimpan/dipulihkan saat reload view pasca-proses
+- [x] Title dinamis: `<title>`/brand jadi "Release PR", `document.title` di-update per view di `switchView`
 
 ### 🧪 Testing
 - [ ] Sidebar: badge pending ROTO vs RSB7 terpisah

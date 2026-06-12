@@ -25,7 +25,7 @@ ENDIF.
   <meta charset="UTF-8">
   <meta name="viewport"
         content="width=device-width, initial-scale=1.0">
-  <title>Release PR ROTO - PT. Kayu Mebel Indonesia</title>
+  <title>Release PR - PT. Kayu Mebel Indonesia</title>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=DM+Mono:wght@400;500&display=swap"
         rel="stylesheet">
   <style>
@@ -622,7 +622,7 @@ ENDIF.
                 object-fit:contain;">
   </div>
   <div>
-    <div class="hdr-brand">Release PR ROTO</div>
+    <div class="hdr-brand">Release PR</div>
     <div class="hdr-corp">
       PT. Kayu Mebel Indonesia
     </div>
@@ -777,6 +777,7 @@ ENDIF.
 var API_URL        = 'main.htm';
 var curPlant       = '';
 var curMode        = '';
+var curBsart       = 'ROTO';
 var isApprover     = false;
 var openSections   = {};
 var curEstkzFilter = '';
@@ -789,8 +790,15 @@ var searchKw     = '';
 var allExpanded  = false;
 var filteredData = [];
 
+/* Data history aktif — dipegang di variabel global,
+   TIDAK di-embed ke atribut HTML (fix XSS §3.5) */
+var histData = [];
+var histType = '';
+
+/* pending per plant per kategori — kontrak §8.0 */
 var sbCounts = {
-  pending:  { '1200':0, '1300':0 },
+  pending:  { '1200':{ROTO:0,RSB7:0},
+              '1300':{ROTO:0,RSB7:0} },
   hist_app: { '1200':0, '1300':0 },
   hist_rej: { '1200':0, '1300':0 }
 };
@@ -799,6 +807,21 @@ var PLANT_LABELS = {
   '1200':'Surabaya',
   '1300':'Semarang'
 };
+
+var PR_CATEGORIES = {
+  'ROTO': { label:'PR One Time Off',
+            short:'One Time Off',
+            icon:'&#128203;' },
+  'RSB7': { label:'PR Jasa',
+            short:'Jasa',
+            icon:'&#128736;' }
+};
+
+function getBsartLabel(bs) {
+  if (!bs) return '-';
+  return (PR_CATEGORIES[bs]&&
+          PR_CATEGORIES[bs].label)||bs;
+}
 
 var ESTKZ_MAP = {
   'B':'MRP',        'D':'Direct',
@@ -987,10 +1010,14 @@ function loadSidebarData() {
     .then(function(res){
       if (res.status==='S'){
         isApprover=(res.is_approver===true);
-        sbCounts.pending['1200']=
-          parseInt(res.pending['1200'])||0;
-        sbCounts.pending['1300']=
-          parseInt(res.pending['1300'])||0;
+        var pd=res.pending||{};
+        ['1200','1300'].forEach(function(w){
+          var o=pd[w]||{};
+          sbCounts.pending[w]={
+            ROTO: parseInt(o.ROTO)||0,
+            RSB7: parseInt(o.RSB7)||0
+          };
+        });
         sbCounts.hist_rej['1200']=
           parseInt(res.hist_rej['1200'])||0;
         sbCounts.hist_rej['1300']=
@@ -1023,7 +1050,9 @@ function renderSidebar() {
 
     var isOpen=(curPlant===p.code)||
                (openSections[p.code]===true);
-    var pend  =sbCounts.pending[p.code]  ||0;
+    var pendObj=sbCounts.pending[p.code]||{};
+    var pend  =(pendObj.ROTO||0)+
+               (pendObj.RSB7||0);
     var happ  =sbCounts.hist_app[p.code] ||0;
     var hrej  =sbCounts.hist_rej[p.code] ||0;
 
@@ -1053,20 +1082,27 @@ function renderSidebar() {
     /* Submenu */
     html+='<div class="sb-submenu">';
 
-    /* 1 — PR Pending */
-    var isPend=(curPlant===p.code &&
-                curMode==='pending');
-    html+='<a class="sb-link'+
-          (isPend?' active':'')+'"'+
-          ' onclick="switchView(\''+
-          p.code+'\',\'pending\')">';
-    html+='<span style="display:flex;'+
-          'align-items:center;gap:7px;">'+
-          '&#128203; PR One Time Off</span>';
-    if (pend>0)
-      html+='<span class="sb-badge '+
-            'sb-badge-pending">'+pend+'</span>';
-    html+='</a>';
+    /* 1 — PR Pending per kategori (ROTO, RSB7) */
+    Object.keys(PR_CATEGORIES)
+      .forEach(function(bs){
+        var cat =PR_CATEGORIES[bs];
+        var cnt =pendObj[bs]||0;
+        var isAct=(curPlant===p.code &&
+                   curMode==='pending' &&
+                   curBsart===bs);
+        html+='<a class="sb-link'+
+              (isAct?' active':'')+'"'+
+              ' onclick="switchView(\''+
+              p.code+'\',\'pending\',\''+
+              bs+'\')">';
+        html+='<span style="display:flex;'+
+              'align-items:center;gap:7px;">'+
+              cat.icon+' '+cat.label+'</span>';
+        if (cnt>0)
+          html+='<span class="sb-badge '+
+                'sb-badge-pending">'+cnt+'</span>';
+        html+='</a>';
+      });
 
     /* 2 — History Approve */
     var isApp=(curPlant===p.code &&
@@ -1117,14 +1153,26 @@ function toggleSection(plantCode) {
 /* ================================================================
    SWITCH VIEW
    ================================================================ */
-function switchView(plant,mode) {
+function switchView(plant,mode,bsart) {
   curPlant       = plant;
   curMode        = mode;
+  if (mode==='pending')
+    curBsart     = bsart||'ROTO';
   curPage        = 1;
   selBanfns      = {};
   searchKw       = '';
   allExpanded    = false;
   curEstkzFilter = '';
+
+  var t='Release PR';
+  if (mode==='pending'&&PR_CATEGORIES[curBsart])
+    t+=' '+PR_CATEGORIES[curBsart].short;
+  else if (mode==='hist_app')
+    t+=' - History Approve';
+  else if (mode==='hist_rej')
+    t+=' - History Reject';
+  document.title=
+    t+' - PT. Kayu Mebel Indonesia';
 
   document.getElementById('fab').className='fab';
   renderSidebar();
@@ -1141,6 +1189,8 @@ function switchView(plant,mode) {
 function fetchList(estkz) {
   fetch(API_URL+'?action=GET_LIST'+
         '&werks='+encodeURIComponent(curPlant)+
+        '&bsart='+encodeURIComponent(
+          curBsart||'ROTO')+
         '&estkz='+encodeURIComponent(estkz||''))
     .then(function(r){return r.json();})
     .then(function(res){
@@ -1241,12 +1291,15 @@ function renderList() {
   var pageData=filteredData.slice(start,end);
 
   var html='';
+  var cat=PR_CATEGORIES[curBsart]||
+          {label:curBsart,icon:'&#128203;'};
 
   /* Sticky header */
   html+='<div class="sticky-top">'+
         '<div class="pg-hdr">'+
         '<div class="pg-title">'+
-        '&#128203; PR Pending ROTO &mdash; '+
+        cat.icon+' Pending '+cat.label+
+        ' &mdash; '+
         PLANT_LABELS[curPlant]+'</div>'+
         '<div class="pg-sub">'+
         total+' PR menunggu approval';
@@ -1328,7 +1381,7 @@ function renderList() {
             ?'Tidak ada PR '+
               (curEstkzFilter==='MRP'
                 ?'MRP':'Non-MRP')+' pending'
-            :'Tidak ada PR ROTO pending')+
+            :'Tidak ada '+cat.label+' pending')+
           '</div></div>';
   } else {
     pageData.forEach(function(pr){
@@ -1441,6 +1494,11 @@ function renderList() {
    RENDER HISTORY TABLE (approve & reject)
    ================================================================ */
 function renderHistTable(data,type) {
+  /* simpan ke global utk search — fix XSS §3.5:
+     data tidak lagi di-embed ke atribut oninput */
+  histData=data;
+  histType=type;
+
   var isApp =(type==='approve');
   var title =isApp
     ?'&#10003; History Approve &mdash; '
@@ -1467,8 +1525,7 @@ function renderHistTable(data,type) {
         '<input type="text"'+
         ' id="histSearchInp"'+
         ' placeholder="Cari No PR, Item..."'+
-        ' oninput="onHistSearch(this.value,'+
-        JSON.stringify(data)+',"'+type+'")">'+
+        ' oninput="onHistSearch(this.value)">'+
         '</div></div>';
 
   html+='<div id="histTableWrap">';
@@ -1503,6 +1560,7 @@ function buildHistTable(data,type) {
     '<thead><tr>'+
     '<th>No PR</th>'+
     '<th>Item</th>'+
+    '<th>Kategori</th>'+
     '<th>Deskripsi</th>'+
     '<th>Dibuat Oleh</th>'+
     '<th>Tgl PR</th>'+
@@ -1542,6 +1600,17 @@ function buildHistTable(data,type) {
     html+='<td style="font-family:\'DM Mono\','+
           'monospace;font-size:12px;">'+
           escHtml(h.bnfpo)+'</td>';
+
+    var bcls=(h.bsart==='RSB7')
+      ?'background:#ecfeff;color:#0e7490;'
+      :'background:#eef2ff;color:#4338ca;';
+    html+='<td><span style="padding:2px 6px;'+
+          'border-radius:4px;font-size:11px;'+
+          'font-weight:600;white-space:nowrap;'+
+          bcls+'">'+
+          escHtml(getBsartLabel(h.bsart))+
+          '</span></td>';
+
     html+='<td style="font-weight:500;'+
           'max-width:180px;">'+
           escHtml(h.txz01||'-')+'</td>';
@@ -1600,30 +1669,37 @@ function buildHistTable(data,type) {
   return html;
 }
 
-/* search di history */
+/* search di history — baca histData/histType
+   global (fix XSS §3.5) */
 var histSearchTimer=null;
-function onHistSearch(val,allHistData,type) {
+function onHistSearch(val) {
   clearTimeout(histSearchTimer);
   histSearchTimer=setTimeout(function(){
     var kw=val.trim().toLowerCase();
     var filtered=kw
-      ?allHistData.filter(function(h){
+      ?histData.filter(function(h){
           return h.banfn.toLowerCase()
                    .indexOf(kw)>-1||
                  (h.txz01&&h.txz01.toLowerCase()
                    .indexOf(kw)>-1)||
                  (h.ernam&&h.ernam.toLowerCase()
                    .indexOf(kw)>-1)||
+                 (h.bsart&&
+                  (h.bsart.toLowerCase()
+                    .indexOf(kw)>-1||
+                   getBsartLabel(h.bsart)
+                    .toLowerCase()
+                    .indexOf(kw)>-1))||
                  ((h.app_by||h.del_by)&&
                   (h.app_by||h.del_by).toLowerCase()
                    .indexOf(kw)>-1);
         })
-      :allHistData;
+      :histData;
     var wrap=document.getElementById(
       'histTableWrap');
     if (wrap)
       wrap.innerHTML=buildHistTable(
-        filtered,type);
+        filtered,histType);
   },300);
 }
 
@@ -1960,6 +2036,7 @@ function processAction(banfns,action,notes) {
   /* Simpan state untuk reload setelah selesai */
   var savedPlant =curPlant;
   var savedMode  =curMode;
+  var savedBsart =curBsart;
   var savedEstkz =curEstkzFilter;
 
   function doNext(idx) {
@@ -1992,6 +2069,7 @@ function processAction(banfns,action,notes) {
       setTimeout(function(){
         curPlant       =savedPlant;
         curMode        =savedMode;
+        curBsart       =savedBsart;
         curEstkzFilter =savedEstkz;
         curPage        =1;
         allExpanded    =false;

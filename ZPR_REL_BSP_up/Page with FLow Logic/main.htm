@@ -58,6 +58,7 @@ TYPES: BEGIN OF ty_eban_item,
          badat TYPE eban-badat,
          loekz TYPE eban-loekz,
          estkz TYPE eban-estkz,
+         bsart TYPE eban-bsart,
        END OF ty_eban_item.
 
 TYPES: BEGIN OF ty_makt,
@@ -71,42 +72,42 @@ TYPES: BEGIN OF ty_uname_nm,
        END OF ty_uname_nm.
 
 TYPES: BEGIN OF ty_hist_rej,
-         banfn  TYPE zroto_rej_hist-banfn,
-         bnfpo  TYPE zroto_rej_hist-bnfpo,
-         werks  TYPE zroto_rej_hist-werks,
-         bsart  TYPE zroto_rej_hist-bsart,
-         txz01  TYPE zroto_rej_hist-txz01,
-         ernam  TYPE zroto_rej_hist-ernam,
-         erdat  TYPE zroto_rej_hist-erdat,
-         menge  TYPE zroto_rej_hist-menge,
-         meins  TYPE zroto_rej_hist-meins,
-         preis  TYPE zroto_rej_hist-preis,
-         peinh  TYPE zroto_rej_hist-peinh,
-         waers  TYPE zroto_rej_hist-waers,
-         ekgrp  TYPE zroto_rej_hist-ekgrp,
-         del_by TYPE zroto_rej_hist-del_by,
-         del_at TYPE zroto_rej_hist-del_at,
-         del_tm TYPE zroto_rej_hist-del_tm,
-         reason TYPE zroto_rej_hist-reason,
+         banfn  TYPE zpr_rej_hist-banfn,
+         bnfpo  TYPE zpr_rej_hist-bnfpo,
+         werks  TYPE zpr_rej_hist-werks,
+         bsart  TYPE zpr_rej_hist-bsart,
+         txz01  TYPE zpr_rej_hist-txz01,
+         ernam  TYPE zpr_rej_hist-ernam,
+         erdat  TYPE zpr_rej_hist-erdat,
+         menge  TYPE zpr_rej_hist-menge,
+         meins  TYPE zpr_rej_hist-meins,
+         preis  TYPE zpr_rej_hist-preis,
+         peinh  TYPE zpr_rej_hist-peinh,
+         waers  TYPE zpr_rej_hist-waers,
+         ekgrp  TYPE zpr_rej_hist-ekgrp,
+         del_by TYPE zpr_rej_hist-del_by,
+         del_at TYPE zpr_rej_hist-del_at,
+         del_tm TYPE zpr_rej_hist-del_tm,
+         reason TYPE zpr_rej_hist-reason,
        END OF ty_hist_rej.
 
 TYPES: BEGIN OF ty_hist_app,
-         banfn  TYPE zroto_app_hist-banfn,
-         bnfpo  TYPE zroto_app_hist-bnfpo,
-         werks  TYPE zroto_app_hist-werks,
-         bsart  TYPE zroto_app_hist-bsart,
-         txz01  TYPE zroto_app_hist-txz01,
-         ernam  TYPE zroto_app_hist-ernam,
-         erdat  TYPE zroto_app_hist-erdat,
-         menge  TYPE zroto_app_hist-menge,
-         meins  TYPE zroto_app_hist-meins,
-         preis  TYPE zroto_app_hist-preis,
-         peinh  TYPE zroto_app_hist-peinh,
-         waers  TYPE zroto_app_hist-waers,
-         ekgrp  TYPE zroto_app_hist-ekgrp,
-         app_by TYPE zroto_app_hist-app_by,
-         app_at TYPE zroto_app_hist-app_at,
-         app_tm TYPE zroto_app_hist-app_tm,
+         banfn  TYPE zpr_app_hist-banfn,
+         bnfpo  TYPE zpr_app_hist-bnfpo,
+         werks  TYPE zpr_app_hist-werks,
+         bsart  TYPE zpr_app_hist-bsart,
+         txz01  TYPE zpr_app_hist-txz01,
+         ernam  TYPE zpr_app_hist-ernam,
+         erdat  TYPE zpr_app_hist-erdat,
+         menge  TYPE zpr_app_hist-menge,
+         meins  TYPE zpr_app_hist-meins,
+         preis  TYPE zpr_app_hist-preis,
+         peinh  TYPE zpr_app_hist-peinh,
+         waers  TYPE zpr_app_hist-waers,
+         ekgrp  TYPE zpr_app_hist-ekgrp,
+         app_by TYPE zpr_app_hist-app_by,
+         app_at TYPE zpr_app_hist-app_at,
+         app_tm TYPE zpr_app_hist-app_tm,
        END OF ty_hist_app.
 
 DATA: lt_head      TYPE STANDARD TABLE OF ty_eban_head,
@@ -165,6 +166,25 @@ DEFINE fmt_date.
   ENDIF.
 END-OF-DEFINITION.
 
+" Hitung jumlah PR pending unik utk 1 kategori + 1 plant
+" &1 = bsart, &2 = werks, &3 = hasil (string angka)
+DEFINE count_pending.
+  CLEAR lt_sb_uniq.
+  SELECT banfn FROM eban
+    INTO CORRESPONDING FIELDS OF TABLE lt_sb_uniq
+    WHERE bsart = &1
+      AND werks = &2
+      AND frgkz = 'X'
+      AND frgzu = ' '
+      AND loekz = ' '.
+  SORT lt_sb_uniq BY banfn.
+  DELETE ADJACENT DUPLICATES FROM lt_sb_uniq
+    COMPARING banfn.
+  lv_sb_cnt = lines( lt_sb_uniq ).
+  &3 = lv_sb_cnt.
+  CONDENSE &3 NO-GAPS.
+END-OF-DEFINITION.
+
 *----------------------------------------------------------------------
 * REDIRECT ke index.htm jika bukan action call
 *----------------------------------------------------------------------
@@ -193,12 +213,13 @@ CASE lv_action.
 *======================================================================
     DATA: lv_is_app_s TYPE string.
     DATA: lt_sb_uniq  TYPE STANDARD TABLE OF eban,
-          lt_rj_uniq  TYPE STANDARD TABLE OF zroto_rej_hist,
-          lt_ra_uniq  TYPE STANDARD TABLE OF zroto_app_hist.
-    DATA: lv_cnt_1200  TYPE i,
-          lv_cnt_1300  TYPE i,
-          lv_s_1200    TYPE string,
-          lv_s_1300    TYPE string,
+          lt_rj_uniq  TYPE STANDARD TABLE OF zpr_rej_hist,
+          lt_ra_uniq  TYPE STANDARD TABLE OF zpr_app_hist.
+    DATA: lv_sb_cnt      TYPE i,
+          lv_s_1200_roto TYPE string,
+          lv_s_1200_rsb7 TYPE string,
+          lv_s_1300_roto TYPE string,
+          lv_s_1300_rsb7 TYPE string,
           lv_rj_1200   TYPE i,
           lv_rj_1300   TYPE i,
           lv_sr_1200   TYPE string,
@@ -208,41 +229,16 @@ CASE lv_action.
           lv_sa_1200   TYPE string,
           lv_sa_1300   TYPE string.
 
-    " Pending Surabaya
-    CLEAR lt_sb_uniq.
-    SELECT banfn FROM eban
-      INTO CORRESPONDING FIELDS OF TABLE lt_sb_uniq
-      WHERE bsart = 'ROTO'
-        AND werks = '1200'
-        AND frgkz = 'X'
-        AND frgzu = ' '
-        AND loekz = ' '.
-    SORT lt_sb_uniq BY banfn.
-    DELETE ADJACENT DUPLICATES FROM lt_sb_uniq
-      COMPARING banfn.
-    lv_cnt_1200 = lines( lt_sb_uniq ).
-    lv_s_1200   = lv_cnt_1200.
-    CONDENSE lv_s_1200 NO-GAPS.
-
-    " Pending Semarang
-    CLEAR lt_sb_uniq.
-    SELECT banfn FROM eban
-      INTO CORRESPONDING FIELDS OF TABLE lt_sb_uniq
-      WHERE bsart = 'ROTO'
-        AND werks = '1300'
-        AND frgkz = 'X'
-        AND frgzu = ' '
-        AND loekz = ' '.
-    SORT lt_sb_uniq BY banfn.
-    DELETE ADJACENT DUPLICATES FROM lt_sb_uniq
-      COMPARING banfn.
-    lv_cnt_1300 = lines( lt_sb_uniq ).
-    lv_s_1300   = lv_cnt_1300.
-    CONDENSE lv_s_1300 NO-GAPS.
+    " Pending per plant per kategori (kontrak JSON: §8.0
+    " development-to-roto.md)
+    count_pending 'ROTO' '1200' lv_s_1200_roto.
+    count_pending 'RSB7' '1200' lv_s_1200_rsb7.
+    count_pending 'ROTO' '1300' lv_s_1300_roto.
+    count_pending 'RSB7' '1300' lv_s_1300_rsb7.
 
     " History Reject Surabaya
     CLEAR lt_rj_uniq.
-    SELECT banfn FROM zroto_rej_hist
+    SELECT banfn FROM zpr_rej_hist
       INTO CORRESPONDING FIELDS OF TABLE lt_rj_uniq
       WHERE werks = '1200'.
     lv_rj_1200 = lines( lt_rj_uniq ).
@@ -251,7 +247,7 @@ CASE lv_action.
 
     " History Reject Semarang
     CLEAR lt_rj_uniq.
-    SELECT banfn FROM zroto_rej_hist
+    SELECT banfn FROM zpr_rej_hist
       INTO CORRESPONDING FIELDS OF TABLE lt_rj_uniq
       WHERE werks = '1300'.
     lv_rj_1300 = lines( lt_rj_uniq ).
@@ -260,7 +256,7 @@ CASE lv_action.
 
     " History Approve Surabaya
     CLEAR lt_ra_uniq.
-    SELECT banfn FROM zroto_app_hist
+    SELECT banfn FROM zpr_app_hist
       INTO CORRESPONDING FIELDS OF TABLE lt_ra_uniq
       WHERE werks = '1200'.
     lv_ra_1200 = lines( lt_ra_uniq ).
@@ -269,7 +265,7 @@ CASE lv_action.
 
     " History Approve Semarang
     CLEAR lt_ra_uniq.
-    SELECT banfn FROM zroto_app_hist
+    SELECT banfn FROM zpr_app_hist
       INTO CORRESPONDING FIELDS OF TABLE lt_ra_uniq
       WHERE werks = '1300'.
     lv_ra_1300 = lines( lt_ra_uniq ).
@@ -285,8 +281,10 @@ CASE lv_action.
     CONCATENATE
       '{"status":"S","is_approver":' lv_is_app_s
       ',"pending":{'
-        '"1200":' lv_s_1200 ','
-        '"1300":' lv_s_1300
+        '"1200":{"ROTO":' lv_s_1200_roto
+          ',"RSB7":' lv_s_1200_rsb7 '},'
+        '"1300":{"ROTO":' lv_s_1300_roto
+          ',"RSB7":' lv_s_1300_rsb7 '}'
       '},"hist_rej":{'
         '"1200":' lv_sr_1200 ','
         '"1300":' lv_sr_1300
@@ -307,13 +305,25 @@ CASE lv_action.
       EXIT.
     ENDIF.
 
+    " Whitelist kategori — hanya ROTO/RSB7 yang dilayani
+    " (development-to-roto.md §8.1)
+    IF lv_bsart IS INITIAL.
+      lv_bsart = 'ROTO'.
+    ELSEIF lv_bsart NE 'ROTO' AND lv_bsart NE 'RSB7'.
+      lv_output = '{"status":"E",' &
+        '"message":"bsart tidak valid","data":[]}'.
+      response->append_cdata( lv_output ).
+      _m_navigation->response_complete( ).
+      EXIT.
+    ENDIF.
+
     CLEAR: lt_head, lt_items, lt_makt.
 
     SELECT banfn badat werks bsart txz01 ernam ekgrp
            frgkz frgzu loekz estkz
       FROM eban
       INTO CORRESPONDING FIELDS OF TABLE lt_head
-      WHERE bsart = 'ROTO'
+      WHERE bsart = lv_bsart
         AND werks  = lv_werks
         AND frgkz  = 'X'
         AND frgzu  = ' '
@@ -622,7 +632,7 @@ CASE lv_action.
     SELECT banfn bnfpo werks bsart txz01 ernam erdat
            menge meins preis peinh waers ekgrp
            del_by del_at del_tm reason
-      FROM zroto_rej_hist
+      FROM zpr_rej_hist
       INTO CORRESPONDING FIELDS OF TABLE lt_hist_rej
       WHERE werks = lv_werks
       ORDER BY del_at DESCENDING del_tm DESCENDING.
@@ -676,6 +686,7 @@ CASE lv_action.
         '{"banfn":"'  ls_hist_rej-banfn  '",'
         '"bnfpo":"'   ls_hist_rej-bnfpo  '",'
         '"werks":"'   ls_hist_rej-werks  '",'
+        '"bsart":"'   ls_hist_rej-bsart  '",'
         '"txz01":"'   lv_h_txz01         '",'
         '"ernam":"'   ls_hist_rej-ernam  '",'
         '"erdat":"'   lv_h_erdat         '",'
@@ -712,7 +723,7 @@ CASE lv_action.
     SELECT banfn bnfpo werks bsart txz01 ernam erdat
            menge meins preis peinh waers ekgrp
            app_by app_at app_tm
-      FROM zroto_app_hist
+      FROM zpr_app_hist
       INTO CORRESPONDING FIELDS OF TABLE lt_hist_app
       WHERE werks = lv_werks
       ORDER BY app_at DESCENDING app_tm DESCENDING.
@@ -763,6 +774,7 @@ CASE lv_action.
         '{"banfn":"'  ls_hist_app-banfn  '",'
         '"bnfpo":"'   ls_hist_app-bnfpo  '",'
         '"werks":"'   ls_hist_app-werks  '",'
+        '"bsart":"'   ls_hist_app-bsart  '",'
         '"txz01":"'   lv_a_txz01         '",'
         '"ernam":"'   ls_hist_app-ernam  '",'
         '"erdat":"'   lv_a_erdat         '",'
@@ -807,7 +819,7 @@ CASE lv_action.
     CLEAR lt_items.
     SELECT banfn bnfpo matnr txz01 menge meins preis
            peinh waers lfdat werks ekgrp ernam badat
-           loekz estkz
+           loekz estkz bsart
       FROM eban
       INTO CORRESPONDING FIELDS OF TABLE lt_items
       WHERE banfn = lv_banfn_e
@@ -828,11 +840,12 @@ CASE lv_action.
 *--- APPROVE -----------------------------------------------------------
     IF lv_pr_action = 'approve'.
 
-      DATA: lv_ap_ok   TYPE i,
-            lv_ap_ok_s TYPE string,
-            lv_ap_err  TYPE string.
+      DATA: lv_ap_ok    TYPE i,
+            lv_ap_ok_s  TYPE string,
+            lv_ap_err   TYPE string,
+            lt_items_ok TYPE STANDARD TABLE OF ty_eban_item.
 
-      CLEAR: lv_ap_ok, lv_ap_err.
+      CLEAR: lv_ap_ok, lv_ap_err, lt_items_ok.
 
       LOOP AT lt_items INTO ls_item.
         CLEAR: lt_return, lv_rel_status, lv_rel_ind.
@@ -860,6 +873,7 @@ CASE lv_action.
 
         IF sy-subrc = 0.
           lv_ap_ok = lv_ap_ok + 1.
+          APPEND ls_item TO lt_items_ok.
         ELSE.
           READ TABLE lt_return INTO ls_return
             WITH KEY type = 'E'.
@@ -891,14 +905,15 @@ CASE lv_action.
         CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
           EXPORTING wait = 'X'.
 
-        " Simpan ke ZROTO_APP_HIST
-        DATA: ls_zapp TYPE zroto_app_hist.
-        LOOP AT lt_items INTO ls_item.
+        " Simpan ke ZPR_APP_HIST — hanya item yang sukses
+        " release (fix §3.1, lihat development-to-roto.md §8.3)
+        DATA: ls_zapp TYPE zpr_app_hist.
+        LOOP AT lt_items_ok INTO ls_item.
           CLEAR ls_zapp.
           ls_zapp-banfn  = ls_item-banfn.
           ls_zapp-bnfpo  = ls_item-bnfpo.
           ls_zapp-werks  = ls_item-werks.
-          ls_zapp-bsart  = 'ROTO'.
+          ls_zapp-bsart  = ls_item-bsart.
           ls_zapp-txz01  = ls_item-txz01.
           ls_zapp-ernam  = ls_item-ernam.
           ls_zapp-erdat  = ls_item-badat.
@@ -911,7 +926,7 @@ CASE lv_action.
           ls_zapp-app_by = sy-uname.
           ls_zapp-app_at = sy-datum.
           ls_zapp-app_tm = sy-uzeit.
-          MODIFY zroto_app_hist FROM ls_zapp.
+          MODIFY zpr_app_hist FROM ls_zapp.
         ENDLOOP.
         COMMIT WORK AND WAIT.
 
@@ -934,31 +949,13 @@ CASE lv_action.
 *--- DELETE / REJECT ---------------------------------------------------
     ELSEIF lv_pr_action = 'delete'.
 
-      DATA: ls_zroto TYPE zroto_rej_hist.
+      DATA: ls_zrej    TYPE zpr_rej_hist,
+            lv_del_err TYPE string.
 
-      LOOP AT lt_items INTO ls_item.
-        CLEAR ls_zroto.
-        ls_zroto-banfn  = ls_item-banfn.
-        ls_zroto-bnfpo  = ls_item-bnfpo.
-        ls_zroto-werks  = ls_item-werks.
-        ls_zroto-bsart  = 'ROTO'.
-        ls_zroto-txz01  = ls_item-txz01.
-        ls_zroto-ernam  = ls_item-ernam.
-        ls_zroto-erdat  = ls_item-badat.
-        ls_zroto-menge  = ls_item-menge.
-        ls_zroto-meins  = ls_item-meins.
-        ls_zroto-preis  = ls_item-preis.
-        ls_zroto-peinh  = ls_item-peinh.
-        ls_zroto-waers  = ls_item-waers.
-        ls_zroto-ekgrp  = ls_item-ekgrp.
-        ls_zroto-del_by = sy-uname.
-        ls_zroto-del_at = sy-datum.
-        ls_zroto-del_tm = sy-uzeit.
-        ls_zroto-reason = lv_notes.
-        MODIFY zroto_rej_hist FROM ls_zroto.
-      ENDLOOP.
-      COMMIT WORK AND WAIT.
-
+      " Fix §3.6 (development-to-roto.md §8.3): BAPI delete
+      " dulu tanpa commit; history hanya ditulis jika delete
+      " sukses, lalu satu COMMIT untuk keduanya (1 LUW) —
+      " rollback manual history tidak diperlukan lagi
       CLEAR lt_delitem.
       LOOP AT lt_items INTO ls_item.
         CLEAR ls_delitem.
@@ -978,17 +975,39 @@ CASE lv_action.
       READ TABLE lt_return INTO ls_return
         WITH KEY type = 'E'.
       IF sy-subrc NE 0.
+        " Delete sukses -> tulis history reject
+        LOOP AT lt_items INTO ls_item.
+          CLEAR ls_zrej.
+          ls_zrej-banfn  = ls_item-banfn.
+          ls_zrej-bnfpo  = ls_item-bnfpo.
+          ls_zrej-werks  = ls_item-werks.
+          ls_zrej-bsart  = ls_item-bsart.
+          ls_zrej-txz01  = ls_item-txz01.
+          ls_zrej-ernam  = ls_item-ernam.
+          ls_zrej-erdat  = ls_item-badat.
+          ls_zrej-menge  = ls_item-menge.
+          ls_zrej-meins  = ls_item-meins.
+          ls_zrej-preis  = ls_item-preis.
+          ls_zrej-peinh  = ls_item-peinh.
+          ls_zrej-waers  = ls_item-waers.
+          ls_zrej-ekgrp  = ls_item-ekgrp.
+          ls_zrej-del_by = sy-uname.
+          ls_zrej-del_at = sy-datum.
+          ls_zrej-del_tm = sy-uzeit.
+          ls_zrej-reason = lv_notes.
+          MODIFY zpr_rej_hist FROM ls_zrej.
+        ENDLOOP.
+        COMMIT WORK AND WAIT.
+
         CONCATENATE
           '{"status":"S","message":"PR '
           lv_banfn ' berhasil di-reject\/delete"}'
           INTO lv_output.
       ELSE.
-        DATA: lv_del_err TYPE string.
+        " Delete gagal -> rollback, tanpa history
+        CALL FUNCTION 'BAPI_TRANSACTION_ROLLBACK'.
         lv_del_err = ls_return-message.
         escape_json lv_del_err.
-        DELETE FROM zroto_rej_hist
-          WHERE banfn = lv_banfn_e.
-        COMMIT WORK AND WAIT.
         CONCATENATE
           '{"status":"E","message":"'
           lv_del_err '"}'
