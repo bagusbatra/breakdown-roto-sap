@@ -127,3 +127,51 @@ pemanfaatan BSP), **tidak mengubah konfigurasi atau ABAP backend**:
   `zpr_*_hist` → `zroto_*_hist` (frontend tidak terdampak).
 - Detail revisi: `ZPR_REL_BSP_up/development-to-roto.md` §0 (prinsip) &
   §7 (tabel).
+
+---
+
+## Screening #3 — 2026-06-12 (verifikasi final ZPR_REL_BSP_up)
+
+### Scope
+User konfirmasi: `ZPO_REL_BSP` (selesai, live, basis standar) → `ZPR_REL_BSP`
+(original/baseline, JANGAN diubah) → `ZPR_REL_BSP_up` (folder development,
+PR ROTO sudah selesai, lanjut PR Jasa/RSB7). Permintaan: cek apakah
+`ZPR_REL_BSP_up` sudah sesuai aturan §11 `development-to-roto.md` dan siap
+copy-paste langsung ke SE80.
+
+### Kondisi Repo
+- Commit terakhir: `f9057c7 update`, working tree clean.
+- `ZPR_REL_BSP_up/Page with FLow Logic/main.htm`: 1030 baris.
+- `ZPR_REL_BSP_up/Page with FLow Logic/index.htm`: 2143 baris.
+
+### Verifikasi vs §11 Standar Kode (Copy-Paste Ready)
+
+| # | Aturan | Hasil |
+|---|---|---|
+| 1 | Deliverable file utuh | ✅ Kedua file lengkap, bukan diff |
+| 2 | ABAP klasik (tanpa `DATA(...)`, `\|...\|`, `VALUE #()`, `NEW`, `COND`, `line_exists()`, `->*`) | ✅ Grep nol hasil — tidak ada sintaks 7.40+ |
+| 3 | Deklarasi variabel unik (no duplicate `lv_`/`ls_`/`lt_`) | ✅ Semua nama unik (dicek via grep+uniq) |
+| 4 | Objek implisit BSP (`request`/`response`/`_m_navigation`, `<%@page%>`, `append_cdata`+`response_complete`) | ✅ Pola dipertahankan persis |
+| 5 | Frontend vanilla ES5 | ✅ `var`, string concat, tanpa library eksternal |
+| 6 | Referensi tabel `ZROTO_*_HIST` (existing, aktif) | ✅ Nol sisa `zpr_`/`ZPR_` di kedua file |
+| 7 | Self-review syntax (deklarasi, tipe, struktur) | ✅ IF/ENDIF (38=38 setelah dikurangi 3 ELSEIF), LOOP/ENDLOOP (14/14), CASE/ENDCASE (2/2) seimbang |
+
+### Temuan Tambahan (bukan blocker, perlu perhatian user saat deploy)
+
+- `index.htm` baris 950 & 955: URL logout hardcode
+  `/sap/bc/bsp/sap/zpr_rel_bsp/index.htm` — **mengacu nama aplikasi BSP
+  `zpr_rel_bsp` (baseline)**, bukan path `_up`. Ini KONSISTEN dengan pola
+  baseline (`ZPR_REL_BSP/index.htm` juga hardcode nama dirinya sendiri,
+  begitu juga `ZPO_REL_BSP/main.htm` → `zpo_rel_bsp`). **Tidak perlu
+  diubah** jika deploy Skenario A (`notes.md` §2A — menimpa aplikasi BSP
+  `zpr_rel_bsp` yang sama). **Perlu disesuaikan** ke nama teknis aplikasi
+  baru jika deploy sebagai aplikasi BSP terpisah (Skenario B).
+
+### Kesimpulan
+
+`ZPR_REL_BSP_up` (main.htm + index.htm) **SUDAH SESUAI** standar §11 dan
+**SIAP copy-paste langsung ke SE80** tanpa prasyarat SE11/konfigurasi
+tambahan (sesuai §1.1 — pakai ulang `ZROTO_APP_HIST`/`ZROTO_REJ_HIST`
+existing). Satu-satunya hal yang perlu dipastikan user sebelum paste adalah
+nama aplikasi BSP tujuan (lihat temuan URL logout di atas) — pilih Skenario
+A atau B di `notes.md` §2.
