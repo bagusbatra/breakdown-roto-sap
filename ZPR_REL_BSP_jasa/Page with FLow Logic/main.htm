@@ -38,8 +38,9 @@ TYPES: BEGIN OF ty_eban_head,
          frgkz TYPE eban-frgkz,
          frgzu TYPE eban-frgzu,
          loekz TYPE eban-loekz,
-         estkz TYPE eban-estkz,
-       END OF ty_eban_head.
+          estkz TYPE eban-estkz,
+          statu TYPE eban-statu,
+        END OF ty_eban_head.
 
 TYPES: BEGIN OF ty_eban_item,
          banfn TYPE eban-banfn,
@@ -176,7 +177,8 @@ DEFINE count_pending.
       AND werks = &2
       AND frgkz = 'X'
       AND frgzu = ' '
-      AND loekz = ' '.
+      AND loekz = ' '
+      AND statu NE 'B'.
   SORT lt_sb_uniq BY banfn.
   DELETE ADJACENT DUPLICATES FROM lt_sb_uniq
     COMPARING banfn.
@@ -218,8 +220,11 @@ CASE lv_action.
     DATA: lv_sb_cnt      TYPE i,
           lv_s_1200_roto TYPE string,
           lv_s_1200_rsb7 TYPE string,
+          lv_s_1200_rsbt TYPE string,
+          lv_s_1200_rsb8 TYPE string,
           lv_s_1300_roto TYPE string,
           lv_s_1300_rsb7 TYPE string,
+          lv_s_1300_rsm8 TYPE string,
           lv_rj_1200   TYPE i,
           lv_rj_1300   TYPE i,
           lv_sr_1200   TYPE string,
@@ -233,8 +238,11 @@ CASE lv_action.
     " development-to-roto.md)
     count_pending 'ROTO' '1200' lv_s_1200_roto.
     count_pending 'RSB7' '1200' lv_s_1200_rsb7.
+    count_pending 'RSBT' '1200' lv_s_1200_rsbt.
+    count_pending 'RSB8' '1200' lv_s_1200_rsb8.
     count_pending 'ROTO' '1300' lv_s_1300_roto.
     count_pending 'RSB7' '1300' lv_s_1300_rsb7.
+    count_pending 'RSM8' '1300' lv_s_1300_rsm8.
 
     " History Reject Surabaya
     CLEAR lt_rj_uniq.
@@ -281,10 +289,17 @@ CASE lv_action.
     CONCATENATE
       '{"status":"S","is_approver":' lv_is_app_s
       ',"pending":{'
-        '"1200":{"ROTO":' lv_s_1200_roto
-          ',"RSB7":' lv_s_1200_rsb7 '},'
-        '"1300":{"ROTO":' lv_s_1300_roto
-          ',"RSB7":' lv_s_1300_rsb7 '}'
+        '"1200":{'
+          '"ROTO":' lv_s_1200_roto ','
+          '"RSB7":' lv_s_1200_rsb7 ','
+          '"RSBT":' lv_s_1200_rsbt ','
+          '"RSB8":' lv_s_1200_rsb8
+        '},'
+        '"1300":{'
+          '"ROTO":' lv_s_1300_roto ','
+          '"RSB7":' lv_s_1300_rsb7 ','
+          '"RSM8":' lv_s_1300_rsm8
+        '}'
       '},"hist_rej":{'
         '"1200":' lv_sr_1200 ','
         '"1300":' lv_sr_1300
@@ -305,11 +320,14 @@ CASE lv_action.
       EXIT.
     ENDIF.
 
-    " Whitelist kategori — hanya ROTO/RSB7 yang dilayani
-    " (development-to-roto.md §8.1)
+    " Whitelist kategori — ROTO/RSB7/RSBT/RSB8/RSM8
     IF lv_bsart IS INITIAL.
       lv_bsart = 'ROTO'.
-    ELSEIF lv_bsart NE 'ROTO' AND lv_bsart NE 'RSB7'.
+    ELSEIF lv_bsart NE 'ROTO'
+       AND lv_bsart NE 'RSB7'
+       AND lv_bsart NE 'RSBT'
+       AND lv_bsart NE 'RSB8'
+       AND lv_bsart NE 'RSM8'.
       lv_output = '{"status":"E",' &
         '"message":"bsart tidak valid","data":[]}'.
       response->append_cdata( lv_output ).
@@ -320,7 +338,7 @@ CASE lv_action.
     CLEAR: lt_head, lt_items, lt_makt.
 
     SELECT banfn badat werks bsart txz01 ernam ekgrp
-           frgkz frgzu loekz estkz
+           frgkz frgzu loekz estkz statu
       FROM eban
       INTO CORRESPONDING FIELDS OF TABLE lt_head
       WHERE bsart = lv_bsart
@@ -328,12 +346,31 @@ CASE lv_action.
         AND frgkz  = 'X'
         AND frgzu  = ' '
         AND loekz  = ' '
+        AND statu  NE 'B'
       ORDER BY banfn DESCENDING.
 
     SORT lt_head BY banfn.
     DELETE ADJACENT DUPLICATES FROM lt_head
       COMPARING banfn.
     SORT lt_head BY banfn DESCENDING.
+
+    " Validasi: pastikan header masih memiliki item open
+    DATA: ls_chk TYPE ty_eban_head.
+    DATA lt_head_final TYPE STANDARD TABLE
+      OF ty_eban_head.
+
+    LOOP AT lt_head INTO ls_head.
+      SELECT SINGLE banfn FROM eban
+        INTO ls_chk-banfn
+        WHERE banfn = ls_head-banfn
+          AND loekz = ' '
+          AND statu NE 'B'.
+      IF sy-subrc = 0.
+        APPEND ls_head TO lt_head_final.
+      ENDIF.
+    ENDLOOP.
+
+    lt_head = lt_head_final.
 
     IF lv_estkz_filter = 'MRP'.
       DELETE lt_head WHERE estkz NE 'B'.
