@@ -48,64 +48,22 @@ dipakai ulang untuk kategori PR lain (bukan hanya ROTO).
 
 ---
 
-## 2. Struktur Repo
+## 2. Aplikasi: ZPR_REL_BSP (Baseline)
 
-```
-D:\DEV\Breakdown ROTO SAP\
-│
-├── .git/                          # Git version control
-├── README.md                      # Overview proyek
-├── notes.md                       # Pre-flight SE80 test notes
-├── history_screaning.md           # Log audit/screening
-├── perbandingan.md                # Tabel perbandingan (dibuat 2026-06-17)
-├── myLearning.md                  # File ini — laporan pembelajaran
-│
-├── documentation/
-│   ├── flow.md                    # Alur teknis request/response
-│   └── business-process.md        # Konteks bisnis & aturan proses
-│
-├── notes/
-│   └── investigation.md           # Temuan bug, potensi isu, ide reuse
-│
-├── ZPR_REL_BSP/                   # Baseline — clone aplikasi asli
-│   ├── Page with FLow Logic/
-│   │   ├── index.htm              # Frontend (HTML+CSS+JS)
-│   │   └── main.htm               # Backend API (ABAP)
-│   └── MIMEs/                     # Aset gambar
-│
-├── ZPR_REL_BSP_jasa/              # Development fork — multi kategori
-│   ├── Page with FLow Logic/
-│   │   ├── index.htm              # Frontend (2169 baris)
-│   │   └── main.htm               # Backend (1068 baris)
-│   ├── MIMEs/                     # Aset gambar
-│   ├── development-to-roto.md     # Rencana pengembangan
-│   ├── erd.md                     # Entity Relationship Diagram (577 baris)
-│   └── TAMBAH_KATEGORI.md         # Panduan tambah kategori (280 baris)
-│
-└── ZPO_REL_BSP/                   # PO Release — live, single-file
-    ├── Page with FLow Logic/
-    │   └── main.htm               # Monolitik (4085 baris)
-    └── MIMEs/                     # Aset gambar
-```
-
----
-
-## 3. Aplikasi: ZPR_REL_BSP (Baseline)
-
-### 3.1 Apa Itu?
+### 2.1 Apa Itu?
 
 Aplikasi asli "Release PR ROTO" — portal untuk BOD (Board of Director)
 melakukan approve/reject Purchase Requisition (PR) dengan document type
 `ROTO` ("One Time Off") untuk plant Surabaya (1200) dan Semarang (1300).
 
-### 3.2 File Penting
+### 2.2 File Penting
 
 | File | Baris | Fungsi |
 |------|:-----:|--------|
 | `index.htm` | 2065 | Frontend SPA: HTML + CSS + JS |
 | `main.htm` | 1011 | Backend API: ABAP murni, return JSON manual |
 
-### 3.3 Karakteristik
+### 2.3 Karakteristik
 
 - Single kategori (`ROTO` saja)
 - 2 plant (1200, 1300) — hardcode
@@ -118,9 +76,9 @@ melakukan approve/reject Purchase Requisition (PR) dengan document type
 
 ---
 
-## 4. Aplikasi: ZPR_REL_BSP_jasa (Development Fork)
+## 3. Aplikasi: ZPR_REL_BSP_jasa (Development Fork)
 
-### 4.1 Perubahan dari Baseline
+### 3.1 Perubahan dari Baseline
 
 | Perubahan | Detail |
 |-----------|--------|
@@ -130,7 +88,7 @@ melakukan approve/reject Purchase Requisition (PR) dengan document type
 | **History** | Kolom "Kategori" ditambahkan di tabel history |
 | **Search** | Diperluas ke 10 field (`banfn`, `ernam_full`, `badat`, `total_value`, `bsart`, `werks`, dll) |
 
-### 4.2 Bug Fixes yang Diterapkan
+### 3.2 Bug Fixes yang Diterapkan
 
 1. **History approve mencatat semua item walau ada yang gagal release**
    - Fix: hanya item sukses (`lt_items_ok`) yang ditulis ke `ZROTO_APP_HIST`
@@ -150,7 +108,7 @@ melakukan approve/reject Purchase Requisition (PR) dengan document type
    - Fix: validasi item-level dengan `SELECT SINGLE banfn` setelah
      header-level filter
 
-### 4.3 Kategori yang Didukung
+### 3.3 Kategori yang Didukung
 
 | Kode | Label | Surabaya (1200) | Semarang (1300) |
 |:----:|-------|:----------------:|:----------------:|
@@ -162,9 +120,9 @@ melakukan approve/reject Purchase Requisition (PR) dengan document type
 
 ---
 
-## 5. Aplikasi: ZPO_REL_BSP (PO Release)
+## 4. Aplikasi: ZPO_REL_BSP (PO Release)
 
-### 5.1 Perbedaan Arsitektur Utama
+### 4.1 Perbedaan Arsitektur Utama
 
 | Aspek | ZPR_REL_BSP_jasa | ZPO_REL_BSP |
 |-------|-------------------|-------------|
@@ -184,14 +142,14 @@ melakukan approve/reject Purchase Requisition (PR) dengan document type
 | **ABAP syntax** | Klasik (7.0 style) | Modern (7.40+: `DATA(...)`, `VALUE`) |
 | **Popstate / URL** | Tidak ada | Ada — restore state via URL params |
 
-### 5.2 Kategori PO
+### 4.2 Kategori PO
 
 | Plant | Kategori | BSART |
 |-------|----------|-------|
 | 1200 (Surabaya) | JASA, JASA_PROD, BAHAN, PENUNJANG, SPAREPART, UTILITY, EXIM | PSB7, POK1, PSB1/3/4, PSB2, PSB8/9/BT, PSB5/6, PSBI/POK9 |
 | 1300 (Semarang) | JASA, BAHAN, PENUNJANG, SPAREPART, UTILITY, EXIM | PSM7, PSM1/3/4, PSM2, PSM8/9/MT, PSM5/6, PSMI/POK9 |
 
-### 5.3 Yang Bisa Diadopsi untuk PR ke Depan
+### 4.3 Yang Bisa Diadopsi untuk PR ke Depan
 
 - Kategori sebagai array BSART di JS map (POTYPE_MAP-style) — lebih fleksibel
 - History dengan filter rentang tanggal + paginasi server-side
@@ -199,9 +157,9 @@ melakukan approve/reject Purchase Requisition (PR) dengan document type
 
 ---
 
-## 6. Arsitektur BSP
+## 5. Arsitektur BSP
 
-### 6.1 Pola 2-File (ZPR_REL_BSP_jasa)
+### 5.1 Pola 2-File (ZPR_REL_BSP_jasa)
 
 ```
 Browser (index.htm)
@@ -220,7 +178,7 @@ SAP Tables: EBAN, MAKT, USR21, ADRP,
 - `main.htm` = API handler ABAP murni, return JSON, tidak render HTML
 - Komunikasi: GET untuk query, POST `application/x-www-form-urlencoded` untuk PROCESS
 
-### 6.2 Pola Single-File (ZPO_REL_BSP)
+### 5.2 Pola Single-File (ZPO_REL_BSP)
 
 - Satu file `main.htm` menggabungkan ABAP + HTML + CSS + JS
 - ABAP pre-load semua data, embed sebagai JSON di HTML
@@ -228,7 +186,7 @@ SAP Tables: EBAN, MAKT, USR21, ADRP,
 - Kelebihan: 1 file = 1 deploy, lebih sederhana
 - Kekurangan: file besar (4085 baris), campur aduk bahasa
 
-### 6.3 Objek Implisit BSP yang Dipakai
+### 5.3 Objek Implisit BSP yang Dipakai
 
 | Objek | Fungsi |
 |-------|--------|
@@ -241,9 +199,9 @@ SAP Tables: EBAN, MAKT, USR21, ADRP,
 
 ---
 
-## 7. Data Model & ERD
+## 6. Data Model & ERD
 
-### 7.1 SAP Standard Tables
+### 6.1 SAP Standard Tables
 
 | Table | Key | Digunakan Untuk |
 |-------|-----|-----------------|
@@ -252,14 +210,14 @@ SAP Tables: EBAN, MAKT, USR21, ADRP,
 | **USR21** | BNAME | Bridge username → person number |
 | **ADRP** | PERSNUMBER + DATE_FROM | Nama lengkap user |
 
-### 7.2 Custom Z Tables
+### 6.2 Custom Z Tables
 
 | Table | Key | Fungsi |
 |-------|-----|--------|
 | `ZROTO_APP_HIST` | MANDT + BANFN + BNFPO | Snapshot approve history (16 field data + app_by, app_at, app_tm) |
 | `ZROTO_REJ_HIST` | MANDT + BANFN + BNFPO | Snapshot reject history (+ del_by, del_at, del_tm, reason) |
 
-### 7.3 Virtual Entities (di Kode, bukan DB)
+### 6.3 Virtual Entities (di Kode, bukan DB)
 
 | Entity | Values | Sumber |
 |--------|--------|--------|
@@ -268,7 +226,7 @@ SAP Tables: EBAN, MAKT, USR21, ADRP,
 | **Approver** | KMI-BOD | `IF lv_uname = 'KMI-BOD'` |
 | **ESTKZ** | B=MRP, R=Manual, D=Direct, dll. | `ESTKZ_MAP` di JS |
 
-### 7.4 Relasi
+### 6.4 Relasi
 
 ```mermaid
 erDiagram
@@ -280,7 +238,7 @@ erDiagram
     EBAN_ITEM ||--o{ ZROTO_REJ_HIST : "snapshot saat reject"
 ```
 
-### 7.5 Kriteria PR Pending
+### 6.5 Kriteria PR Pending
 
 ```abap
 BSART = <kategori>
@@ -293,9 +251,9 @@ STATU NE 'B'      " Belum closed
 
 ---
 
-## 8. Flow Aksi Backend
+## 7. Flow Aksi Backend
 
-### 8.1 GET_SIDEBAR
+### 7.1 GET_SIDEBAR
 
 ```
 SELECT EBAN (count_pending macro)
@@ -320,7 +278,7 @@ Output:
 }
 ```
 
-### 8.2 GET_LIST
+### 7.2 GET_LIST
 
 1. Validasi werks & whitelist bsart
 2. SELECT header dari EBAN → dedup → validasi item open → filter ESTKZ
@@ -330,20 +288,20 @@ Output:
 6. Hitung total_value = SUM(menge * preis) per PR
 7. Return JSON array
 
-### 8.3 GET_DETAIL
+### 7.3 GET_DETAIL
 
 1. SELECT items dari EBAN per banfn (loekz=' ')
 2. SELECT MAKT untuk deskripsi material
 3. Hitung total per item = menge * preis
 4. Return JSON array item details
 
-### 8.4 GET_HIST_APP / GET_HIST_REJ
+### 7.4 GET_HIST_APP / GET_HIST_REJ
 
 SELECT dari ZROTO_APP_HIST / ZROTO_REJ_HIST
 WHERE werks = lv_werks
 ORDER BY app_at/del_at DESC, app_tm/del_tm DESC
 
-### 8.5 PROCESS — Approve
+### 7.5 PROCESS — Approve
 
 ```
 1. LOOP setiap item → BAPI_REQUISITION_RELEASE(rel_code='P2')
@@ -355,7 +313,7 @@ ORDER BY app_at/del_at DESC, app_tm/del_tm DESC
    ELSE: BAPI_TRANSACTION_ROLLBACK
 ```
 
-### 8.6 PROCESS — Reject
+### 7.6 PROCESS — Reject
 
 ```
 1. BAPI_REQUISITION_DELETE (semua item, delete_ind='L')
@@ -367,9 +325,9 @@ ORDER BY app_at/del_at DESC, app_tm/del_tm DESC
 
 ---
 
-## 9. Flow Frontend
+## 8. Flow Frontend
 
-### 9.1 State Management (Global JS Variables)
+### 8.1 State Management (Global JS Variables)
 
 | Variable | Tipe | Fungsi |
 |----------|------|--------|
@@ -387,7 +345,7 @@ ORDER BY app_at/del_at DESC, app_tm/del_tm DESC
 | `histType` | string | Tipe history ('approve'/'reject') |
 | `sbCounts` | object | Badge counter sidebar |
 
-### 9.2 Konstanten
+### 8.2 Konstanten
 
 ```js
 var PR_CATEGORIES = {
@@ -411,7 +369,7 @@ var ESTKZ_MAP = {
 };
 ```
 
-### 9.3 Utility Functions
+### 8.3 Utility Functions
 
 | Function | Input | Output |
 |----------|-------|--------|
@@ -423,7 +381,7 @@ var ESTKZ_MAP = {
 | `getBsartLabel(bs)` | BSART code | Label kategori PR |
 | `postOpts(body)` | string | POST request options object |
 
-### 9.4 Alur Navigasi
+### 8.4 Alur Navigasi
 
 ```
 User klik sidebar link
@@ -434,7 +392,7 @@ User klik sidebar link
     → fetchList() / fetchHistApp() / fetchHistRej()
 ```
 
-### 9.5 Caching Detail (Lazy Load)
+### 8.5 Caching Detail (Lazy Load)
 
 ```
 toggleExpand(banfn)
@@ -444,7 +402,7 @@ toggleExpand(banfn)
   → set dataset.loaded='1' (tidak fetch ulang)
 ```
 
-### 9.6 Search
+### 8.6 Search
 
 - **Pending PR**: client-side, debounce 300ms, filter `allData` berdasarkan
   `banfn`, `ernam_full`, `ernam`, `txz01`, `ekgrp`, `estkz_label`, `badat`,
@@ -452,14 +410,14 @@ toggleExpand(banfn)
 - **History**: client-side, debounce 300ms, filter `histData` berdasarkan
   `banfn`, `txz01`, `ernam`, `bsart`, `app_by`/`del_by`
 
-### 9.7 Pagination
+### 8.7 Pagination
 
 - Client-side
 - Page sizes: 10, 20, 50, All (0)
 - Smart page buttons: max 5 dengan ellipsis
 - First/Prev/Next/Last + info "Showing X-Y of Z"
 
-### 9.8 Process Action (Sequential Batch)
+### 8.8 Process Action (Sequential Batch)
 
 ```
 processAction(banfns, action, notes)
@@ -473,7 +431,7 @@ processAction(banfns, action, notes)
 
 ---
 
-## 10. Bug Fixes
+## 9. Bug Fixes
 
 Dari `notes/investigation.md` §3, berikut bug yang sudah di-fix di
 ZPR_REL_BSP_jasa:
@@ -497,9 +455,9 @@ Bug yang **belum di-fix** (ditunda):
 
 ---
 
-## 11. Perbandingan ZPR vs ZPO
+## 10. Perbandingan ZPR vs ZPO
 
-### 11.1 Tabel Ringkasan
+### 10.1 Tabel Ringkasan
 
 | Aspek | ZPR_REL_BSP_jasa | ZPO_REL_BSP |
 |-------|-------------------|-------------|
@@ -517,7 +475,7 @@ Bug yang **belum di-fix** (ditunda):
 | **ABAP syntax** | Klasik | Modern (7.40+) |
 | **Fitur unik** | ESTKZ filter, search 10 field | OGR, date range filter, popstate |
 
-### 11.2 Detail Perbedaan per Aksi Backend
+### 10.2 Detail Perbedaan per Aksi Backend
 
 | Action | ZPR | ZPO |
 |--------|-----|-----|
@@ -531,7 +489,7 @@ Bug yang **belum di-fix** (ditunda):
 
 ---
 
-## 12. Hardcoded Items
+## 11. Hardcoded Items
 
 Item-item yang perlu diparameterisasi untuk reuse di aplikasi lain:
 
@@ -547,9 +505,9 @@ Item-item yang perlu diparameterisasi untuk reuse di aplikasi lain:
 
 ---
 
-## 13. Security Notes
+## 12. Security Notes
 
-### 13.1 Temuan Keamanan
+### 12.1 Temuan Keamanan
 
 1. **CSRF/XSRF** — Tidak ada token CSRF di POST request `PROCESS`
 2. **Otorisasi** — Hanya hardcode username (`KMI-BOD`), bukan authorization object
@@ -560,7 +518,7 @@ Item-item yang perlu diparameterisasi untuk reuse di aplikasi lain:
 5. **XSS** — Sudah di-fix: data history disimpan di variabel global, bukan
    di atribut HTML
 
-### 13.2 Rekomendasi
+### 12.2 Rekomendasi
 
 - Gunakan authorization object custom (mis. `Z_PR_REL`)
 - Tambah CSRF token untuk POST request
@@ -569,7 +527,7 @@ Item-item yang perlu diparameterisasi untuk reuse di aplikasi lain:
 
 ---
 
-## 14. Cara Tambah Kategori Baru
+## 13. Cara Tambah Kategori Baru
 
 Berdasarkan `TAMBAH_KATEGORI.md`, proses menambah kategori PR baru:
 
@@ -613,7 +571,7 @@ Berdasarkan `TAMBAH_KATEGORI.md`, proses menambah kategori PR baru:
 
 ---
 
-## 15. Dokumentasi Lengkap
+## 14. Dokumentasi Lengkap
 
 ### File di Repo
 
@@ -642,7 +600,7 @@ Berdasarkan `TAMBAH_KATEGORI.md`, proses menambah kategori PR baru:
 
 ---
 
-## 16. Glossary
+## 15. Glossary
 
 | Istilah | Arti |
 |---------|------|
