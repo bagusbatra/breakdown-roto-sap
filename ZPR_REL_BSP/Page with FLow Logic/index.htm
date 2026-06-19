@@ -120,7 +120,7 @@ ENDIF.
       transition:max-height .28s ease;
     }
     .sb-section.open .sb-submenu {
-      max-height:500px;
+      max-height:1200px;
     }
     .sb-link {
       display:flex; align-items:center;
@@ -178,6 +178,44 @@ ENDIF.
     .sb-divider {
       height:1px; background:var(--border);
       margin:8px 0;
+    }
+
+    /* ── SIDEBAR: KATEGORI (level antara plant & mode) ── */
+    .sb-cat { margin-bottom:1px; }
+    .sb-cat-hdr {
+      padding:9px 18px 9px 28px;
+      font-size:12.5px; font-weight:600;
+      color:#4b5563;
+      display:flex; align-items:center;
+      justify-content:space-between;
+      cursor:pointer; transition:background .12s;
+      user-select:none;
+    }
+    .sb-cat-hdr:hover { background:#f9fafb; }
+    .sb-cat-left {
+      display:flex; align-items:center; gap:7px;
+    }
+    .sb-cat-chevron {
+      font-size:10px; color:#9ca3af;
+      transition:transform .2s;
+    }
+    .sb-cat.open .sb-cat-chevron {
+      transform:rotate(180deg);
+    }
+    .sb-cat-submenu {
+      max-height:0; overflow:hidden;
+      transition:max-height .26s ease;
+    }
+    .sb-cat.open .sb-cat-submenu {
+      max-height:300px;
+    }
+    .sb-cat .sb-link {
+      padding-left:42px;
+    }
+    .sb-cat .sb-link.active,
+    .sb-cat .sb-link.active-app,
+    .sb-cat .sb-link.active-rej {
+      padding-left:39px;
     }
 
     /* ── MAIN ── */
@@ -777,8 +815,11 @@ ENDIF.
 var API_URL        = 'main.htm';
 var curPlant       = '';
 var curMode        = '';
+var curCategory    = '';
+var curBsart       = '';
 var isApprover     = false;
 var openSections   = {};
+var openCategories = {};
 var curEstkzFilter = '';
 
 var allData      = [];
@@ -789,10 +830,31 @@ var searchKw     = '';
 var allExpanded  = false;
 var filteredData = [];
 
+/* Daftar kategori PR per plant. bsart bisa berisi lebih dari satu
+   doc type dipisah koma (contoh 'RSBR,PRK9') — backend akan
+   menjumlahkan/menggabungkan filter-nya jadi satu kategori. Daftar
+   ini HARUS selalu sinkron dengan lt_cat_def di main.htm. */
+var CATEGORY_DEF = {
+  '1200':[
+    {code:'MTN',label:'PR Maintenance',bsart:'ROTO',
+     icon:'&#128203;'},
+    {code:'RND',label:'PR RND',bsart:'RSBR,PRK9',
+     icon:'&#128300;'},
+    {code:'SVC',label:'PR Service',bsart:'PRKS',
+     icon:'&#128736;'}
+  ],
+  '1300':[
+    {code:'MTN',label:'PR Maintenance',bsart:'ROTO',
+     icon:'&#128203;'},
+    {code:'SVC',label:'PR Service',bsart:'PRKS',
+     icon:'&#128736;'}
+  ]
+};
+
 var sbCounts = {
-  pending:  { '1200':0, '1300':0 },
-  hist_app: { '1200':0, '1300':0 },
-  hist_rej: { '1200':0, '1300':0 }
+  pending:  { '1200':{}, '1300':{} },
+  hist_app: { '1200':{}, '1300':{} },
+  hist_rej: { '1200':{}, '1300':{} }
 };
 
 var PLANT_LABELS = {
@@ -870,6 +932,24 @@ function postOpts(body) {
 function getEstkzLabel(e) {
   if (!e) return '-';
   return ESTKZ_MAP[e] || e;
+}
+
+function getCategoryDef(werks,category) {
+  var list=CATEGORY_DEF[werks]||[];
+  for (var i=0;i<list.length;i++){
+    if (list[i].code===category) return list[i];
+  }
+  return null;
+}
+
+function getPlantTotalPending(werks) {
+  var cats =CATEGORY_DEF[werks]||[];
+  var total=0;
+  cats.forEach(function(c){
+    total+=parseInt(
+      (sbCounts.pending[werks]||{})[c.code])||0;
+  });
+  return total;
 }
 
 function showEmpty(msg) {
@@ -987,22 +1067,30 @@ function loadSidebarData() {
     .then(function(res){
       if (res.status==='S'){
         isApprover=(res.is_approver===true);
-        sbCounts.pending['1200']=
-          parseInt(res.pending['1200'])||0;
-        sbCounts.pending['1300']=
-          parseInt(res.pending['1300'])||0;
-        sbCounts.hist_rej['1200']=
-          parseInt(res.hist_rej['1200'])||0;
-        sbCounts.hist_rej['1300']=
-          parseInt(res.hist_rej['1300'])||0;
-        sbCounts.hist_app['1200']=
-          parseInt(res.hist_app['1200'])||0;
-        sbCounts.hist_app['1300']=
-          parseInt(res.hist_app['1300'])||0;
+        ['1200','1300'].forEach(function(w){
+          sbCounts.pending[w] =
+            normalizeCatCounts(res.pending,w);
+          sbCounts.hist_app[w] =
+            normalizeCatCounts(res.hist_app,w);
+          sbCounts.hist_rej[w] =
+            normalizeCatCounts(res.hist_rej,w);
+        });
       }
       renderSidebar();
     })
     .catch(function(){renderSidebar();});
+}
+
+/* Ambil object {MTN:1,RND:2,...} dari response GET_SIDEBAR untuk
+   satu plant, dengan fallback aman jika werks/kategori tidak ada. */
+function normalizeCatCounts(group,werks) {
+  var src=(group&&group[werks])||{};
+  var out={};
+  var cats=CATEGORY_DEF[werks]||[];
+  cats.forEach(function(c){
+    out[c.code]=parseInt(src[c.code])||0;
+  });
+  return out;
 }
 
 /* ================================================================
@@ -1021,11 +1109,10 @@ function renderSidebar() {
     if (pi>0)
       html+='<div class="sb-divider"></div>';
 
-    var isOpen=(curPlant===p.code)||
-               (openSections[p.code]===true);
-    var pend  =sbCounts.pending[p.code]  ||0;
-    var happ  =sbCounts.hist_app[p.code] ||0;
-    var hrej  =sbCounts.hist_rej[p.code] ||0;
+    var cats    =CATEGORY_DEF[p.code]||[];
+    var isOpen  =(curPlant===p.code)||
+                 (openSections[p.code]===true);
+    var pendTot =getPlantTotalPending(p.code);
 
     html+='<div class="sb-section'+
           (isOpen?' open':'')+
@@ -1043,72 +1130,95 @@ function renderSidebar() {
     html+=p.name+'</span>';
     html+='<span style="display:flex;'+
           'align-items:center;gap:6px;">';
-    if (pend>0)
+    if (pendTot>0)
       html+='<span class="sb-badge sb-badge-total">'+
-            pend+'</span>';
+            pendTot+'</span>';
     html+='<span class="sb-plant-chevron">'+
           '&#9660;</span>';
     html+='</span></div>';
 
-    /* Submenu */
+    /* Submenu — daftar kategori */
     html+='<div class="sb-submenu">';
 
-    /* 1 — PR Pending (PR Maintenance) */
-    var isPend=(curPlant===p.code &&
-                curMode==='pending');
-    html+='<a class="sb-link'+
-          (isPend?' active':'')+'"'+
-          ' onclick="switchView(\''+
-          p.code+'\',\'pending\')">';
-    html+='<span style="display:flex;'+
-          'align-items:center;gap:7px;">'+
-          '&#128203; PR Maintenance</span>';
-    if (pend>0)
-      html+='<span class="sb-badge '+
-            'sb-badge-pending">'+pend+'</span>';
-    html+='</a>';
+    cats.forEach(function(cat){
+      var catKey   =p.code+'_'+cat.code;
+      var catOpen  =(curPlant===p.code &&
+                     curCategory===cat.code)||
+                    (openCategories[catKey]===true);
+      var pend =(sbCounts.pending[p.code]||{})[cat.code]||0;
+      var happ =(sbCounts.hist_app[p.code]||{})[cat.code]||0;
+      var hrej =(sbCounts.hist_rej[p.code]||{})[cat.code]||0;
 
-    /* 2 — PR RND (placeholder, PO Type belum dikonfigurasi) */
-    var isRnd=(curPlant===p.code &&
-               curMode==='pr_rnd');
-    html+='<a class="sb-link'+
-          (isRnd?' active':'')+'"'+
-          ' onclick="switchView(\''+
-          p.code+'\',\'pr_rnd\')">';
-    html+='<span style="display:flex;'+
-          'align-items:center;gap:7px;">'+
-          '&#128300; PR RND</span>';
-    html+='</a>';
+      html+='<div class="sb-cat'+
+            (catOpen?' open':'')+
+            '" id="sbCat_'+catKey+'">';
 
-    /* 3 — History Approve */
-    var isApp=(curPlant===p.code &&
-               curMode==='hist_app');
-    html+='<a class="sb-link'+
-          (isApp?' active-app':'')+'"'+
-          ' onclick="switchView(\''+
-          p.code+'\',\'hist_app\')">';
-    html+='<span style="display:flex;'+
-          'align-items:center;gap:7px;">'+
-          '&#10003; History Approve</span>';
-    if (happ>0)
-      html+='<span class="sb-badge '+
-            'sb-badge-app">'+happ+'</span>';
-    html+='</a>';
+      /* Header kategori */
+      html+='<div class="sb-cat-hdr"'+
+            ' onclick="toggleCategory(\''+
+            catKey+'\')">';
+      html+='<span class="sb-cat-left">'+
+            cat.icon+' '+cat.label+'</span>';
+      html+='<span style="display:flex;'+
+            'align-items:center;gap:6px;">';
+      if (pend>0)
+        html+='<span class="sb-badge '+
+              'sb-badge-pending">'+pend+'</span>';
+      html+='<span class="sb-cat-chevron">'+
+            '&#9660;</span></span>';
+      html+='</div>';
 
-    /* 4 — History Reject */
-    var isRej=(curPlant===p.code &&
-               curMode==='hist_rej');
-    html+='<a class="sb-link'+
-          (isRej?' active-rej':'')+'"'+
-          ' onclick="switchView(\''+
-          p.code+'\',\'hist_rej\')">';
-    html+='<span style="display:flex;'+
-          'align-items:center;gap:7px;">'+
-          '&#128465; History Reject</span>';
-    if (hrej>0)
-      html+='<span class="sb-badge '+
-            'sb-badge-rej">'+hrej+'</span>';
-    html+='</a>';
+      /* Submenu mode — Pending / Hist App / Hist Rej */
+      html+='<div class="sb-cat-submenu">';
+
+      var isPend=(curPlant===p.code &&
+                  curCategory===cat.code &&
+                  curMode==='pending');
+      html+='<a class="sb-link'+
+            (isPend?' active':'')+'"'+
+            ' onclick="switchView(\''+p.code+'\',\''+
+            cat.code+'\',\'pending\')">';
+      html+='<span style="display:flex;'+
+            'align-items:center;gap:7px;">'+
+            '&#128203; Pending</span>';
+      if (pend>0)
+        html+='<span class="sb-badge '+
+              'sb-badge-pending">'+pend+'</span>';
+      html+='</a>';
+
+      var isApp=(curPlant===p.code &&
+                 curCategory===cat.code &&
+                 curMode==='hist_app');
+      html+='<a class="sb-link'+
+            (isApp?' active-app':'')+'"'+
+            ' onclick="switchView(\''+p.code+'\',\''+
+            cat.code+'\',\'hist_app\')">';
+      html+='<span style="display:flex;'+
+            'align-items:center;gap:7px;">'+
+            '&#10003; History Approve</span>';
+      if (happ>0)
+        html+='<span class="sb-badge '+
+              'sb-badge-app">'+happ+'</span>';
+      html+='</a>';
+
+      var isRej=(curPlant===p.code &&
+                 curCategory===cat.code &&
+                 curMode==='hist_rej');
+      html+='<a class="sb-link'+
+            (isRej?' active-rej':'')+'"'+
+            ' onclick="switchView(\''+p.code+'\',\''+
+            cat.code+'\',\'hist_rej\')">';
+      html+='<span style="display:flex;'+
+            'align-items:center;gap:7px;">'+
+            '&#128465; History Reject</span>';
+      if (hrej>0)
+        html+='<span class="sb-badge '+
+              'sb-badge-rej">'+hrej+'</span>';
+      html+='</a>';
+
+      html+='</div>'; /* sb-cat-submenu */
+      html+='</div>'; /* sb-cat */
+    });
 
     html+='</div>'; /* sb-submenu */
     html+='</div>'; /* sb-section */
@@ -1126,11 +1236,24 @@ function toggleSection(plantCode) {
     sec.classList.contains('open');
 }
 
+function toggleCategory(catKey) {
+  var sec=document.getElementById(
+    'sbCat_'+catKey);
+  if (!sec) return;
+  sec.classList.toggle('open');
+  openCategories[catKey]=
+    sec.classList.contains('open');
+}
+
 /* ================================================================
    SWITCH VIEW
    ================================================================ */
-function switchView(plant,mode) {
+function switchView(plant,category,mode) {
+  var catDef = getCategoryDef(plant,category);
+
   curPlant       = plant;
+  curCategory    = category;
+  curBsart       = catDef?catDef.bsart:'';
   curMode        = mode;
   curPage        = 1;
   selBanfns      = {};
@@ -1145,36 +1268,6 @@ function switchView(plant,mode) {
   if      (mode==='pending')  fetchList('');
   else if (mode==='hist_app') fetchHistApp();
   else if (mode==='hist_rej') fetchHistRej();
-  else if (mode==='pr_rnd')   renderPrRnd();
-}
-
-/* ================================================================
-   RENDER PR RND — placeholder, PO Type belum dikonfigurasi
-   ================================================================ */
-function renderPrRnd() {
-  var html='';
-  html+='<div class="sticky-top">'+
-        '<div class="pg-hdr">'+
-        '<div class="pg-title">'+
-        '&#128300; PR RND &mdash; '+
-        PLANT_LABELS[curPlant]+'</div>'+
-        '<div class="pg-sub">'+
-        'Menu PR RND belum aktif'+
-        '</div></div></div>';
-
-  html+='<div class="empty" style="padding:60px 20px;">'+
-        '<div class="empty-ico">&#128679;</div>'+
-        '<div class="empty-txt">'+
-        'PR RND belum tersedia'+
-        '<div style="font-size:13px;font-weight:400;'+
-        'color:var(--muted);margin-top:6px;">'+
-        'PO Type untuk PR RND belum dikonfigurasi '+
-        'di sistem.'+
-        '</div></div></div>';
-
-  document.getElementById('mainContent')
-    .innerHTML=html;
-  document.getElementById('fab').className='fab';
 }
 
 /* ================================================================
@@ -1183,6 +1276,7 @@ function renderPrRnd() {
 function fetchList(estkz) {
   fetch(API_URL+'?action=GET_LIST'+
         '&werks='+encodeURIComponent(curPlant)+
+        '&bsart='+encodeURIComponent(curBsart)+
         '&estkz='+encodeURIComponent(estkz||''))
     .then(function(r){return r.json();})
     .then(function(res){
@@ -1204,7 +1298,8 @@ function fetchList(estkz) {
    ================================================================ */
 function fetchHistApp() {
   fetch(API_URL+'?action=GET_HIST_APP'+
-        '&werks='+encodeURIComponent(curPlant))
+        '&werks='+encodeURIComponent(curPlant)+
+        '&bsart='+encodeURIComponent(curBsart))
     .then(function(r){return r.json();})
     .then(function(res){
       renderHistTable(
@@ -1222,7 +1317,8 @@ function fetchHistApp() {
    ================================================================ */
 function fetchHistRej() {
   fetch(API_URL+'?action=GET_HIST_REJ'+
-        '&werks='+encodeURIComponent(curPlant))
+        '&werks='+encodeURIComponent(curPlant)+
+        '&bsart='+encodeURIComponent(curBsart))
     .then(function(r){return r.json();})
     .then(function(res){
       renderHistTable(
@@ -1282,13 +1378,17 @@ function renderList() {
     :Math.min(start+pageSize,total);
   var pageData=filteredData.slice(start,end);
 
+  var catDef =getCategoryDef(curPlant,curCategory);
+  var catIcon=catDef?catDef.icon:'&#128203;';
+  var catLbl =catDef?catDef.label:'PR';
+
   var html='';
 
   /* Sticky header */
   html+='<div class="sticky-top">'+
         '<div class="pg-hdr">'+
         '<div class="pg-title">'+
-        '&#128203; PR Maintenance &mdash; '+
+        catIcon+' '+catLbl+' &mdash; '+
         PLANT_LABELS[curPlant]+'</div>'+
         '<div class="pg-sub">'+
         total+' PR menunggu approval';
@@ -1299,6 +1399,7 @@ function renderList() {
     html+=' &mdash; <span style="color:#b45309;'+
           'font-weight:600;">Non-MRP only</span>';
   html+='</div></div></div>';
+
 
   /* Sticky toolbar */
   html+='<div class="sticky-toolbar">'+
@@ -1370,7 +1471,7 @@ function renderList() {
             ?'Tidak ada PR '+
               (curEstkzFilter==='MRP'
                 ?'MRP':'Non-MRP')+' pending'
-            :'Tidak ada PR Maintenance pending')+
+            :'Tidak ada '+catLbl+' pending')+
           '</div></div>';
   } else {
     pageData.forEach(function(pr){
@@ -1489,13 +1590,16 @@ function renderHistTable(data,type) {
     :'&#128465; History Reject &mdash; ';
   var color =isApp
     ?'var(--success)':'var(--danger)';
+  var catDef=getCategoryDef(curPlant,curCategory);
+  var catLbl=catDef?catDef.label:'PR';
 
   var html='';
   html+='<div class="sticky-top">'+
         '<div class="pg-hdr">'+
         '<div class="pg-title"'+
         ' style="color:'+color+';">'+
-        title+PLANT_LABELS[curPlant]+'</div>'+
+        title+PLANT_LABELS[curPlant]+
+        ' &middot; '+catLbl+'</div>'+
         '<div class="pg-sub">'+
         data.length+' record '+
         (isApp?'approved':'rejected')+
@@ -2029,9 +2133,11 @@ function processAction(banfns,action,notes) {
     '<div class="lo-spin"></div>';
 
   /* Simpan state untuk reload setelah selesai */
-  var savedPlant =curPlant;
-  var savedMode  =curMode;
-  var savedEstkz =curEstkzFilter;
+  var savedPlant    =curPlant;
+  var savedCategory =curCategory;
+  var savedBsart    =curBsart;
+  var savedMode     =curMode;
+  var savedEstkz    =curEstkzFilter;
 
   function doNext(idx) {
     if (idx>=banfns.length){
@@ -2062,6 +2168,8 @@ function processAction(banfns,action,notes) {
       /* Reload view setelah delay */
       setTimeout(function(){
         curPlant       =savedPlant;
+        curCategory    =savedCategory;
+        curBsart       =savedBsart;
         curMode        =savedMode;
         curEstkzFilter =savedEstkz;
         curPage        =1;

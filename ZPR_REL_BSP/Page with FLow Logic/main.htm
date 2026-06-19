@@ -58,6 +58,7 @@ TYPES: BEGIN OF ty_eban_item,
          badat TYPE eban-badat,
          loekz TYPE eban-loekz,
          estkz TYPE eban-estkz,
+         bsart TYPE eban-bsart,
        END OF ty_eban_item.
 
 TYPES: BEGIN OF ty_makt,
@@ -131,6 +132,14 @@ DATA: lv_rel_status TYPE bapimmpara-rel_status,
       lv_rel_ind    TYPE bapimmpara-rel_ind.
 
 *----------------------------------------------------------------------
+* BSART RANGE (dipakai untuk filter multi doc type, contoh "RSBR,PRK9")
+*----------------------------------------------------------------------
+DATA: lt_bsart_rng    TYPE RANGE OF eban-bsart,
+      ls_bsart_rng    LIKE LINE OF lt_bsart_rng,
+      lt_bsart_split  TYPE STANDARD TABLE OF string,
+      lv_bsart_part   TYPE string.
+
+*----------------------------------------------------------------------
 * IS APPROVER
 *----------------------------------------------------------------------
 IF lv_uname = 'KMI-BOD'.
@@ -166,6 +175,29 @@ DEFINE fmt_date.
 END-OF-DEFINITION.
 
 *----------------------------------------------------------------------
+* MACRO: parse_bsart_range
+* Mengubah string comma-separated (contoh: 'RSBR,PRK9') jadi
+* RANGE OF eban-bsart untuk dipakai di "WHERE bsart IN ...".
+* &1 = input string, &2 = output RANGE table
+*----------------------------------------------------------------------
+DEFINE parse_bsart_range.
+  CLEAR &2.
+  CLEAR lt_bsart_split.
+  SPLIT &1 AT ',' INTO TABLE lt_bsart_split.
+  LOOP AT lt_bsart_split INTO lv_bsart_part.
+    CONDENSE lv_bsart_part.
+    TRANSLATE lv_bsart_part TO UPPER CASE.
+    IF lv_bsart_part IS NOT INITIAL.
+      CLEAR ls_bsart_rng.
+      ls_bsart_rng-sign   = 'I'.
+      ls_bsart_rng-option = 'EQ'.
+      ls_bsart_rng-low    = lv_bsart_part.
+      APPEND ls_bsart_rng TO &2.
+    ENDIF.
+  ENDLOOP.
+END-OF-DEFINITION.
+
+*----------------------------------------------------------------------
 * REDIRECT ke index.htm jika bukan action call
 *----------------------------------------------------------------------
 IF lv_action IS INITIAL.
@@ -191,90 +223,121 @@ CASE lv_action.
 *======================================================================
   WHEN 'GET_SIDEBAR'.
 *======================================================================
-    DATA: lv_is_app_s TYPE string.
-    DATA: lt_sb_uniq  TYPE STANDARD TABLE OF eban,
-          lt_rj_uniq  TYPE STANDARD TABLE OF zroto_rej_hist,
-          lt_ra_uniq  TYPE STANDARD TABLE OF zroto_app_hist.
-    DATA: lv_cnt_1200  TYPE i,
-          lv_cnt_1300  TYPE i,
-          lv_s_1200    TYPE string,
-          lv_s_1300    TYPE string,
-          lv_rj_1200   TYPE i,
-          lv_rj_1300   TYPE i,
-          lv_sr_1200   TYPE string,
-          lv_sr_1300   TYPE string,
-          lv_ra_1200   TYPE i,
-          lv_ra_1300   TYPE i,
-          lv_sa_1200   TYPE string,
-          lv_sa_1300   TYPE string.
+* Sidebar sekarang menghitung jumlah PR per PLANT x KATEGORI.
+* Daftar kategori per plant di-define inline di bawah (bsart list-nya
+* harus selalu sinkron dengan CATEGORY_MAP di index.htm).
+*   1200 (Surabaya) : MTN=ROTO | RND=RSBR,PRK9 | SVC=PRKS
+*   1300 (Semarang)  : MTN=ROTO | SVC=PRKS
+    DATA: lv_is_app_s   TYPE string.
+    DATA: lt_sb_uniq    TYPE STANDARD TABLE OF eban,
+          lt_rj_uniq    TYPE STANDARD TABLE OF zroto_rej_hist,
+          lt_ra_uniq    TYPE STANDARD TABLE OF zroto_app_hist.
+    DATA: lv_cnt        TYPE i,
+          lv_cnt_s      TYPE string.
 
-    " Pending Surabaya
-    CLEAR lt_sb_uniq.
-    SELECT banfn FROM eban
-      INTO CORRESPONDING FIELDS OF TABLE lt_sb_uniq
-      WHERE bsart = 'ROTO'
-        AND werks = '1200'
-        AND frgkz = 'X'
-        AND frgzu = ' '
-        AND loekz = ' '.
-    SORT lt_sb_uniq BY banfn.
-    DELETE ADJACENT DUPLICATES FROM lt_sb_uniq
-      COMPARING banfn.
-    lv_cnt_1200 = lines( lt_sb_uniq ).
-    lv_s_1200   = lv_cnt_1200.
-    CONDENSE lv_s_1200 NO-GAPS.
+    DATA: BEGIN OF ls_cat_def,
+            werks    TYPE eban-werks,
+            category TYPE string,
+            bsart_cs TYPE string,
+          END OF ls_cat_def.
+    DATA: lt_cat_def LIKE STANDARD TABLE OF ls_cat_def.
 
-    " Pending Semarang
-    CLEAR lt_sb_uniq.
-    SELECT banfn FROM eban
-      INTO CORRESPONDING FIELDS OF TABLE lt_sb_uniq
-      WHERE bsart = 'ROTO'
-        AND werks = '1300'
-        AND frgkz = 'X'
-        AND frgzu = ' '
-        AND loekz = ' '.
-    SORT lt_sb_uniq BY banfn.
-    DELETE ADJACENT DUPLICATES FROM lt_sb_uniq
-      COMPARING banfn.
-    lv_cnt_1300 = lines( lt_sb_uniq ).
-    lv_s_1300   = lv_cnt_1300.
-    CONDENSE lv_s_1300 NO-GAPS.
+    CLEAR lt_cat_def.
+    ls_cat_def-werks = '1200'. ls_cat_def-category = 'MTN'.
+    ls_cat_def-bsart_cs = 'ROTO'. APPEND ls_cat_def TO lt_cat_def.
+    ls_cat_def-werks = '1200'. ls_cat_def-category = 'RND'.
+    ls_cat_def-bsart_cs = 'RSBR,PRK9'. APPEND ls_cat_def TO lt_cat_def.
+    ls_cat_def-werks = '1200'. ls_cat_def-category = 'SVC'.
+    ls_cat_def-bsart_cs = 'PRKS'. APPEND ls_cat_def TO lt_cat_def.
+    ls_cat_def-werks = '1300'. ls_cat_def-category = 'MTN'.
+    ls_cat_def-bsart_cs = 'ROTO'. APPEND ls_cat_def TO lt_cat_def.
+    ls_cat_def-werks = '1300'. ls_cat_def-category = 'SVC'.
+    ls_cat_def-bsart_cs = 'PRKS'. APPEND ls_cat_def TO lt_cat_def.
 
-    " History Reject Surabaya
-    CLEAR lt_rj_uniq.
-    SELECT banfn FROM zroto_rej_hist
-      INTO CORRESPONDING FIELDS OF TABLE lt_rj_uniq
-      WHERE werks = '1200'.
-    lv_rj_1200 = lines( lt_rj_uniq ).
-    lv_sr_1200 = lv_rj_1200.
-    CONDENSE lv_sr_1200 NO-GAPS.
+    DATA: lv_sb_pend TYPE string,
+          lv_sb_app  TYPE string,
+          lv_sb_rej  TYPE string,
+          lv_sb_sep  TYPE string,
+          lv_cur_w   TYPE eban-werks,
+          lv_first_w TYPE abap_bool VALUE abap_true.
 
-    " History Reject Semarang
-    CLEAR lt_rj_uniq.
-    SELECT banfn FROM zroto_rej_hist
-      INTO CORRESPONDING FIELDS OF TABLE lt_rj_uniq
-      WHERE werks = '1300'.
-    lv_rj_1300 = lines( lt_rj_uniq ).
-    lv_sr_1300 = lv_rj_1300.
-    CONDENSE lv_sr_1300 NO-GAPS.
+    CLEAR: lv_sb_pend, lv_sb_app, lv_sb_rej.
 
-    " History Approve Surabaya
-    CLEAR lt_ra_uniq.
-    SELECT banfn FROM zroto_app_hist
-      INTO CORRESPONDING FIELDS OF TABLE lt_ra_uniq
-      WHERE werks = '1200'.
-    lv_ra_1200 = lines( lt_ra_uniq ).
-    lv_sa_1200 = lv_ra_1200.
-    CONDENSE lv_sa_1200 NO-GAPS.
+    SORT lt_cat_def BY werks category.
 
-    " History Approve Semarang
-    CLEAR lt_ra_uniq.
-    SELECT banfn FROM zroto_app_hist
-      INTO CORRESPONDING FIELDS OF TABLE lt_ra_uniq
-      WHERE werks = '1300'.
-    lv_ra_1300 = lines( lt_ra_uniq ).
-    lv_sa_1300 = lv_ra_1300.
-    CONDENSE lv_sa_1300 NO-GAPS.
+    LOOP AT lt_cat_def INTO ls_cat_def.
+
+      " Buka group werks baru jika werks berubah
+      IF lv_cur_w NE ls_cat_def-werks.
+        IF lv_first_w = abap_false.
+          CONCATENATE lv_sb_pend '},' INTO lv_sb_pend.
+          CONCATENATE lv_sb_app  '},' INTO lv_sb_app.
+          CONCATENATE lv_sb_rej  '},' INTO lv_sb_rej.
+        ENDIF.
+        CONCATENATE lv_sb_pend '"' ls_cat_def-werks '":{'
+          INTO lv_sb_pend.
+        CONCATENATE lv_sb_app  '"' ls_cat_def-werks '":{'
+          INTO lv_sb_app.
+        CONCATENATE lv_sb_rej  '"' ls_cat_def-werks '":{'
+          INTO lv_sb_rej.
+        lv_cur_w   = ls_cat_def-werks.
+        lv_sb_sep  = ''.
+        lv_first_w = abap_false.
+      ENDIF.
+
+      parse_bsart_range ls_cat_def-bsart_cs lt_bsart_rng.
+
+      " --- PENDING ---
+      CLEAR lt_sb_uniq.
+      SELECT banfn FROM eban
+        INTO CORRESPONDING FIELDS OF TABLE lt_sb_uniq
+        WHERE bsart IN lt_bsart_rng
+          AND werks = ls_cat_def-werks
+          AND frgkz = 'X'
+          AND frgzu = ' '
+          AND loekz = ' '.
+      SORT lt_sb_uniq BY banfn.
+      DELETE ADJACENT DUPLICATES FROM lt_sb_uniq
+        COMPARING banfn.
+      lv_cnt   = lines( lt_sb_uniq ).
+      lv_cnt_s = lv_cnt.
+      CONDENSE lv_cnt_s NO-GAPS.
+      CONCATENATE lv_sb_pend lv_sb_sep
+        '"' ls_cat_def-category '":' lv_cnt_s
+        INTO lv_sb_pend.
+
+      " --- HISTORY REJECT ---
+      CLEAR lt_rj_uniq.
+      SELECT banfn FROM zroto_rej_hist
+        INTO CORRESPONDING FIELDS OF TABLE lt_rj_uniq
+        WHERE werks = ls_cat_def-werks
+          AND bsart IN lt_bsart_rng.
+      lv_cnt   = lines( lt_rj_uniq ).
+      lv_cnt_s = lv_cnt.
+      CONDENSE lv_cnt_s NO-GAPS.
+      CONCATENATE lv_sb_rej lv_sb_sep
+        '"' ls_cat_def-category '":' lv_cnt_s
+        INTO lv_sb_rej.
+
+      " --- HISTORY APPROVE ---
+      CLEAR lt_ra_uniq.
+      SELECT banfn FROM zroto_app_hist
+        INTO CORRESPONDING FIELDS OF TABLE lt_ra_uniq
+        WHERE werks = ls_cat_def-werks
+          AND bsart IN lt_bsart_rng.
+      lv_cnt   = lines( lt_ra_uniq ).
+      lv_cnt_s = lv_cnt.
+      CONDENSE lv_cnt_s NO-GAPS.
+      CONCATENATE lv_sb_app lv_sb_sep
+        '"' ls_cat_def-category '":' lv_cnt_s
+        INTO lv_sb_app.
+
+      lv_sb_sep = ','.
+    ENDLOOP.
+
+    CONCATENATE lv_sb_pend '}' INTO lv_sb_pend.
+    CONCATENATE lv_sb_app  '}' INTO lv_sb_app.
+    CONCATENATE lv_sb_rej  '}' INTO lv_sb_rej.
 
     IF lv_is_approver = abap_true.
       lv_is_app_s = 'true'.
@@ -284,15 +347,9 @@ CASE lv_action.
 
     CONCATENATE
       '{"status":"S","is_approver":' lv_is_app_s
-      ',"pending":{'
-        '"1200":' lv_s_1200 ','
-        '"1300":' lv_s_1300
-      '},"hist_rej":{'
-        '"1200":' lv_sr_1200 ','
-        '"1300":' lv_sr_1300
-      '},"hist_app":{'
-        '"1200":' lv_sa_1200 ','
-        '"1300":' lv_sa_1300
+      ',"pending":{'   lv_sb_pend
+      '},"hist_rej":{' lv_sb_rej
+      '},"hist_app":{' lv_sb_app
       '}}'
       INTO lv_output.
 
@@ -307,13 +364,23 @@ CASE lv_action.
       EXIT.
     ENDIF.
 
+    IF lv_bsart IS INITIAL.
+      lv_output = '{"status":"E",' &
+        '"message":"Kategori PR (bsart) belum dipilih","data":[]}'.
+      response->append_cdata( lv_output ).
+      _m_navigation->response_complete( ).
+      EXIT.
+    ENDIF.
+
+    parse_bsart_range lv_bsart lt_bsart_rng.
+
     CLEAR: lt_head, lt_items, lt_makt.
 
     SELECT banfn badat werks bsart txz01 ernam ekgrp
            frgkz frgzu loekz estkz
       FROM eban
       INTO CORRESPONDING FIELDS OF TABLE lt_head
-      WHERE bsart = 'ROTO'
+      WHERE bsart IN lt_bsart_rng
         AND werks  = lv_werks
         AND frgkz  = 'X'
         AND frgzu  = ' '
@@ -490,6 +557,8 @@ CASE lv_action.
 *======================================================================
   WHEN 'GET_DETAIL'.
 *======================================================================
+* Tidak diubah — fetch detail item berdasarkan banfn (sudah unik per
+* PR), tidak memerlukan filter bsart tambahan.
     IF lv_banfn IS INITIAL.
       lv_output = '{"status":"E",' &
         '"message":"banfn kosong","data":[]}'.
@@ -618,6 +687,16 @@ CASE lv_action.
       EXIT.
     ENDIF.
 
+    IF lv_bsart IS INITIAL.
+      lv_output = '{"status":"E",' &
+        '"message":"Kategori PR (bsart) belum dipilih","data":[]}'.
+      response->append_cdata( lv_output ).
+      _m_navigation->response_complete( ).
+      EXIT.
+    ENDIF.
+
+    parse_bsart_range lv_bsart lt_bsart_rng.
+
     CLEAR lt_hist_rej.
     SELECT banfn bnfpo werks bsart txz01 ernam erdat
            menge meins preis peinh waers ekgrp
@@ -625,6 +704,7 @@ CASE lv_action.
       FROM zroto_rej_hist
       INTO CORRESPONDING FIELDS OF TABLE lt_hist_rej
       WHERE werks = lv_werks
+        AND bsart IN lt_bsart_rng
       ORDER BY del_at DESCENDING del_tm DESCENDING.
 
     IF lt_hist_rej IS INITIAL.
@@ -676,6 +756,7 @@ CASE lv_action.
         '{"banfn":"'  ls_hist_rej-banfn  '",'
         '"bnfpo":"'   ls_hist_rej-bnfpo  '",'
         '"werks":"'   ls_hist_rej-werks  '",'
+        '"bsart":"'   ls_hist_rej-bsart  '",'
         '"txz01":"'   lv_h_txz01         '",'
         '"ernam":"'   ls_hist_rej-ernam  '",'
         '"erdat":"'   lv_h_erdat         '",'
@@ -708,6 +789,16 @@ CASE lv_action.
       EXIT.
     ENDIF.
 
+    IF lv_bsart IS INITIAL.
+      lv_output = '{"status":"E",' &
+        '"message":"Kategori PR (bsart) belum dipilih","data":[]}'.
+      response->append_cdata( lv_output ).
+      _m_navigation->response_complete( ).
+      EXIT.
+    ENDIF.
+
+    parse_bsart_range lv_bsart lt_bsart_rng.
+
     CLEAR lt_hist_app.
     SELECT banfn bnfpo werks bsart txz01 ernam erdat
            menge meins preis peinh waers ekgrp
@@ -715,6 +806,7 @@ CASE lv_action.
       FROM zroto_app_hist
       INTO CORRESPONDING FIELDS OF TABLE lt_hist_app
       WHERE werks = lv_werks
+        AND bsart IN lt_bsart_rng
       ORDER BY app_at DESCENDING app_tm DESCENDING.
 
     IF lt_hist_app IS INITIAL.
@@ -763,6 +855,7 @@ CASE lv_action.
         '{"banfn":"'  ls_hist_app-banfn  '",'
         '"bnfpo":"'   ls_hist_app-bnfpo  '",'
         '"werks":"'   ls_hist_app-werks  '",'
+        '"bsart":"'   ls_hist_app-bsart  '",'
         '"txz01":"'   lv_a_txz01         '",'
         '"ernam":"'   ls_hist_app-ernam  '",'
         '"erdat":"'   lv_a_erdat         '",'
@@ -786,6 +879,12 @@ CASE lv_action.
 *======================================================================
   WHEN 'PROCESS'.
 *======================================================================
+* CATATAN: Logic approval/reject (BAPI_REQUISITION_RELEASE,
+* BAPI_TRANSACTION_COMMIT/ROLLBACK, BAPI_REQUISITION_DELETE) TIDAK
+* DIUBAH dari versi sebelumnya. bsart untuk PR yang diproses TIDAK
+* diambil dari parameter request (tidak dipercaya dari client),
+* melainkan dari data EBAN itu sendiri (ls_item-bsart) yang sudah
+* di-SELECT di bawah ini.
     IF lv_is_approver = abap_false.
       lv_output = '{"status":"E",' &
         '"message":"Anda tidak memiliki hak akses"}'.
@@ -807,7 +906,7 @@ CASE lv_action.
     CLEAR lt_items.
     SELECT banfn bnfpo matnr txz01 menge meins preis
            peinh waers lfdat werks ekgrp ernam badat
-           loekz estkz
+           loekz estkz bsart
       FROM eban
       INTO CORRESPONDING FIELDS OF TABLE lt_items
       WHERE banfn = lv_banfn_e
@@ -892,13 +991,16 @@ CASE lv_action.
           EXPORTING wait = 'X'.
 
         " Simpan ke ZROTO_APP_HIST
+        " bsart diambil dari ls_item-bsart (data asli PR),
+        " BUKAN hardcode 'ROTO', supaya history PR RND/Service
+        " tersimpan dengan doc type yang benar.
         DATA: ls_zapp TYPE zroto_app_hist.
         LOOP AT lt_items INTO ls_item.
           CLEAR ls_zapp.
           ls_zapp-banfn  = ls_item-banfn.
           ls_zapp-bnfpo  = ls_item-bnfpo.
           ls_zapp-werks  = ls_item-werks.
-          ls_zapp-bsart  = 'ROTO'.
+          ls_zapp-bsart  = ls_item-bsart.
           ls_zapp-txz01  = ls_item-txz01.
           ls_zapp-ernam  = ls_item-ernam.
           ls_zapp-erdat  = ls_item-badat.
@@ -941,7 +1043,7 @@ CASE lv_action.
         ls_zroto-banfn  = ls_item-banfn.
         ls_zroto-bnfpo  = ls_item-bnfpo.
         ls_zroto-werks  = ls_item-werks.
-        ls_zroto-bsart  = 'ROTO'.
+        ls_zroto-bsart  = ls_item-bsart.
         ls_zroto-txz01  = ls_item-txz01.
         ls_zroto-ernam  = ls_item-ernam.
         ls_zroto-erdat  = ls_item-badat.
