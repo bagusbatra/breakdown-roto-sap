@@ -979,7 +979,7 @@ var histData = [];
 var histType = '';
 
 var sbCounts = {
-  pending:  { '1200':{ROTO:0,PRK9:0}, '1300':{ROTO:0,PRK9:0} },
+  pending:  { '1200':{ROTO:0,PRK9:0,PRKS:0}, '1300':{ROTO:0,PRK9:0,PRKS:0} },
   hist_app: { '1200':0, '1300':0 },
   hist_rej: { '1200':0, '1300':0 }
 };
@@ -988,12 +988,13 @@ var PLANT_LABELS = { '1200':'Surabaya', '1300':'Semarang' };
 
 var PR_CATEGORIES = {
   'ROTO': { label:'PR Maintenance', short:'Maintenance', icon:'&#128203;' },
-  'PRK9': { label:'PR RND',         short:'RND',         icon:'&#128736;' }
+  'PRK9': { label:'PR RND',         short:'RND',         icon:'&#128736;' },
+  'PRKS': { label:'PR Service',     short:'Service',     icon:'&#128295;' }
 };
 
 var PLANT_CATEGORIES = {
-  '1200': ['ROTO', 'PRK9'],
-  '1300': ['ROTO', 'PRK9']
+  '1200': ['ROTO', 'PRK9', 'PRKS'],
+  '1300': ['ROTO', 'PRKS']
 };
 
 function getBsartLabel(bs) {
@@ -1216,13 +1217,15 @@ function loadSidebarData() {
         var o1200 = pd['1200']||{};
         sbCounts.pending['1200'] = {
           ROTO: parseInt(o1200.ROTO)||0,
-          PRK9: parseInt(o1200.PRK9)||0
+          PRK9: parseInt(o1200.PRK9)||0,
+          PRKS: parseInt(o1200.PRKS)||0
         };
 
         var o1300 = pd['1300']||{};
         sbCounts.pending['1300'] = {
           ROTO: parseInt(o1300.ROTO)||0,
-          PRK9: parseInt(o1300.PRK9)||0
+          PRK9: parseInt(o1300.PRK9)||0,
+          PRKS: parseInt(o1300.PRKS)||0
         };
 
         sbCounts.hist_rej['1200']=parseInt(res.hist_rej['1200'])||0;
