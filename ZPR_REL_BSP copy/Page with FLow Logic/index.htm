@@ -777,6 +777,7 @@ ENDIF.
 var API_URL        = 'main.htm';
 var curPlant       = '';
 var curMode        = '';
+var curBsart       = '';
 var isApprover     = false;
 var openSections   = {};
 var curEstkzFilter = '';
@@ -790,14 +791,31 @@ var allExpanded  = false;
 var filteredData = [];
 
 var sbCounts = {
-  pending:  { '1200':0, '1300':0 },
-  hist_app: { '1200':0, '1300':0 },
-  hist_rej: { '1200':0, '1300':0 }
+  pending:  { '1200': {}, '1300': {} },
+  hist_app: { '1200': {}, '1300': {} },
+  hist_rej: { '1200': {}, '1300': {} }
 };
 
 var PLANT_LABELS = {
   '1200':'Surabaya',
   '1300':'Semarang'
+};
+
+var PLANT_CATS = {
+  '1200': ['MTN','RND','SVC'],
+  '1300': ['MTN','SVC']
+};
+
+var CAT_BSART = {
+  'MTN':'ROTO',
+  'RND':'RSBR,PRK9',
+  'SVC':'PRKS'
+};
+
+var CAT_LABELS = {
+  'MTN':'Maintenance',
+  'RND':'R &amp; D',
+  'SVC':'Service'
 };
 
 var ESTKZ_MAP = {
@@ -987,18 +1005,12 @@ function loadSidebarData() {
     .then(function(res){
       if (res.status==='S'){
         isApprover=(res.is_approver===true);
-        sbCounts.pending['1200']=
-          parseInt(res.pending['1200'])||0;
-        sbCounts.pending['1300']=
-          parseInt(res.pending['1300'])||0;
-        sbCounts.hist_rej['1200']=
-          parseInt(res.hist_rej['1200'])||0;
-        sbCounts.hist_rej['1300']=
-          parseInt(res.hist_rej['1300'])||0;
-        sbCounts.hist_app['1200']=
-          parseInt(res.hist_app['1200'])||0;
-        sbCounts.hist_app['1300']=
-          parseInt(res.hist_app['1300'])||0;
+        sbCounts.pending['1200']=res.pending['1200']||{};
+        sbCounts.pending['1300']=res.pending['1300']||{};
+        sbCounts.hist_app['1200']=res.hist_app['1200']||{};
+        sbCounts.hist_app['1300']=res.hist_app['1300']||{};
+        sbCounts.hist_rej['1200']=res.hist_rej['1200']||{};
+        sbCounts.hist_rej['1300']=res.hist_rej['1300']||{};
       }
       renderSidebar();
     })
@@ -1023,9 +1035,25 @@ function renderSidebar() {
 
     var isOpen=(curPlant===p.code)||
                (openSections[p.code]===true);
-    var pend  =sbCounts.pending[p.code]  ||0;
-    var happ  =sbCounts.hist_app[p.code] ||0;
-    var hrej  =sbCounts.hist_rej[p.code] ||0;
+    var pCount=sbCounts.pending[p.code]||{};
+    var hApp  =sbCounts.hist_app[p.code]||{};
+    var hRej  =sbCounts.hist_rej[p.code]||{};
+
+    /* Total pending (sum of all categories) */
+    var totalPend=0;
+    for (var k in pCount)
+      if (pCount.hasOwnProperty(k))
+        totalPend+=parseInt(pCount[k])||0;
+
+    var totalHapp=0;
+    for (var k in hApp)
+      if (hApp.hasOwnProperty(k))
+        totalHapp+=parseInt(hApp[k])||0;
+
+    var totalHrej=0;
+    for (var k in hRej)
+      if (hRej.hasOwnProperty(k))
+        totalHrej+=parseInt(hRej[k])||0;
 
     html+='<div class="sb-section'+
           (isOpen?' open':'')+
@@ -1043,9 +1071,9 @@ function renderSidebar() {
     html+=p.name+'</span>';
     html+='<span style="display:flex;'+
           'align-items:center;gap:6px;">';
-    if (pend>0)
+    if (totalPend>0)
       html+='<span class="sb-badge sb-badge-total">'+
-            pend+'</span>';
+            totalPend+'</span>';
     html+='<span class="sb-plant-chevron">'+
           '&#9660;</span>';
     html+='</span></div>';
@@ -1053,61 +1081,55 @@ function renderSidebar() {
     /* Submenu */
     html+='<div class="sb-submenu">';
 
-    /* 1 — PR Pending (PR Maintenance) */
-    var isPend=(curPlant===p.code &&
-                curMode==='pending');
-    html+='<a class="sb-link'+
-          (isPend?' active':'')+'"'+
-          ' onclick="switchView(\''+
-          p.code+'\',\'pending\')">';
-    html+='<span style="display:flex;'+
-          'align-items:center;gap:7px;">'+
-          '&#128203; PR Maintenance</span>';
-    if (pend>0)
-      html+='<span class="sb-badge '+
-            'sb-badge-pending">'+pend+'</span>';
-    html+='</a>';
+    /* Categories (MTN, RND, SVC) */
+    var cats=PLANT_CATS[p.code]||[];
+    cats.forEach(function(cat){
+      var isAct=(curPlant===p.code &&
+                 curMode==='pending'&&
+                 curBsart===CAT_BSART[cat]);
+      var cnt=parseInt(pCount[cat])||0;
+      html+='<a class="sb-link'+
+            (isAct?' active':'')+'"'+
+            ' onclick="switchView(\''+
+            p.code+'\',\'pending\',\''+
+            CAT_BSART[cat]+'\')">';
+      html+='<span style="display:flex;'+
+            'align-items:center;gap:7px;">'+
+            escHtml(CAT_LABELS[cat]||cat)+'</span>';
+      if (cnt>0)
+        html+='<span class="sb-badge '+
+              'sb-badge-pending">'+cnt+'</span>';
+      html+='</a>';
+    });
 
-    /* 2 — PR RND (placeholder, PO Type belum dikonfigurasi) */
-    var isRnd=(curPlant===p.code &&
-               curMode==='pr_rnd');
-    html+='<a class="sb-link'+
-          (isRnd?' active':'')+'"'+
-          ' onclick="switchView(\''+
-          p.code+'\',\'pr_rnd\')">';
-    html+='<span style="display:flex;'+
-          'align-items:center;gap:7px;">'+
-          '&#128300; PR RND</span>';
-    html+='</a>';
-
-    /* 3 — History Approve */
+    /* History Approve */
     var isApp=(curPlant===p.code &&
                curMode==='hist_app');
     html+='<a class="sb-link'+
           (isApp?' active-app':'')+'"'+
           ' onclick="switchView(\''+
-          p.code+'\',\'hist_app\')">';
+          p.code+'\',\'hist_app\',\'\')">';
     html+='<span style="display:flex;'+
           'align-items:center;gap:7px;">'+
           '&#10003; History Approve</span>';
-    if (happ>0)
+    if (totalHapp>0)
       html+='<span class="sb-badge '+
-            'sb-badge-app">'+happ+'</span>';
+            'sb-badge-app">'+totalHapp+'</span>';
     html+='</a>';
 
-    /* 4 — History Reject */
+    /* History Reject */
     var isRej=(curPlant===p.code &&
                curMode==='hist_rej');
     html+='<a class="sb-link'+
           (isRej?' active-rej':'')+'"'+
           ' onclick="switchView(\''+
-          p.code+'\',\'hist_rej\')">';
+          p.code+'\',\'hist_rej\',\'\')">';
     html+='<span style="display:flex;'+
           'align-items:center;gap:7px;">'+
           '&#128465; History Reject</span>';
-    if (hrej>0)
+    if (totalHrej>0)
       html+='<span class="sb-badge '+
-            'sb-badge-rej">'+hrej+'</span>';
+            'sb-badge-rej">'+totalHrej+'</span>';
     html+='</a>';
 
     html+='</div>'; /* sb-submenu */
@@ -1129,9 +1151,10 @@ function toggleSection(plantCode) {
 /* ================================================================
    SWITCH VIEW
    ================================================================ */
-function switchView(plant,mode) {
+function switchView(plant,mode,bsart) {
   curPlant       = plant;
   curMode        = mode;
+  curBsart       = bsart||'';
   curPage        = 1;
   selBanfns      = {};
   searchKw       = '';
@@ -1145,45 +1168,22 @@ function switchView(plant,mode) {
   if      (mode==='pending')  fetchList('');
   else if (mode==='hist_app') fetchHistApp();
   else if (mode==='hist_rej') fetchHistRej();
-  else if (mode==='pr_rnd')   renderPrRnd();
 }
 
 /* ================================================================
    RENDER PR RND — placeholder, PO Type belum dikonfigurasi
    ================================================================ */
-function renderPrRnd() {
-  var html='';
-  html+='<div class="sticky-top">'+
-        '<div class="pg-hdr">'+
-        '<div class="pg-title">'+
-        '&#128300; PR RND &mdash; '+
-        PLANT_LABELS[curPlant]+'</div>'+
-        '<div class="pg-sub">'+
-        'Menu PR RND belum aktif'+
-        '</div></div></div>';
 
-  html+='<div class="empty" style="padding:60px 20px;">'+
-        '<div class="empty-ico">&#128679;</div>'+
-        '<div class="empty-txt">'+
-        'PR RND belum tersedia'+
-        '<div style="font-size:13px;font-weight:400;'+
-        'color:var(--muted);margin-top:6px;">'+
-        'PO Type untuk PR RND belum dikonfigurasi '+
-        'di sistem.'+
-        '</div></div></div>';
-
-  document.getElementById('mainContent')
-    .innerHTML=html;
-  document.getElementById('fab').className='fab';
-}
 
 /* ================================================================
    FETCH LIST — PR Pending
    ================================================================ */
 function fetchList(estkz) {
-  fetch(API_URL+'?action=GET_LIST'+
+  var url=API_URL+'?action=GET_LIST'+
         '&werks='+encodeURIComponent(curPlant)+
-        '&estkz='+encodeURIComponent(estkz||''))
+        '&bsart='+encodeURIComponent(curBsart)+
+        '&estkz='+encodeURIComponent(estkz||'');
+  fetch(url)
     .then(function(r){return r.json();})
     .then(function(res){
       if (res.status!=='S'){
@@ -1203,8 +1203,10 @@ function fetchList(estkz) {
    FETCH HISTORY APPROVE
    ================================================================ */
 function fetchHistApp() {
-  fetch(API_URL+'?action=GET_HIST_APP'+
-        '&werks='+encodeURIComponent(curPlant))
+  var url=API_URL+'?action=GET_HIST_APP'+
+        '&werks='+encodeURIComponent(curPlant)+
+        '&bsart='+encodeURIComponent(curBsart);
+  fetch(url)
     .then(function(r){return r.json();})
     .then(function(res){
       renderHistTable(
@@ -1221,8 +1223,10 @@ function fetchHistApp() {
    FETCH HISTORY REJECT
    ================================================================ */
 function fetchHistRej() {
-  fetch(API_URL+'?action=GET_HIST_REJ'+
-        '&werks='+encodeURIComponent(curPlant))
+  var url=API_URL+'?action=GET_HIST_REJ'+
+        '&werks='+encodeURIComponent(curPlant)+
+        '&bsart='+encodeURIComponent(curBsart);
+  fetch(url)
     .then(function(r){return r.json();})
     .then(function(res){
       renderHistTable(
@@ -1285,10 +1289,18 @@ function renderList() {
   var html='';
 
   /* Sticky header */
+  var curCat='';
+  for (var c in CAT_BSART){
+    if (CAT_BSART[c]===curBsart){curCat=c;break;}
+  }
+  var catLabel=curCat
+    ?(CAT_LABELS[curCat]||curCat)
+    :'PR';
+
   html+='<div class="sticky-top">'+
         '<div class="pg-hdr">'+
         '<div class="pg-title">'+
-        '&#128203; PR Maintenance &mdash; '+
+        '&#128203; '+catLabel+' &mdash; '+
         PLANT_LABELS[curPlant]+'</div>'+
         '<div class="pg-sub">'+
         total+' PR menunggu approval';
@@ -1370,7 +1382,7 @@ function renderList() {
             ?'Tidak ada PR '+
               (curEstkzFilter==='MRP'
                 ?'MRP':'Non-MRP')+' pending'
-            :'Tidak ada PR Maintenance pending')+
+            :'Tidak ada '+catLabel+' PR pending')+
           '</div></div>';
   } else {
     pageData.forEach(function(pr){
@@ -2031,6 +2043,7 @@ function processAction(banfns,action,notes) {
   /* Simpan state untuk reload setelah selesai */
   var savedPlant =curPlant;
   var savedMode  =curMode;
+  var savedBsart =curBsart;
   var savedEstkz =curEstkzFilter;
 
   function doNext(idx) {
@@ -2063,6 +2076,7 @@ function processAction(banfns,action,notes) {
       setTimeout(function(){
         curPlant       =savedPlant;
         curMode        =savedMode;
+        curBsart       =savedBsart;
         curEstkzFilter =savedEstkz;
         curPage        =1;
         allExpanded    =false;

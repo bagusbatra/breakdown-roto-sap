@@ -130,6 +130,11 @@ DATA: lt_return  TYPE STANDARD TABLE OF bapiret2,
 DATA: lv_rel_status TYPE bapimmpara-rel_status,
       lv_rel_ind    TYPE bapimmpara-rel_ind.
 
+DATA: lt_bsart_split TYPE TABLE OF string,
+      lv_bsart_part  TYPE string,
+      lt_bsart_rng   TYPE RANGE OF eban-bsart,
+      ls_bsart_rng   LIKE LINE OF lt_bsart_rng.
+
 *----------------------------------------------------------------------
 * IS APPROVER
 *----------------------------------------------------------------------
@@ -165,6 +170,21 @@ DEFINE fmt_date.
   ENDIF.
 END-OF-DEFINITION.
 
+DEFINE parse_bsart_range.
+  CLEAR &2.
+  SPLIT &1 AT ',' INTO TABLE lt_bsart_split.
+  LOOP AT lt_bsart_split INTO lv_bsart_part.
+    CONDENSE lv_bsart_part.
+    IF lv_bsart_part IS NOT INITIAL.
+      CLEAR ls_bsart_rng.
+      ls_bsart_rng-sign   = 'I'.
+      ls_bsart_rng-option = 'EQ'.
+      ls_bsart_rng-low    = lv_bsart_part.
+      APPEND ls_bsart_rng TO &2.
+    ENDIF.
+  ENDLOOP.
+END-OF-DEFINITION.
+
 *----------------------------------------------------------------------
 * REDIRECT ke index.htm jika bukan action call
 *----------------------------------------------------------------------
@@ -191,90 +211,47 @@ CASE lv_action.
 *======================================================================
   WHEN 'GET_SIDEBAR'.
 *======================================================================
-    DATA: lv_is_app_s TYPE string.
-    DATA: lt_sb_uniq  TYPE STANDARD TABLE OF eban,
-          lt_rj_uniq  TYPE STANDARD TABLE OF zroto_rej_hist,
-          lt_ra_uniq  TYPE STANDARD TABLE OF zroto_app_hist.
-    DATA: lv_cnt_1200  TYPE i,
-          lv_cnt_1300  TYPE i,
-          lv_s_1200    TYPE string,
-          lv_s_1300    TYPE string,
-          lv_rj_1200   TYPE i,
-          lv_rj_1300   TYPE i,
-          lv_sr_1200   TYPE string,
-          lv_sr_1300   TYPE string,
-          lv_ra_1200   TYPE i,
-          lv_ra_1300   TYPE i,
-          lv_sa_1200   TYPE string,
-          lv_sa_1300   TYPE string.
+    TYPES: BEGIN OF ty_cat_def,
+             plant TYPE string,
+             cat   TYPE string,
+             bsart TYPE string,
+           END OF ty_cat_def.
+    DATA: ls_cat_def TYPE ty_cat_def,
+          lt_cat_def TYPE STANDARD TABLE OF ty_cat_def.
+    DATA: lv_is_app_s  TYPE string,
+          lv_cat_cnt_p TYPE i,
+          lv_cat_cnt_a TYPE i,
+          lv_cat_cnt_r TYPE i,
+          lv_cat_str   TYPE string,
+          lv_json_p1200 TYPE string,
+          lv_json_p1300 TYPE string,
+          lv_json_a1200 TYPE string,
+          lv_json_a1300 TYPE string,
+          lv_json_r1200 TYPE string,
+          lv_json_r1300 TYPE string.
 
-    " Pending Surabaya
-    CLEAR lt_sb_uniq.
-    SELECT banfn FROM eban
-      INTO CORRESPONDING FIELDS OF TABLE lt_sb_uniq
-      WHERE bsart = 'ROTO'
-        AND werks = '1200'
-        AND frgkz = 'X'
-        AND frgzu = ' '
-        AND loekz = ' '.
-    SORT lt_sb_uniq BY banfn.
-    DELETE ADJACENT DUPLICATES FROM lt_sb_uniq
-      COMPARING banfn.
-    lv_cnt_1200 = lines( lt_sb_uniq ).
-    lv_s_1200   = lv_cnt_1200.
-    CONDENSE lv_s_1200 NO-GAPS.
+    " Category definitions per plant
+    CLEAR lt_cat_def.
 
-    " Pending Semarang
-    CLEAR lt_sb_uniq.
-    SELECT banfn FROM eban
-      INTO CORRESPONDING FIELDS OF TABLE lt_sb_uniq
-      WHERE bsart = 'ROTO'
-        AND werks = '1300'
-        AND frgkz = 'X'
-        AND frgzu = ' '
-        AND loekz = ' '.
-    SORT lt_sb_uniq BY banfn.
-    DELETE ADJACENT DUPLICATES FROM lt_sb_uniq
-      COMPARING banfn.
-    lv_cnt_1300 = lines( lt_sb_uniq ).
-    lv_s_1300   = lv_cnt_1300.
-    CONDENSE lv_s_1300 NO-GAPS.
+    CLEAR ls_cat_def.
+    ls_cat_def-plant = '1200'. ls_cat_def-cat = 'MTN'. ls_cat_def-bsart = 'ROTO'.
+    APPEND ls_cat_def TO lt_cat_def.
 
-    " History Reject Surabaya
-    CLEAR lt_rj_uniq.
-    SELECT banfn FROM zroto_rej_hist
-      INTO CORRESPONDING FIELDS OF TABLE lt_rj_uniq
-      WHERE werks = '1200'.
-    lv_rj_1200 = lines( lt_rj_uniq ).
-    lv_sr_1200 = lv_rj_1200.
-    CONDENSE lv_sr_1200 NO-GAPS.
+    CLEAR ls_cat_def.
+    ls_cat_def-plant = '1200'. ls_cat_def-cat = 'RND'. ls_cat_def-bsart = 'RSBR,PRK9'.
+    APPEND ls_cat_def TO lt_cat_def.
 
-    " History Reject Semarang
-    CLEAR lt_rj_uniq.
-    SELECT banfn FROM zroto_rej_hist
-      INTO CORRESPONDING FIELDS OF TABLE lt_rj_uniq
-      WHERE werks = '1300'.
-    lv_rj_1300 = lines( lt_rj_uniq ).
-    lv_sr_1300 = lv_rj_1300.
-    CONDENSE lv_sr_1300 NO-GAPS.
+    CLEAR ls_cat_def.
+    ls_cat_def-plant = '1200'. ls_cat_def-cat = 'SVC'. ls_cat_def-bsart = 'PRKS'.
+    APPEND ls_cat_def TO lt_cat_def.
 
-    " History Approve Surabaya
-    CLEAR lt_ra_uniq.
-    SELECT banfn FROM zroto_app_hist
-      INTO CORRESPONDING FIELDS OF TABLE lt_ra_uniq
-      WHERE werks = '1200'.
-    lv_ra_1200 = lines( lt_ra_uniq ).
-    lv_sa_1200 = lv_ra_1200.
-    CONDENSE lv_sa_1200 NO-GAPS.
+    CLEAR ls_cat_def.
+    ls_cat_def-plant = '1300'. ls_cat_def-cat = 'MTN'. ls_cat_def-bsart = 'ROTO'.
+    APPEND ls_cat_def TO lt_cat_def.
 
-    " History Approve Semarang
-    CLEAR lt_ra_uniq.
-    SELECT banfn FROM zroto_app_hist
-      INTO CORRESPONDING FIELDS OF TABLE lt_ra_uniq
-      WHERE werks = '1300'.
-    lv_ra_1300 = lines( lt_ra_uniq ).
-    lv_sa_1300 = lv_ra_1300.
-    CONDENSE lv_sa_1300 NO-GAPS.
+    CLEAR ls_cat_def.
+    ls_cat_def-plant = '1300'. ls_cat_def-cat = 'SVC'. ls_cat_def-bsart = 'PRKS'.
+    APPEND ls_cat_def TO lt_cat_def.
 
     IF lv_is_approver = abap_true.
       lv_is_app_s = 'true'.
@@ -282,18 +259,79 @@ CASE lv_action.
       lv_is_app_s = 'false'.
     ENDIF.
 
+    CLEAR: lv_json_p1200, lv_json_p1300,
+           lv_json_a1200, lv_json_a1300,
+           lv_json_r1200, lv_json_r1300.
+
+    LOOP AT lt_cat_def INTO ls_cat_def.
+      parse_bsart_range ls_cat_def-bsart lt_bsart_rng.
+
+      SELECT SINGLE COUNT(*) FROM eban INTO lv_cat_cnt_p
+        WHERE bsart IN lt_bsart_rng
+          AND werks = ls_cat_def-plant
+          AND frgkz = 'X'
+          AND frgzu = ' '
+          AND loekz = ' '.
+
+      SELECT SINGLE COUNT(*) FROM zroto_app_hist INTO lv_cat_cnt_a
+        WHERE bsart IN lt_bsart_rng
+          AND werks = ls_cat_def-plant.
+
+      SELECT SINGLE COUNT(*) FROM zroto_rej_hist INTO lv_cat_cnt_r
+        WHERE bsart IN lt_bsart_rng
+          AND werks = ls_cat_def-plant.
+
+      CONCATENATE '"' ls_cat_def-cat '":' lv_cat_cnt_p INTO lv_cat_str.
+      IF ls_cat_def-plant = '1200'.
+        IF lv_json_p1200 IS INITIAL.
+          lv_json_p1200 = lv_cat_str.
+        ELSE.
+          CONCATENATE lv_json_p1200 ',' lv_cat_str INTO lv_json_p1200.
+        ENDIF.
+      ELSE.
+        IF lv_json_p1300 IS INITIAL.
+          lv_json_p1300 = lv_cat_str.
+        ELSE.
+          CONCATENATE lv_json_p1300 ',' lv_cat_str INTO lv_json_p1300.
+        ENDIF.
+      ENDIF.
+
+      CONCATENATE '"' ls_cat_def-cat '":' lv_cat_cnt_a INTO lv_cat_str.
+      IF ls_cat_def-plant = '1200'.
+        IF lv_json_a1200 IS INITIAL.
+          lv_json_a1200 = lv_cat_str.
+        ELSE.
+          CONCATENATE lv_json_a1200 ',' lv_cat_str INTO lv_json_a1200.
+        ENDIF.
+      ELSE.
+        IF lv_json_a1300 IS INITIAL.
+          lv_json_a1300 = lv_cat_str.
+        ELSE.
+          CONCATENATE lv_json_a1300 ',' lv_cat_str INTO lv_json_a1300.
+        ENDIF.
+      ENDIF.
+
+      CONCATENATE '"' ls_cat_def-cat '":' lv_cat_cnt_r INTO lv_cat_str.
+      IF ls_cat_def-plant = '1200'.
+        IF lv_json_r1200 IS INITIAL.
+          lv_json_r1200 = lv_cat_str.
+        ELSE.
+          CONCATENATE lv_json_r1200 ',' lv_cat_str INTO lv_json_r1200.
+        ENDIF.
+      ELSE.
+        IF lv_json_r1300 IS INITIAL.
+          lv_json_r1300 = lv_cat_str.
+        ELSE.
+          CONCATENATE lv_json_r1300 ',' lv_cat_str INTO lv_json_r1300.
+        ENDIF.
+      ENDIF.
+    ENDLOOP.
+
     CONCATENATE
       '{"status":"S","is_approver":' lv_is_app_s
-      ',"pending":{'
-        '"1200":' lv_s_1200 ','
-        '"1300":' lv_s_1300
-      '},"hist_rej":{'
-        '"1200":' lv_sr_1200 ','
-        '"1300":' lv_sr_1300
-      '},"hist_app":{'
-        '"1200":' lv_sa_1200 ','
-        '"1300":' lv_sa_1300
-      '}}'
+      ',"pending":{"1200":{' lv_json_p1200 '},"1300":{' lv_json_p1300 '}}'
+      ',"hist_app":{"1200":{' lv_json_a1200 '},"1300":{' lv_json_a1300 '}}'
+      ',"hist_rej":{"1200":{' lv_json_r1200 '},"1300":{' lv_json_r1300 '}}}'
       INTO lv_output.
 
 *======================================================================
@@ -309,11 +347,19 @@ CASE lv_action.
 
     CLEAR: lt_head, lt_items, lt_makt.
 
+    IF lv_bsart IS INITIAL.
+      CLEAR lt_bsart_rng.
+      ls_bsart_rng-sign = 'I'. ls_bsart_rng-option = 'CP'. ls_bsart_rng-low = '*'.
+      APPEND ls_bsart_rng TO lt_bsart_rng.
+    ELSE.
+      parse_bsart_range lv_bsart lt_bsart_rng.
+    ENDIF.
+
     SELECT banfn badat werks bsart txz01 ernam ekgrp
            frgkz frgzu loekz estkz
       FROM eban
       INTO CORRESPONDING FIELDS OF TABLE lt_head
-      WHERE bsart = 'ROTO'
+      WHERE bsart IN lt_bsart_rng
         AND werks  = lv_werks
         AND frgkz  = 'X'
         AND frgzu  = ' '
@@ -619,12 +665,21 @@ CASE lv_action.
     ENDIF.
 
     CLEAR lt_hist_rej.
+    IF lv_bsart IS INITIAL.
+      CLEAR lt_bsart_rng.
+      ls_bsart_rng-sign = 'I'. ls_bsart_rng-option = 'CP'. ls_bsart_rng-low = '*'.
+      APPEND ls_bsart_rng TO lt_bsart_rng.
+    ELSE.
+      parse_bsart_range lv_bsart lt_bsart_rng.
+    ENDIF.
+
     SELECT banfn bnfpo werks bsart txz01 ernam erdat
            menge meins preis peinh waers ekgrp
            del_by del_at del_tm reason
       FROM zroto_rej_hist
       INTO CORRESPONDING FIELDS OF TABLE lt_hist_rej
       WHERE werks = lv_werks
+        AND bsart IN lt_bsart_rng
       ORDER BY del_at DESCENDING del_tm DESCENDING.
 
     IF lt_hist_rej IS INITIAL.
@@ -675,6 +730,7 @@ CASE lv_action.
       CONCATENATE lv_json lv_sep
         '{"banfn":"'  ls_hist_rej-banfn  '",'
         '"bnfpo":"'   ls_hist_rej-bnfpo  '",'
+        '"bsart":"'   ls_hist_rej-bsart  '",'
         '"werks":"'   ls_hist_rej-werks  '",'
         '"txz01":"'   lv_h_txz01         '",'
         '"ernam":"'   ls_hist_rej-ernam  '",'
@@ -709,12 +765,21 @@ CASE lv_action.
     ENDIF.
 
     CLEAR lt_hist_app.
+    IF lv_bsart IS INITIAL.
+      CLEAR lt_bsart_rng.
+      ls_bsart_rng-sign = 'I'. ls_bsart_rng-option = 'CP'. ls_bsart_rng-low = '*'.
+      APPEND ls_bsart_rng TO lt_bsart_rng.
+    ELSE.
+      parse_bsart_range lv_bsart lt_bsart_rng.
+    ENDIF.
+
     SELECT banfn bnfpo werks bsart txz01 ernam erdat
            menge meins preis peinh waers ekgrp
            app_by app_at app_tm
       FROM zroto_app_hist
       INTO CORRESPONDING FIELDS OF TABLE lt_hist_app
       WHERE werks = lv_werks
+        AND bsart IN lt_bsart_rng
       ORDER BY app_at DESCENDING app_tm DESCENDING.
 
     IF lt_hist_app IS INITIAL.
@@ -762,6 +827,7 @@ CASE lv_action.
       CONCATENATE lv_json lv_sep
         '{"banfn":"'  ls_hist_app-banfn  '",'
         '"bnfpo":"'   ls_hist_app-bnfpo  '",'
+        '"bsart":"'   ls_hist_app-bsart  '",'
         '"werks":"'   ls_hist_app-werks  '",'
         '"txz01":"'   lv_a_txz01         '",'
         '"ernam":"'   ls_hist_app-ernam  '",'
@@ -807,7 +873,7 @@ CASE lv_action.
     CLEAR lt_items.
     SELECT banfn bnfpo matnr txz01 menge meins preis
            peinh waers lfdat werks ekgrp ernam badat
-           loekz estkz
+           loekz estkz bsart
       FROM eban
       INTO CORRESPONDING FIELDS OF TABLE lt_items
       WHERE banfn = lv_banfn_e
@@ -898,7 +964,7 @@ CASE lv_action.
           ls_zapp-banfn  = ls_item-banfn.
           ls_zapp-bnfpo  = ls_item-bnfpo.
           ls_zapp-werks  = ls_item-werks.
-          ls_zapp-bsart  = 'ROTO'.
+          ls_zapp-bsart  = ls_item-bsart.
           ls_zapp-txz01  = ls_item-txz01.
           ls_zapp-ernam  = ls_item-ernam.
           ls_zapp-erdat  = ls_item-badat.
@@ -941,7 +1007,7 @@ CASE lv_action.
         ls_zroto-banfn  = ls_item-banfn.
         ls_zroto-bnfpo  = ls_item-bnfpo.
         ls_zroto-werks  = ls_item-werks.
-        ls_zroto-bsart  = 'ROTO'.
+        ls_zroto-bsart  = ls_item-bsart.
         ls_zroto-txz01  = ls_item-txz01.
         ls_zroto-ernam  = ls_item-ernam.
         ls_zroto-erdat  = ls_item-badat.

@@ -25,7 +25,7 @@ ENDIF.
   <meta charset="UTF-8">
   <meta name="viewport"
         content="width=device-width, initial-scale=1.0">
-  <title>Release PR ROTO - PT. Kayu Mebel Indonesia</title>
+  <title>Release Purchasing Requisition - PT. Kayu Mebel Indonesia</title>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=DM+Mono:wght@400;500&display=swap"
         rel="stylesheet">
   <style>
@@ -622,7 +622,7 @@ ENDIF.
                 object-fit:contain;">
   </div>
   <div>
-    <div class="hdr-brand">Release PR ROTO</div>
+    <div class="hdr-brand">Release Purchasing Requisition</div>
     <div class="hdr-corp">
       PT. Kayu Mebel Indonesia
     </div>
@@ -1053,7 +1053,7 @@ function renderSidebar() {
     /* Submenu */
     html+='<div class="sb-submenu">';
 
-    /* 1 — PR Pending */
+    /* 1 — PR Pending (PR Maintenance) */
     var isPend=(curPlant===p.code &&
                 curMode==='pending');
     html+='<a class="sb-link'+
@@ -1062,13 +1062,25 @@ function renderSidebar() {
           p.code+'\',\'pending\')">';
     html+='<span style="display:flex;'+
           'align-items:center;gap:7px;">'+
-          '&#128203; PR One Time Off</span>';
+          '&#128203; PR Maintenance</span>';
     if (pend>0)
       html+='<span class="sb-badge '+
             'sb-badge-pending">'+pend+'</span>';
     html+='</a>';
 
-    /* 2 — History Approve */
+    /* 2 — PR RND (placeholder, PO Type belum dikonfigurasi) */
+    var isRnd=(curPlant===p.code &&
+               curMode==='pr_rnd');
+    html+='<a class="sb-link'+
+          (isRnd?' active':'')+'"'+
+          ' onclick="switchView(\''+
+          p.code+'\',\'pr_rnd\')">';
+    html+='<span style="display:flex;'+
+          'align-items:center;gap:7px;">'+
+          '&#128300; PR RND</span>';
+    html+='</a>';
+
+    /* 3 — History Approve */
     var isApp=(curPlant===p.code &&
                curMode==='hist_app');
     html+='<a class="sb-link'+
@@ -1083,7 +1095,7 @@ function renderSidebar() {
             'sb-badge-app">'+happ+'</span>';
     html+='</a>';
 
-    /* 3 — History Reject */
+    /* 4 — History Reject */
     var isRej=(curPlant===p.code &&
                curMode==='hist_rej');
     html+='<a class="sb-link'+
@@ -1133,6 +1145,36 @@ function switchView(plant,mode) {
   if      (mode==='pending')  fetchList('');
   else if (mode==='hist_app') fetchHistApp();
   else if (mode==='hist_rej') fetchHistRej();
+  else if (mode==='pr_rnd')   renderPrRnd();
+}
+
+/* ================================================================
+   RENDER PR RND — placeholder, PO Type belum dikonfigurasi
+   ================================================================ */
+function renderPrRnd() {
+  var html='';
+  html+='<div class="sticky-top">'+
+        '<div class="pg-hdr">'+
+        '<div class="pg-title">'+
+        '&#128300; PR RND &mdash; '+
+        PLANT_LABELS[curPlant]+'</div>'+
+        '<div class="pg-sub">'+
+        'Menu PR RND belum aktif'+
+        '</div></div></div>';
+
+  html+='<div class="empty" style="padding:60px 20px;">'+
+        '<div class="empty-ico">&#128679;</div>'+
+        '<div class="empty-txt">'+
+        'PR RND belum tersedia'+
+        '<div style="font-size:13px;font-weight:400;'+
+        'color:var(--muted);margin-top:6px;">'+
+        'PO Type untuk PR RND belum dikonfigurasi '+
+        'di sistem.'+
+        '</div></div></div>';
+
+  document.getElementById('mainContent')
+    .innerHTML=html;
+  document.getElementById('fab').className='fab';
 }
 
 /* ================================================================
@@ -1246,7 +1288,7 @@ function renderList() {
   html+='<div class="sticky-top">'+
         '<div class="pg-hdr">'+
         '<div class="pg-title">'+
-        '&#128203; PR Pending ROTO &mdash; '+
+        '&#128203; PR Maintenance &mdash; '+
         PLANT_LABELS[curPlant]+'</div>'+
         '<div class="pg-sub">'+
         total+' PR menunggu approval';
@@ -1328,7 +1370,7 @@ function renderList() {
             ?'Tidak ada PR '+
               (curEstkzFilter==='MRP'
                 ?'MRP':'Non-MRP')+' pending'
-            :'Tidak ada PR ROTO pending')+
+            :'Tidak ada PR Maintenance pending')+
           '</div></div>';
   } else {
     pageData.forEach(function(pr){
@@ -1763,119 +1805,148 @@ function loadDetail(banfn) {
           'font-size:13px;color:var(--muted);'+
           'text-align:center;">'+
           'Tidak ada item.</div>';
-        return;
-      }
-      var waers=items[0].waers||'IDR';
-      var html=
-        '<div style="overflow-x:auto;">'+
-        '<table><thead><tr>'+
-        '<th>Item</th><th>Material</th>'+
-        '<th>Deskripsi</th>'+
-        '<th class="num">Qty</th>'+
-        '<th>UoM</th>'+
-        '<th class="num">Harga/Unit</th>'+
-        '<th class="num">Total</th>'+
-        '<th>Curr</th>'+
-        '<th>Tgl Butuh</th>'+
-        '</tr></thead><tbody>';
+ return;
+  }
+  var waers=items[0].waers||'IDR';
+  var html=
+    '<div style="overflow-x:auto;">'+
+    '<table><thead><tr>'+
+    '<th>Item</th><th>Material</th>'+
+    '<th>Deskripsi</th>'+
+    '<th class="num">Qty</th>'+
+    '<th>UoM</th>'+
+    '<th class="num">Harga/Unit</th>'+
+    '<th class="num">Total</th>'+
+    '<th>Curr</th>'+
+    '<th>Tgl Butuh</th>'+
+    '</tr></thead><tbody>';
 
-      items.forEach(function(it){
-        var w=it.waers||waers;
-        var cs=w==='IDR'
-          ?'background:#f1f5f9;color:#475569;'
-          :w==='USD'
-            ?'background:#dbeafe;color:#1d4ed8;'
-            :'background:#fef9c3;color:#854d0e;';
-        html+='<tr>';
-        html+='<td style="font-family:\'DM Mono\','+
-              'monospace;font-weight:600;'+
-              'color:var(--primary);">'+
-              escHtml(it.bnfpo)+'</td>';
-        html+='<td style="font-family:\'DM Mono\','+
-              'monospace;font-size:12px;">'+
-              escHtml(it.matnr||'-')+'</td>';
-        html+='<td style="font-weight:500;">'+
-              escHtml(it.maktx||it.txz01||'-')+
-              '</td>';
-        html+='<td class="num">'+
-              fmtQty(it.menge)+'</td>';
-        html+='<td><span style="background:#f1f5f9;'+
-              'padding:2px 6px;border-radius:4px;'+
-              'font-size:11px;">'+
-              escHtml(it.meins)+'</span></td>';
-        html+='<td class="num">'+
-              fmtAmt(it.preis,w)+'</td>';
-        html+='<td class="num"'+
-              ' style="font-weight:700;">'+
-              fmtAmt(it.total,w)+'</td>';
-        html+='<td><span style="padding:2px 6px;'+
-              'border-radius:4px;font-size:11px;'+
-              'font-weight:600;'+cs+'">'+
-              escHtml(w)+'</span></td>';
-        html+='<td style="color:var(--muted);">'+
-              escHtml(it.lfdat||'-')+'</td>';
-        html+='</tr>';
-      });
-      html+='</tbody></table></div>';
-      el.innerHTML=html;
-    })
-    .catch(function(){
-      el.innerHTML=
-        '<div style="padding:12px;'+
-        'font-size:13px;color:var(--danger);'+
-        'text-align:center;">'+
-        'Gagal memuat detail.</div>';
-    });
+  items.forEach(function(it){
+    var w=it.waers||waers;
+    var cs=w==='IDR'
+      ?'background:#f1f5f9;color:#475569;'
+      :w==='USD'
+        ?'background:#dbeafe;color:#1d4ed8;'
+        :'background:#fef9c3;color:#854d0e;';
+    html+='<tr>';
+    html+='<td style="font-family:\'DM Mono\','+
+          'monospace;font-weight:600;'+
+          'color:var(--primary);">'+
+          escHtml(it.bnfpo)+'</td>';
+    html+='<td style="font-family:\'DM Mono\','+
+          'monospace;font-size:12px;">'+
+          escHtml(it.matnr||'-')+'</td>';
+    html+='<td style="font-weight:500;">'+
+          escHtml(it.maktx||it.txz01||'-')+
+          '</td>';
+    html+='<td class="num">'+
+          fmtQty(it.menge)+'</td>';
+    html+='<td><span style="background:#f1f5f9;'+
+          'padding:2px 6px;border-radius:4px;'+
+          'font-size:11px;">'+
+          escHtml(it.meins)+'</span></td>';
+    html+='<td class="num">'+
+          fmtAmt(it.preis,w)+'</td>';
+    html+='<td class="num"'+
+          ' style="font-weight:700;">'+
+          fmtAmt(it.total,w)+'</td>';
+    html+='<td><span style="padding:2px 6px;'+
+          'border-radius:4px;font-size:11px;'+
+          'font-weight:600;'+cs+'">'+
+          escHtml(w)+'</span></td>';
+    html+='<td style="color:var(--muted);">'+
+          escHtml(it.lfdat||'-')+'</td>';
+    html+='</tr>';
+  });
+  html+='</tbody></table></div>';
+  el.innerHTML=html;
+})
+.catch(function(){
+  el.innerHTML=
+    '<div style="padding:12px;'+
+    'font-size:13px;color:var(--danger);'+
+    'text-align:center;">'+
+    'Gagal memuat detail.</div>';
+});
 }
-
 /* ================================================================
-   SELECT / DESELECT
-   ================================================================ */
+
+SELECT / DESELECT
+
+================================================================ */
+
 function toggleSelect(banfn) {
-  if (!isApprover) return;
-  if (selBanfns[banfn]) delete selBanfns[banfn];
-  else selBanfns[banfn]=true;
-  updateFabInfo(); syncCheckboxes();
-}
 
+if (!isApprover) return;
+
+if (selBanfns[banfn]) delete selBanfns[banfn];
+
+else selBanfns[banfn]=true;
+
+updateFabInfo(); syncCheckboxes();
+
+}
 function toggleSelectAll() {
-  if (!isApprover) return;
-  var s=pageSize===0?0:(curPage-1)*pageSize;
-  var e=pageSize===0?filteredData.length
-    :Math.min(s+pageSize,filteredData.length);
 
-  var allSel=true;
-  for (var i=s;i<e;i++){
-    if (!selBanfns[filteredData[i].banfn]){
-      allSel=false; break;
-    }
-  }
-  for (var i=s;i<e;i++){
-    var bn=filteredData[i].banfn;
-    if (allSel) delete selBanfns[bn];
-    else selBanfns[bn]=true;
-  }
+if (!isApprover) return;
 
-  var btn=document.getElementById('btnSelAll');
-  if (btn) btn.innerHTML=allSel
-    ?'&#9744; Select All'
-    :'&#9745; Deselect All';
+var s=pageSize===0?0:(curPage-1)*pageSize;
 
-  updateFabInfo(); syncCheckboxes();
+var e=pageSize===0?filteredData.length
+
+:Math.min(s+pageSize,filteredData.length);
+var allSel=true;
+
+for (var i=s;i<e;i++){
+
+if (!selBanfns[filteredData[i].banfn]){
+
+allSel=false; break;
+
 }
 
+}
+
+for (var i=s;i<e;i++){
+
+var bn=filteredData[i].banfn;
+
+if (allSel) delete selBanfns[bn];
+
+else selBanfns[bn]=true;
+
+}
+var btn=document.getElementById('btnSelAll');
+
+if (btn) btn.innerHTML=allSel
+
+?'☐ Select All'
+
+:'☑ Deselect All';
+updateFabInfo(); syncCheckboxes();
+
+}
 function syncCheckboxes() {
-  document.querySelectorAll('.card-cb')
-    .forEach(function(cb){
-      cb.checked=!!selBanfns[cb.dataset.banfn];
-    });
+
+document.querySelectorAll('.card-cb')
+
+.forEach(function(cb){
+
+cb.checked=!!selBanfns[cb.dataset.banfn];
+
+});
+
+}
+function updateFabInfo() {
+
+var cnt=Object.keys(selBanfns).length;
+
+var el=document.getElementById('fabInfo');
+
+if (el) el.textContent=cnt+' PR dipilih';
+
 }
 
-function updateFabInfo() {
-  var cnt=Object.keys(selBanfns).length;
-  var el=document.getElementById('fabInfo');
-  if (el) el.textContent=cnt+' PR dipilih';
-}
 </script>
 <script>
 /* ================================================================
@@ -2061,6 +2132,5 @@ function processAction(banfns,action,notes) {
    ================================================================ */
 init();
 </script>
-
 </body>
 </html>
