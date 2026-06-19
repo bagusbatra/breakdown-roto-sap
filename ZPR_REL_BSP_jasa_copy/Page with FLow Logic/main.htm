@@ -219,9 +219,9 @@ CASE lv_action.
           lt_ra_uniq  TYPE STANDARD TABLE OF zroto_app_hist.
     DATA: lv_sb_cnt      TYPE i,
           lv_s_1200_roto TYPE string,
-          lv_s_1200_rsb7 TYPE string,
+          lv_s_1200_PRK9 TYPE string,
           lv_s_1300_roto TYPE string,
-          lv_s_1300_rsb7 TYPE string,
+          lv_s_1300_PRK9 TYPE string,
           lv_rj_1200   TYPE i,
           lv_rj_1300   TYPE i,
           lv_sr_1200   TYPE string,
@@ -234,9 +234,9 @@ CASE lv_action.
     " Pending per plant per kategori (kontrak JSON: §8.0
     " development-to-roto.md)
     count_pending 'ROTO' '1200' lv_s_1200_roto.
-    count_pending 'RSB7' '1200' lv_s_1200_rsb7.
+    count_pending 'PRK9' '1200' lv_s_1200_PRK9.
     count_pending 'ROTO' '1300' lv_s_1300_roto.
-    count_pending 'RSB7' '1300' lv_s_1300_rsb7.
+    count_pending 'PRK9' '1300' lv_s_1300_PRK9.
 
     " History Reject Surabaya
     CLEAR lt_rj_uniq.
@@ -285,11 +285,11 @@ CASE lv_action.
       ',"pending":{'
         '"1200":{'
           '"ROTO":' lv_s_1200_roto ','
-          '"RSB7":' lv_s_1200_rsb7
+          '"PRK9":' lv_s_1200_PRK9
         '},'
         '"1300":{'
           '"ROTO":' lv_s_1300_roto ','
-          '"RSB7":' lv_s_1300_rsb7
+          '"PRK9":' lv_s_1300_PRK9
         '}'
       '},"hist_rej":{'
         '"1200":' lv_sr_1200 ','
@@ -311,11 +311,11 @@ CASE lv_action.
       EXIT.
     ENDIF.
 
-    " Whitelist kategori — ROTO/RSB7
+    " Whitelist kategori — ROTO/PRK9
     IF lv_bsart IS INITIAL.
       lv_bsart = 'ROTO'.
     ELSEIF lv_bsart NE 'ROTO'
-       AND lv_bsart NE 'RSB7'.
+       AND lv_bsart NE 'PRK9'.
       lv_output = '{"status":"E",' &
         '"message":"bsart tidak valid","data":[]}'.
       response->append_cdata( lv_output ).

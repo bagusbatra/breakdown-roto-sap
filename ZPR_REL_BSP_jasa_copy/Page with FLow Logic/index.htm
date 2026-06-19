@@ -797,8 +797,8 @@ var histType = '';
 
 /* pending per plant per kategori */
 var sbCounts = {
-  pending:  { '1200':{ROTO:0,RSB7:0},
-              '1300':{ROTO:0,RSB7:0} },
+  pending:  { '1200':{ROTO:0,PRK9:0},
+              '1300':{ROTO:0,PRK9:0} },
   hist_app: { '1200':0, '1300':0 },
   hist_rej: { '1200':0, '1300':0 }
 };
@@ -812,14 +812,14 @@ var PR_CATEGORIES = {
   'ROTO': { label:'PR Maintenance',
             short:'Maintenance',
             icon:'&#128203;' },
-  'RSB7': { label:'PR RND',
+  'PRK9': { label:'PR RND',
             short:'RND',
             icon:'&#128736;' }
 };
 
 var PLANT_CATEGORIES = {
-  '1200': ['ROTO', 'RSB7'],
-  '1300': ['ROTO', 'RSB7']
+  '1200': ['ROTO', 'PRK9'],
+  '1300': ['ROTO', 'PRK9']
 };
 
 function getBsartLabel(bs) {
@@ -952,12 +952,12 @@ function doLogout() {
     .finally(function(){
       var xhr=new XMLHttpRequest();
       xhr.open('GET',
-        '/sap/bc/bsp/sap/ZBSP_RSBT_APP/index.htm',
+        '/sap/bc/bsp/sap/zbsp_prch_app/index.htm',
         true,'logout','logout');
       xhr.onreadystatechange=function(){
         if (xhr.readyState===4)
           window.location.replace(
-            '/sap/bc/bsp/sap/ZBSP_RSBT_APP/index.htm');
+            '/sap/bc/bsp/sap/zbsp_prch_app/index.htm');
       };
       xhr.send();
     });
@@ -1020,13 +1020,13 @@ function loadSidebarData() {
         var o1200 = pd['1200']||{};
         sbCounts.pending['1200'] = {
           ROTO: parseInt(o1200.ROTO)||0,
-          RSB7: parseInt(o1200.RSB7)||0
+          PRK9: parseInt(o1200.PRK9)||0
         };
 
         var o1300 = pd['1300']||{};
         sbCounts.pending['1300'] = {
           ROTO: parseInt(o1300.ROTO)||0,
-          RSB7: parseInt(o1300.RSB7)||0
+          PRK9: parseInt(o1300.PRK9)||0
         };
 
         sbCounts.hist_rej['1200']=
@@ -1614,7 +1614,7 @@ function buildHistTable(data,type) {
           'monospace;font-size:12px;">'+
           escHtml(h.bnfpo)+'</td>';
 
-    var bcls=(h.bsart==='RSB7')
+    var bcls=(h.bsart==='PRK9')
       ?'background:#ecfeff;color:#0e7490;'
       :'background:#eef2ff;color:#4338ca;';
     html+='<td><span style="padding:2px 6px;'+
