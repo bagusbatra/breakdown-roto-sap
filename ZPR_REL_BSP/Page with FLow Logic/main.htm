@@ -687,15 +687,10 @@ CASE lv_action.
       EXIT.
     ENDIF.
 
-    IF lv_bsart IS INITIAL.
-      lv_output = '{"status":"E",' &
-        '"message":"Kategori PR (bsart) belum dipilih","data":[]}'.
-      response->append_cdata( lv_output ).
-      _m_navigation->response_complete( ).
-      EXIT.
+    CLEAR lt_bsart_rng.
+    IF lv_bsart IS NOT INITIAL AND lv_bsart NE 'ALL'.
+      parse_bsart_range lv_bsart lt_bsart_rng.
     ENDIF.
-
-    parse_bsart_range lv_bsart lt_bsart_rng.
 
     CLEAR lt_hist_rej.
     SELECT banfn bnfpo werks bsart txz01 ernam erdat
@@ -789,15 +784,10 @@ CASE lv_action.
       EXIT.
     ENDIF.
 
-    IF lv_bsart IS INITIAL.
-      lv_output = '{"status":"E",' &
-        '"message":"Kategori PR (bsart) belum dipilih","data":[]}'.
-      response->append_cdata( lv_output ).
-      _m_navigation->response_complete( ).
-      EXIT.
+    CLEAR lt_bsart_rng.
+    IF lv_bsart IS NOT INITIAL AND lv_bsart NE 'ALL'.
+      parse_bsart_range lv_bsart lt_bsart_rng.
     ENDIF.
-
-    parse_bsart_range lv_bsart lt_bsart_rng.
 
     CLEAR lt_hist_app.
     SELECT banfn bnfpo werks bsart txz01 ernam erdat

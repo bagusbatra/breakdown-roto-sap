@@ -1094,7 +1094,7 @@ function normalizeCatCounts(group,werks) {
 }
 
 /* ================================================================
-   RENDER SIDEBAR
+   RENDER SIDEBAR (Flat Doc Types & Global History per Plant)
    ================================================================ */
 function renderSidebar() {
   var plants=[
@@ -1137,88 +1137,42 @@ function renderSidebar() {
           '&#9660;</span>';
     html+='</span></div>';
 
-    /* Submenu — daftar kategori */
+    /* Submenu internal Plant */
     html+='<div class="sb-submenu">';
 
+    /* A. TOMBOL PENDING SESUAI DOC TYPE (Langsung klik tanpa submenu lagi) */
     cats.forEach(function(cat){
-      var catKey   =p.code+'_'+cat.code;
-      var catOpen  =(curPlant===p.code &&
-                     curCategory===cat.code)||
-                    (openCategories[catKey]===true);
-      var pend =(sbCounts.pending[p.code]||{})[cat.code]||0;
-      var happ =(sbCounts.hist_app[p.code]||{})[cat.code]||0;
-      var hrej =(sbCounts.hist_rej[p.code]||{})[cat.code]||0;
+      var pend=(sbCounts.pending[p.code]||{})[cat.code]||0;
+      var isPendActive=(curPlant===p.code && curCategory===cat.code && curMode==='pending');
 
-      html+='<div class="sb-cat'+
-            (catOpen?' open':'')+
-            '" id="sbCat_'+catKey+'">';
-
-      /* Header kategori */
-      html+='<div class="sb-cat-hdr"'+
-            ' onclick="toggleCategory(\''+
-            catKey+'\')">';
-      html+='<span class="sb-cat-left">'+
-            cat.icon+' '+cat.label+'</span>';
-      html+='<span style="display:flex;'+
-            'align-items:center;gap:6px;">';
-      if (pend>0)
-        html+='<span class="sb-badge '+
-              'sb-badge-pending">'+pend+'</span>';
-      html+='<span class="sb-cat-chevron">'+
-            '&#9660;</span></span>';
-      html+='</div>';
-
-      /* Submenu mode — Pending / Hist App / Hist Rej */
-      html+='<div class="sb-cat-submenu">';
-
-      var isPend=(curPlant===p.code &&
-                  curCategory===cat.code &&
-                  curMode==='pending');
-      html+='<a class="sb-link'+
-            (isPend?' active':'')+'"'+
-            ' onclick="switchView(\''+p.code+'\',\''+
-            cat.code+'\',\'pending\')">';
-      html+='<span style="display:flex;'+
-            'align-items:center;gap:7px;">'+
-            '&#128203; Pending</span>';
-      if (pend>0)
-        html+='<span class="sb-badge '+
-              'sb-badge-pending">'+pend+'</span>';
+      html+='<a class="sb-link'+(isPendActive?' active':'')+'" style="padding-left:20px;" '+
+            'onclick="switchView(\''+p.code+'\',\''+cat.code+'\',\'pending\')">';
+      html+='<span style="display:flex;align-items:center;gap:7px;">'+cat.icon+' '+cat.label+'</span>';
+      if (pend>0) html+='<span class="sb-badge sb-badge-pending">'+pend+'</span>';
       html+='</a>';
-
-      var isApp=(curPlant===p.code &&
-                 curCategory===cat.code &&
-                 curMode==='hist_app');
-      html+='<a class="sb-link'+
-            (isApp?' active-app':'')+'"'+
-            ' onclick="switchView(\''+p.code+'\',\''+
-            cat.code+'\',\'hist_app\')">';
-      html+='<span style="display:flex;'+
-            'align-items:center;gap:7px;">'+
-            '&#10003; History Approve</span>';
-      if (happ>0)
-        html+='<span class="sb-badge '+
-              'sb-badge-app">'+happ+'</span>';
-      html+='</a>';
-
-      var isRej=(curPlant===p.code &&
-                 curCategory===cat.code &&
-                 curMode==='hist_rej');
-      html+='<a class="sb-link'+
-            (isRej?' active-rej':'')+'"'+
-            ' onclick="switchView(\''+p.code+'\',\''+
-            cat.code+'\',\'hist_rej\')">';
-      html+='<span style="display:flex;'+
-            'align-items:center;gap:7px;">'+
-            '&#128465; History Reject</span>';
-      if (hrej>0)
-        html+='<span class="sb-badge '+
-              'sb-badge-rej">'+hrej+'</span>';
-      html+='</a>';
-
-      html+='</div>'; /* sb-cat-submenu */
-      html+='</div>'; /* sb-cat */
     });
+
+    /* B. TOMBOL HISTORY APPROVE (Per Plant - Gabungan) */
+    var happTot=0;
+    cats.forEach(function(c){happTot+=parseInt((sbCounts.hist_app[p.code]||{})[c.code])||0;});
+    var isAppActive=(curPlant===p.code && curMode==='hist_app');
+
+    html+='<a class="sb-link'+(isAppActive?' active-app':'')+'" style="padding-left:20px; border-top:1px dashed #e5e7eb;" '+
+          'onclick="switchView(\''+p.code+'\',\'ALL\',\'hist_app\')">';
+    html+='<span style="display:flex;align-items:center;gap:7px;">&#10003; History Approve</span>';
+    if (happTot>0) html+='<span class="sb-badge sb-badge-app">'+happTot+'</span>';
+    html+='</a>';
+
+    /* C. TOMBOL HISTORY REJECT (Per Plant - Gabungan) */
+    var hrejTot=0;
+    cats.forEach(function(c){hrejTot+=parseInt((sbCounts.hist_rej[p.code]||{})[c.code])||0;});
+    var isRejActive=(curPlant===p.code && curMode==='hist_rej');
+
+    html+='<a class="sb-link'+(isRejActive?' active-rej':'')+'" style="padding-left:20px;" '+
+          'onclick="switchView(\''+p.code+'\',\'ALL\',\'hist_rej\')">';
+    html+='<span style="display:flex;align-items:center;gap:7px;">&#128465; History Reject</span>';
+    if (hrejTot>0) html+='<span class="sb-badge sb-badge-rej">'+hrejTot+'</span>';
+    html+='</a>';
 
     html+='</div>'; /* sb-submenu */
     html+='</div>'; /* sb-section */
@@ -1253,7 +1207,7 @@ function switchView(plant,category,mode) {
 
   curPlant       = plant;
   curCategory    = category;
-  curBsart       = catDef?catDef.bsart:'';
+  curBsart       = (category==='ALL')?'':(catDef?catDef.bsart:'');
   curMode        = mode;
   curPage        = 1;
   selBanfns      = {};
@@ -1591,7 +1545,7 @@ function renderHistTable(data,type) {
   var color =isApp
     ?'var(--success)':'var(--danger)';
   var catDef=getCategoryDef(curPlant,curCategory);
-  var catLbl=catDef?catDef.label:'PR';
+  var catLbl=catDef?catDef.label:(curCategory==='ALL'?'All PR':'PR');
 
   var html='';
   html+='<div class="sticky-top">'+
