@@ -133,13 +133,9 @@ DATA: lv_rel_status TYPE bapimmpara-rel_status,
       lv_rel_ind    TYPE bapimmpara-rel_ind.
 
 *----------------------------------------------------------------------
-* IS APPROVER
+* IS APPROVER — permanen false (read-only mode)
 *----------------------------------------------------------------------
-IF lv_uname = 'KMI-BOD'.
-  lv_is_approver = abap_true.
-ELSE.
-  lv_is_approver = abap_false.
-ENDIF.
+lv_is_approver = abap_false.
 
 *----------------------------------------------------------------------
 * MACROS
