@@ -394,6 +394,14 @@ ENDIF.
       border-bottom:1px solid var(--border);
       white-space:nowrap;
     }
+    .hist-table th:first-child,
+    .hist-table td:first-child {
+      position:sticky; left:0; z-index:2;
+      background:#fff;
+    }
+    .hist-table th:first-child {
+      background:#f9fafb;
+    }
     .hist-table td {
       padding:10px 14px;
       border-bottom:1px solid #f9fafb;
@@ -416,6 +424,9 @@ ENDIF.
       z-index:400;
     }
     .fab.show { display:flex; }
+    .fab.show ~ #mainContent #cardContainer {
+      padding-bottom:70px;
+    }
     .fab-info {
       font-size:13px; font-weight:600;
       color:#374151; white-space:nowrap; padding:0 4px;
@@ -551,6 +562,25 @@ ENDIF.
     .btn-success { background:var(--success); }
     .btn-danger  { background:var(--danger); }
 
+    /* ── SKELETON ── */
+    .sb-skel {
+      padding:14px 18px;
+    }
+    .sb-skel-line {
+      height:12px; background:linear-gradient(90deg,#eee 25%,#f5f5f5 50%,#eee 75%);
+      background-size:200% 100%;
+      animation:shimmer 1.4s ease infinite;
+      border-radius:4px; margin-bottom:10px;
+    }
+    .sb-skel-line:nth-child(1) { width:65%; }
+    .sb-skel-line:nth-child(2) { width:45%; }
+    .sb-skel-line:nth-child(3) { width:55%; }
+    .sb-skel-line:nth-child(4) { width:40%; }
+    @keyframes shimmer {
+      0% { background-position:200% 0; }
+      100% { background-position:-200% 0; }
+    }
+
     /* ── SIDEBAR TOGGLE ── */
     .btn-toggle-sb {
       width:32px; height:32px; border:none;
@@ -562,6 +592,17 @@ ENDIF.
       transition:background .12s; flex-shrink:0;
     }
     .btn-toggle-sb:hover { background:#f3f4f6; }
+
+    /* ── CURRENCY BADGE ── */
+    .cur-idr {
+      background:#f1f5f9; color:#475569;
+    }
+    .cur-usd {
+      background:#dbeafe; color:#1d4ed8;
+    }
+    .cur-other {
+      background:#fef9c3; color:#854d0e;
+    }
     body.sb-collapsed .sidebar {
       transform:translateX(-100%);
     }
@@ -583,7 +624,7 @@ ENDIF.
     }
     .sticky-toolbar {
       position:sticky;
-      top:calc(var(--header-h) + 74px);
+      top:calc(var(--header-h) + var(--toolbar-offset, 74px));
       z-index:149; background:var(--bg);
       padding-bottom:10px;
     }
@@ -596,11 +637,13 @@ ENDIF.
       }
       .sidebar.open { transform:translateX(0); }
       .main { margin-left:0; }
+    }
+    @media (min-width:768px) and (max-width:1024px) {
       .card-meta {
-        grid-template-columns:repeat(2,1fr);
+        grid-template-columns:repeat(3,1fr);
       }
     }
-    @media (max-width:640px) {
+    @media (max-width:767px) {
       .card-meta { grid-template-columns:1fr 1fr; }
       .fab {
         bottom:12px; right:12px; left:12px;
@@ -641,7 +684,8 @@ ENDIF.
       background:#fff; border:1px solid #e5e7eb;
       border-radius:10px;
       box-shadow:0 8px 24px rgba(0,0,0,.12);
-      min-width:160px; z-index:9999;
+      min-width:160px; max-width:50vw;
+      word-break:break-word; z-index:9999;
       overflow:hidden;">
       <div style="padding:12px 16px;
                   border-bottom:1px solid #f3f4f6;">
@@ -920,6 +964,30 @@ function showLoading() {
 }
 
 /* ================================================================
+   STICKY TOOLBAR — ResizeObserver
+   ================================================================ */
+function updateToolbarOffset() {
+  var hdr=document.querySelector('.pg-hdr');
+  if (hdr){
+    var h=hdr.offsetHeight;
+    document.documentElement.style
+      .setProperty('--toolbar-offset',h+'px');
+  }
+}
+
+var toolbarObs=null;
+function observeToolbarOffset() {
+  updateToolbarOffset();
+  var hdr=document.querySelector('.pg-hdr');
+  if (hdr&&!toolbarObs){
+    toolbarObs=new ResizeObserver(function(){
+      updateToolbarOffset();
+    });
+    toolbarObs.observe(hdr);
+  }
+}
+
+/* ================================================================
    HEADER / SIDEBAR TOGGLE
    ================================================================ */
 function toggleSidebar() {
@@ -999,6 +1067,14 @@ function closeModal(id) {
     .classList.remove('show');
 }
 
+document.addEventListener('keydown',function(e){
+  if (e.key==='Escape'){
+    ['modalApprove','modalReject'].forEach(function(id){
+      closeModal(id);
+    });
+  }
+});
+
 /* ================================================================
    INIT
    ================================================================ */
@@ -1010,6 +1086,7 @@ function init() {
    LOAD SIDEBAR
    ================================================================ */
 function loadSidebarData() {
+  showSidebarSkeleton();
   fetch(API_URL+'?action=GET_SIDEBAR')
     .then(function(r){return r.json();})
     .then(function(res){
@@ -1041,6 +1118,18 @@ function loadSidebarData() {
       renderSidebar();
     })
     .catch(function(){renderSidebar();});
+}
+
+function showSidebarSkeleton() {
+  var sb=document.getElementById('sidebar');
+  if (!sb) return;
+  sb.innerHTML=
+    '<div class="sb-skel">'+
+    '<div class="sb-skel-line"></div>'+
+    '<div class="sb-skel-line"></div>'+
+    '<div class="sb-skel-line"></div>'+
+    '<div class="sb-skel-line"></div>'+
+    '</div>';
 }
 
 /* ================================================================
@@ -1261,6 +1350,9 @@ function fetchHistRej() {
    ================================================================ */
 function onEstkzFilter(val) {
   curEstkzFilter=val;
+  searchKw='';
+  var inp=document.getElementById('searchInp');
+  if (inp) inp.value='';
   selBanfns={};
   showLoading();
   fetchList(val);
@@ -1328,11 +1420,12 @@ function renderList() {
   html+='<div class="sticky-toolbar">'+
         '<div class="toolbar">';
 
-  if (isApprover)
-    html+='<button class="btn-selall"'+
-          ' id="btnSelAll"'+
-          ' onclick="toggleSelectAll()">'+
-          '&#9744; Select All</button>';
+    if (isApprover)
+      html+='<button class="btn-selAll"'+
+            ' id="btnSelAll"'+
+            ' onclick="toggleSelectAll()"'+
+            ' aria-pressed="false">'+
+            '&#9744; Select All</button>';
 
   html+='<div class="search-wrap">'+
         '<span>&#128269;</span>'+
@@ -1501,6 +1594,8 @@ function renderList() {
       loadDetail(pr.banfn);
     });
   }
+
+  observeToolbarOffset();
 }
 
 /* ================================================================
@@ -1548,6 +1643,7 @@ function renderHistTable(data,type) {
   document.getElementById('mainContent')
     .innerHTML=html;
   document.getElementById('fab').className='fab';
+  observeToolbarOffset();
 }
 
 /* ================================================================
@@ -1595,11 +1691,7 @@ function buildHistTable(data,type) {
 
   data.forEach(function(h){
     var w=h.waers||'IDR';
-    var cs=w==='IDR'
-      ?'background:#f1f5f9;color:#475569;'
-      :w==='USD'
-        ?'background:#dbeafe;color:#1d4ed8;'
-        :'background:#fef9c3;color:#854d0e;';
+    var cc=w==='IDR'?'cur-idr':w==='USD'?'cur-usd':'cur-other';
 
     var byColor=isApp
       ?'color:var(--success);'
@@ -1642,9 +1734,9 @@ function buildHistTable(data,type) {
     html+='<td class="num"'+
           ' style="font-weight:700;">'+
           fmtAmt(h.total,w)+'</td>';
-    html+='<td><span style="padding:2px 6px;'+
+    html+='<td><span class="'+cc+'" style="padding:2px 6px;'+
           'border-radius:4px;font-size:11px;'+
-          'font-weight:600;'+cs+'">'+
+          'font-weight:600;">'+
           escHtml(w)+'</span></td>';
     html+='<td><span style="background:#f1f5f9;'+
           'padding:2px 6px;border-radius:4px;'+
@@ -1870,11 +1962,7 @@ function loadDetail(banfn) {
 
       items.forEach(function(it){
         var w=it.waers||waers;
-        var cs=w==='IDR'
-          ?'background:#f1f5f9;color:#475569;'
-          :w==='USD'
-            ?'background:#dbeafe;color:#1d4ed8;'
-            :'background:#fef9c3;color:#854d0e;';
+        var cc=w==='IDR'?'cur-idr':w==='USD'?'cur-usd':'cur-other';
         html+='<tr>';
         html+='<td style="font-family:\'DM Mono\','+
               'monospace;font-weight:600;'+
@@ -1897,9 +1985,9 @@ function loadDetail(banfn) {
         html+='<td class="num"'+
               ' style="font-weight:700;">'+
               fmtAmt(it.total,w)+'</td>';
-        html+='<td><span style="padding:2px 6px;'+
+        html+='<td><span class="'+cc+'" style="padding:2px 6px;'+
               'border-radius:4px;font-size:11px;'+
-              'font-weight:600;'+cs+'">'+
+              'font-weight:600;">'+
               escHtml(w)+'</span></td>';
         html+='<td style="color:var(--muted);">'+
               escHtml(it.lfdat||'-')+'</td>';
@@ -1946,9 +2034,12 @@ function toggleSelectAll() {
   }
 
   var btn=document.getElementById('btnSelAll');
-  if (btn) btn.innerHTML=allSel
-    ?'&#9744; Select All'
-    :'&#9745; Deselect All';
+  if (btn){
+    btn.innerHTML=allSel
+      ?'&#9744; Select All'
+      :'&#9745; Deselect All';
+    btn.setAttribute('aria-pressed',allSel?'false':'true');
+  }
 
   updateFabInfo(); syncCheckboxes();
 }
