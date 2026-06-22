@@ -144,6 +144,16 @@ DATA: lv_rel_status TYPE bapimmpara-rel_status,
       lv_rel_ind    TYPE bapimmpara-rel_ind.
 
 *----------------------------------------------------------------------
+* BSART RANGE (dipakai utk filter multi doc type kategori PRK9,
+* contoh "RSBR,PRK9") — disamakan dengan ZPR_REL_BSP.
+*----------------------------------------------------------------------
+DATA: lt_bsart_rng    TYPE RANGE OF eban-bsart,
+      ls_bsart_rng    LIKE LINE OF lt_bsart_rng,
+      lt_bsart_split  TYPE STANDARD TABLE OF string,
+      lv_bsart_part   TYPE string,
+      lv_bsart_cs     TYPE string.
+
+*----------------------------------------------------------------------
 * IS APPROVER — permanen false (read-only mode)
 *----------------------------------------------------------------------
 lv_is_approver = abap_false.
@@ -185,13 +195,35 @@ DEFINE fmt_date.
   ENDIF.
 END-OF-DEFINITION.
 
+" Mengubah string comma-separated (contoh: 'RSBR,PRK9') jadi
+" RANGE OF eban-bsart untuk dipakai di "WHERE bsart IN ...".
+" &1 = input string, &2 = output RANGE table
+DEFINE parse_bsart_range.
+  CLEAR &2.
+  CLEAR lt_bsart_split.
+  SPLIT &1 AT ',' INTO TABLE lt_bsart_split.
+  LOOP AT lt_bsart_split INTO lv_bsart_part.
+    CONDENSE lv_bsart_part.
+    TRANSLATE lv_bsart_part TO UPPER CASE.
+    IF lv_bsart_part IS NOT INITIAL.
+      CLEAR ls_bsart_rng.
+      ls_bsart_rng-sign   = 'I'.
+      ls_bsart_rng-option = 'EQ'.
+      ls_bsart_rng-low    = lv_bsart_part.
+      APPEND ls_bsart_rng TO &2.
+    ENDIF.
+  ENDLOOP.
+END-OF-DEFINITION.
+
 " Hitung jumlah PR pending unik utk 1 kategori + 1 plant
-" &1 = bsart, &2 = werks, &3 = hasil (string angka)
+" &1 = bsart (boleh comma-separated, contoh 'RSBR,PRK9'),
+" &2 = werks, &3 = hasil (string angka)
 DEFINE count_pending.
+  parse_bsart_range &1 lt_bsart_rng.
   CLEAR lt_sb_uniq.
   SELECT banfn FROM eban
     INTO CORRESPONDING FIELDS OF TABLE lt_sb_uniq
-    WHERE bsart = &1
+    WHERE bsart IN lt_bsart_rng
       AND werks = &2
       AND frgkz = 'X'
       AND frgzu = ' '
@@ -253,11 +285,12 @@ CASE lv_action.
 
     " Pending per plant per kategori (kontrak JSON: §8.0
     " development-to-roto.md)
+    " Kategori PRK9 mencakup doc type RSBR,PRK9 (samakan dgn ZPR_REL_BSP).
     count_pending 'ROTO' '1200' lv_s_1200_roto.
-    count_pending 'PRK9' '1200' lv_s_1200_PRK9.
+    count_pending 'RSBR,PRK9' '1200' lv_s_1200_PRK9.
     count_pending 'PRKS' '1200' lv_s_1200_PRKS.
     count_pending 'ROTO' '1300' lv_s_1300_roto.
-    count_pending 'PRK9' '1300' lv_s_1300_PRK9.
+    count_pending 'RSBR,PRK9' '1300' lv_s_1300_PRK9.
     count_pending 'PRKS' '1300' lv_s_1300_PRKS.
 
     " History Reject Surabaya
@@ -372,13 +405,21 @@ CASE lv_action.
       EXIT.
     ENDIF.
 
+    " Kategori PRK9 mencakup doc type RSBR,PRK9 (samakan dgn ZPR_REL_BSP).
+    IF lv_bsart = 'PRK9'.
+      lv_bsart_cs = 'RSBR,PRK9'.
+    ELSE.
+      lv_bsart_cs = lv_bsart.
+    ENDIF.
+    parse_bsart_range lv_bsart_cs lt_bsart_rng.
+
     CLEAR: lt_head, lt_items, lt_makt.
 
     SELECT banfn badat werks bsart txz01 ernam ekgrp
            frgkz frgzu loekz estkz statu
       FROM eban
       INTO CORRESPONDING FIELDS OF TABLE lt_head
-      WHERE bsart = lv_bsart
+      WHERE bsart IN lt_bsart_rng
         AND werks  = lv_werks
         AND frgkz  = 'X'
         AND frgzu  = ' '

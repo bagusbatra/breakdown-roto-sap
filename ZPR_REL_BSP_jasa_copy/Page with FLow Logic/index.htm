@@ -993,9 +993,13 @@ var sbCounts = {
 
 var PLANT_LABELS = { '1200':'Surabaya', '1300':'Semarang' };
 
+/* Kategori PRK9 mencakup doc type RSBR,PRK9 — disamakan dgn
+   ZPR_REL_BSP. PR dgn bsart RSBR ditampilkan dengan label/style
+   yang sama seperti PRK9 (lihat getBsartLabel & bcls). */
 var PR_CATEGORIES = {
   'ROTO': { label:'PR Maintenance', short:'Maintenance', icon:'&#128203;' },
   'PRK9': { label:'PR RND',         short:'RND',         icon:'&#128736;' },
+  'RSBR': { label:'PR RND',         short:'RND',         icon:'&#128736;' },
   'PRKS': { label:'PR Service',     short:'Service',     icon:'&#128295;' }
 };
 
@@ -1556,8 +1560,8 @@ function renderList() {
   html+='<div class="sticky-toolbar"><div class="toolbar">';
 
   html+='<div class="search-wrap"><span>&#128269;</span>'+
-        '<input type="text" id="searchInp" placeholder="Cari No PR, Pembuat..."'+
-        ' value="'+escHtml(searchKw)+'" oninput="onSearchInput(this.value)"></div>';
+        '<input type="text" id="searchInp" placeholder="Cari No PR, Pembuat... (Enter)"'+
+        ' value="'+escHtml(searchKw)+'" onkeydown="onSearchKey(event)" onblur="onSearchBlur()"></div>';
 
   html+='<select class="page-size-select" onchange="changePageSize(parseInt(this.value))">';
   [10,20,50,0].forEach(function(s){
@@ -1713,9 +1717,9 @@ function renderHistView() {
 
   html+='<div class="sticky-toolbar"><div class="toolbar">';
   html+='<div class="search-wrap"><span>&#128269;</span>'+
-        '<input type="text" id="histSearchInp" placeholder="Cari No PR, Item..."'+
+        '<input type="text" id="histSearchInp" placeholder="Cari No PR, Item... (Enter)"'+
         ' value="'+(document.getElementById('histSearchInp')?escHtml(document.getElementById('histSearchInp').value):'')+'"'+
-        ' oninput="onHistSearch(this.value)"></div>';
+        ' onkeydown="onHistSearchKey(event)" onblur="onHistSearchBlur()"></div>';
 
   html+='<select class="estkz-select" onchange="onHistBsartFilter(this.value)">';
   html+='<option value=""'+(histBsartFilter===''?' selected':'')+'>Semua Kategori</option>';
@@ -1773,7 +1777,7 @@ function buildHistTable(data,type) {
   data.forEach(function(h){
     var w  = h.waers||'IDR';
     var cc = curClass(w);
-    var bcls = (h.bsart==='PRK9') ? 'cat-prk9' : 'cat-roto';
+    var bcls = (h.bsart==='PRK9' || h.bsart==='RSBR') ? 'cat-prk9' : 'cat-roto';
     var byColor = isApp ? 'color:var(--success-d);' : 'color:var(--danger-d);';
 
     html+='<tr>';
@@ -1808,14 +1812,26 @@ function buildHistTable(data,type) {
   return html;
 }
 
-/* search di history — baca histData/histType global */
-var histSearchTimer=null;
-function onHistSearch(val) {
-  clearTimeout(histSearchTimer);
-  histSearchTimer=setTimeout(function(){
-    histCurPage=1;
-    applyHistFilter();
-  },300);
+/* search di history — baca histData/histType global.
+   Trigger hanya saat Enter atau blur (bukan tiap keystroke) supaya
+   input tidak kehilangan fokus akibat re-render penuh di applyHistFilter. */
+function applyHistSearchCommit() {
+  histCurPage=1;
+  applyHistFilter();
+}
+function onHistSearchKey(e) {
+  if (e.key==='Enter') {
+    e.preventDefault();
+    applyHistSearchCommit();
+    var inp=document.getElementById('histSearchInp');
+    if (inp) {
+      inp.focus();
+      inp.setSelectionRange(inp.value.length,inp.value.length);
+    }
+  }
+}
+function onHistSearchBlur() {
+  applyHistSearchCommit();
 }
 
 /* ════════════════════════════════════════════════════════════════
@@ -1864,13 +1880,26 @@ function changePageSize(val) {
   renderList();
 }
 
-var searchTimer=null;
-function onSearchInput(val) {
-  clearTimeout(searchTimer);
-  searchTimer=setTimeout(function(){
-    searchKw=val.trim(); curPage=1;
-    renderList();
-  },300);
+/* Trigger hanya saat Enter atau blur (bukan tiap keystroke) supaya
+   input tidak kehilangan fokus akibat re-render penuh di renderList. */
+function applySearchCommit(val) {
+  searchKw=val.trim(); curPage=1;
+  renderList();
+}
+function onSearchKey(e) {
+  if (e.key==='Enter') {
+    e.preventDefault();
+    applySearchCommit(e.target.value);
+    var inp=document.getElementById('searchInp');
+    if (inp) {
+      inp.focus();
+      inp.setSelectionRange(inp.value.length,inp.value.length);
+    }
+  }
+}
+function onSearchBlur() {
+  var inp=document.getElementById('searchInp');
+  applySearchCommit(inp?inp.value:'');
 }
 
 /* ════════════════════════════════════════════════════════════════
