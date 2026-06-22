@@ -9,6 +9,8 @@ DATA: lv_action       TYPE string,
       lv_notes        TYPE string,
       lv_estkz_filter TYPE string,
       lv_uname        TYPE syuname,
+      lv_uname_uc     TYPE syuname,
+      lv_plant_ok     TYPE abap_bool,
       lv_output       TYPE string,
       lv_json         TYPE string,
       lv_sep          TYPE string,
@@ -23,6 +25,15 @@ lv_pr_action    = request->get_form_field( 'pr_action' ).
 lv_notes        = request->get_form_field( 'notes' ).
 lv_estkz_filter = request->get_form_field( 'estkz' ).
 lv_uname        = sy-uname.
+
+*----------------------------------------------------------------------
+* PLANT RESTRICTION PER USER
+* KMI-BOD & BASIS  -> tidak dibatasi (semua plant).
+* KMI-U052         -> hanya plant 1200 (Surabaya).
+* KMI-U051         -> hanya plant 1300 (Semarang).
+*----------------------------------------------------------------------
+lv_uname_uc = lv_uname.
+TRANSLATE lv_uname_uc TO UPPER CASE.
 
 *----------------------------------------------------------------------
 * TYPES
@@ -153,6 +164,17 @@ DEFINE escape_json.
   CONDENSE &1.
 END-OF-DEFINITION.
 
+" Cek apakah user saat ini boleh akses plant &1 (werks)
+" KMI-U052 = Surabaya (1200) only, KMI-U051 = Semarang (1300) only
+DEFINE check_werks_allowed.
+  lv_plant_ok = abap_true.
+  IF lv_uname_uc = 'KMI-U052' AND &1 NE '1200'.
+    lv_plant_ok = abap_false.
+  ELSEIF lv_uname_uc = 'KMI-U051' AND &1 NE '1300'.
+    lv_plant_ok = abap_false.
+  ENDIF.
+END-OF-DEFINITION.
+
 DEFINE fmt_date.
   CLEAR &2.
   IF &1 IS INITIAL OR &1 = '00000000'.
@@ -280,6 +302,22 @@ CASE lv_action.
       lv_is_app_s = 'false'.
     ENDIF.
 
+    " Sembunyikan data plant yang tidak diizinkan utk user ini
+    " (KMI-U052 = Surabaya only, KMI-U051 = Semarang only)
+    IF lv_uname_uc = 'KMI-U052'.
+      lv_s_1300_roto = '0'.
+      lv_s_1300_PRK9 = '0'.
+      lv_s_1300_PRKS = '0'.
+      lv_sr_1300     = '0'.
+      lv_sa_1300     = '0'.
+    ELSEIF lv_uname_uc = 'KMI-U051'.
+      lv_s_1200_roto = '0'.
+      lv_s_1200_PRK9 = '0'.
+      lv_s_1200_PRKS = '0'.
+      lv_sr_1200     = '0'.
+      lv_sa_1200     = '0'.
+    ENDIF.
+
     CONCATENATE
       '{"status":"S","is_approver":' lv_is_app_s
       ',"pending":{'
@@ -307,6 +345,15 @@ CASE lv_action.
     IF lv_werks IS INITIAL.
       lv_output = '{"status":"E",' &
         '"message":"werks harus diisi","data":[]}'.
+      response->append_cdata( lv_output ).
+      _m_navigation->response_complete( ).
+      EXIT.
+    ENDIF.
+
+    check_werks_allowed lv_werks.
+    IF lv_plant_ok = abap_false.
+      lv_output = '{"status":"E",' &
+        '"message":"Anda tidak memiliki akses ke plant ini","data":[]}'.
       response->append_cdata( lv_output ).
       _m_navigation->response_complete( ).
       EXIT.
@@ -655,6 +702,15 @@ CASE lv_action.
       EXIT.
     ENDIF.
 
+    check_werks_allowed lv_werks.
+    IF lv_plant_ok = abap_false.
+      lv_output = '{"status":"E",' &
+        '"message":"Anda tidak memiliki akses ke plant ini","data":[]}'.
+      response->append_cdata( lv_output ).
+      _m_navigation->response_complete( ).
+      EXIT.
+    ENDIF.
+
     CLEAR lt_hist_rej.
     SELECT banfn bnfpo werks bsart txz01 ernam erdat
            menge meins preis peinh waers ekgrp
@@ -741,6 +797,15 @@ CASE lv_action.
     IF lv_werks IS INITIAL.
       lv_output = '{"status":"E",' &
         '"message":"werks kosong","data":[]}'.
+      response->append_cdata( lv_output ).
+      _m_navigation->response_complete( ).
+      EXIT.
+    ENDIF.
+
+    check_werks_allowed lv_werks.
+    IF lv_plant_ok = abap_false.
+      lv_output = '{"status":"E",' &
+        '"message":"Anda tidak memiliki akses ke plant ini","data":[]}'.
       response->append_cdata( lv_output ).
       _m_navigation->response_complete( ).
       EXIT.

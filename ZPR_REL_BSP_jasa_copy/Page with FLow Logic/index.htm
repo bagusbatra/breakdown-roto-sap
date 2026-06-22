@@ -963,6 +963,7 @@ body.sb-collapsed .main     { margin-left:0; }
    (Tidak ada perubahan logic dari versi sebelumnya — hanya visual)
    ════════════════════════════════════════════════════════════════ */
 var API_URL        = 'main.htm';
+var CUR_USER       = '<%=lv_uname2%>';
 var curPlant       = '';
 var curMode        = '';
 var curBsart       = 'ROTO';
@@ -1357,6 +1358,16 @@ function renderSidebar() {
     {code:'1200',name:'Surabaya', img:'surabaya.png'},
     {code:'1300',name:'Semarang', img:'semarang.png'}
   ];
+
+  /* KMI-BOD & BASIS: tidak difilter (lihat semua plant).
+     KMI-U052: hanya Surabaya. KMI-U051: hanya Semarang. */
+  var ucUser = (CUR_USER||'').toUpperCase();
+  if (ucUser==='KMI-U052') {
+    plants = plants.filter(function(p){ return p.code==='1200'; });
+  } else if (ucUser==='KMI-U051') {
+    plants = plants.filter(function(p){ return p.code==='1300'; });
+  }
+
   var html='';
 
   plants.forEach(function(p,pi){
