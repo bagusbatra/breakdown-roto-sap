@@ -28,6 +28,7 @@ ENDIF.
   <title>Release Purchase Requisition - PT. Kayu Mebel Indonesia</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap"
         rel="stylesheet">
+    <link rel="icon" type="image/png" href="logo.png">
 
 <style>
 /* ════════════════════════════════════════════════════════════════
@@ -977,6 +978,11 @@ var filteredData = [];
 
 var histData = [];
 var histType = '';
+var histPageSize = 10;
+var histCurPage = 1;
+var histFilteredData = [];
+var histBsartFilter = '';
+var histSortOrder = '';
 
 var sbCounts = {
   pending:  { '1200':{ROTO:0,PRK9:0,PRKS:0}, '1300':{ROTO:0,PRK9:0,PRKS:0} },
@@ -1638,23 +1644,94 @@ function renderList() {
 function renderHistTable(data,type) {
   histData=data;
   histType=type;
+  histCurPage=1;
+  applyHistFilter();
+}
 
-  var isApp = (type==='approve');
+function applyHistFilter() {
+  var kw = '';
+  var inp = document.getElementById('histSearchInp');
+  if (inp) kw = inp.value.trim().toLowerCase();
+
+  histFilteredData = histData.filter(function(h){
+    if (histBsartFilter && h.bsart !== histBsartFilter) return false;
+    if (!kw) return true;
+    return h.banfn.toLowerCase().indexOf(kw)>-1 ||
+           (h.txz01 && h.txz01.toLowerCase().indexOf(kw)>-1) ||
+           (h.ernam && h.ernam.toLowerCase().indexOf(kw)>-1) ||
+           (h.bsart && (h.bsart.toLowerCase().indexOf(kw)>-1 ||
+             getBsartLabel(h.bsart).toLowerCase().indexOf(kw)>-1)) ||
+           ((h.app_by||h.del_by) && (h.app_by||h.del_by).toLowerCase().indexOf(kw)>-1);
+  });
+
+  if (histSortOrder === 'asc') {
+    histFilteredData.sort(function(a,b){
+      var da = a.app_at || a.del_at || '';
+      var db = b.app_at || b.del_at || '';
+      if (da < db) return -1;
+      if (da > db) return 1;
+      var ta = a.app_tm || a.del_tm || '';
+      var tb = b.app_tm || b.del_tm || '';
+      if (ta < tb) return -1;
+      if (ta > tb) return 1;
+      return 0;
+    });
+  }
+
+  var totalPages = histPageSize===0 ? 1 : Math.ceil(histFilteredData.length/histPageSize)||1;
+  if (histCurPage>totalPages) histCurPage=1;
+  renderHistView();
+}
+
+function renderHistView() {
+  var isApp = (histType==='approve');
+  var total = histFilteredData.length;
+  var totalPages = histPageSize===0 ? 1 : Math.ceil(total/histPageSize)||1;
+  var start = histPageSize===0 ? 0 : (histCurPage-1)*histPageSize;
+  var end   = histPageSize===0 ? total : Math.min(start+histPageSize,total);
+  var pageData = histFilteredData.slice(start,end);
+
   var title = isApp ? '&#10003; History Approve &mdash; ' : '&#128465; History Reject &mdash; ';
   var color = isApp ? 'var(--success-d)' : 'var(--danger-d)';
 
   var html='';
   html+='<div class="sticky-top"><div class="pg-hdr">';
   html+='<div class="pg-title" style="color:'+color+';">'+title+PLANT_LABELS[curPlant]+'</div>';
-  html+='<div class="pg-sub">'+data.length+' record '+(isApp?'approved':'rejected')+'</div>';
+  html+='<div class="pg-sub">'+total+' record '+(isApp?'approved':'rejected')+'</div>';
   html+='</div></div>';
 
-  html+='<div style="margin-bottom:16px;"><div class="search-wrap" style="max-width:340px;">'+
-        '<span>&#128269;</span>'+
+  html+='<div class="sticky-toolbar"><div class="toolbar">';
+  html+='<div class="search-wrap"><span>&#128269;</span>'+
         '<input type="text" id="histSearchInp" placeholder="Cari No PR, Item..."'+
-        ' oninput="onHistSearch(this.value)"></div></div>';
+        ' value="'+(document.getElementById('histSearchInp')?escHtml(document.getElementById('histSearchInp').value):'')+'"'+
+        ' oninput="onHistSearch(this.value)"></div>';
 
-  html+='<div id="histTableWrap">'+buildHistTable(data,type)+'</div>';
+  html+='<select class="estkz-select" onchange="onHistBsartFilter(this.value)">';
+  html+='<option value=""'+(histBsartFilter===''?' selected':'')+'>Semua Kategori</option>';
+  Object.keys(PR_CATEGORIES).forEach(function(bs){
+    html+='<option value="'+bs+'"'+(histBsartFilter===bs?' selected':'')+'>'+
+          PR_CATEGORIES[bs].label+'</option>';
+  });
+  html+='</select>';
+
+  html+='<select class="page-size-select" onchange="onHistSortOrder(this.value)">';
+  html+='<option value=""'+(histSortOrder===''?' selected':'')+'>Terbaru</option>';
+  html+='<option value="asc"'+(histSortOrder==='asc'?' selected':'')+'>Terlama</option>';
+  html+='</select>';
+
+  html+='<select class="page-size-select" onchange="histChangePageSize(parseInt(this.value))">';
+  [10,20,50,0].forEach(function(s){
+    html+='<option value="'+s+'"'+(histPageSize===s?' selected':'')+'>'+
+          (s===0?'All':s+' per page')+'</option>';
+  });
+  html+='</select>';
+
+  html+='<div class="pg-count">'+total+' record</div>';
+  html+='</div></div>';
+
+  html+='<div id="histTableWrap">'+buildHistTable(pageData,histType)+'</div>';
+
+  html+=renderHistPagination(total,totalPages,start,end);
 
   document.getElementById('mainContent').innerHTML=html;
   observeToolbarOffset();
@@ -1725,19 +1802,8 @@ var histSearchTimer=null;
 function onHistSearch(val) {
   clearTimeout(histSearchTimer);
   histSearchTimer=setTimeout(function(){
-    var kw=val.trim().toLowerCase();
-    var filtered=kw
-      ? histData.filter(function(h){
-          return h.banfn.toLowerCase().indexOf(kw)>-1||
-                 (h.txz01 && h.txz01.toLowerCase().indexOf(kw)>-1)||
-                 (h.ernam && h.ernam.toLowerCase().indexOf(kw)>-1)||
-                 (h.bsart && (h.bsart.toLowerCase().indexOf(kw)>-1||
-                   getBsartLabel(h.bsart).toLowerCase().indexOf(kw)>-1))||
-                 ((h.app_by||h.del_by) && (h.app_by||h.del_by).toLowerCase().indexOf(kw)>-1);
-        })
-      : histData;
-    var wrap=document.getElementById('histTableWrap');
-    if (wrap) wrap.innerHTML=buildHistTable(filtered,histType);
+    histCurPage=1;
+    applyHistFilter();
   },300);
 }
 
@@ -1794,6 +1860,66 @@ function onSearchInput(val) {
     searchKw=val.trim(); curPage=1;
     renderList();
   },300);
+}
+
+/* ════════════════════════════════════════════════════════════════
+   HISTORY PAGINATION
+   ════════════════════════════════════════════════════════════════ */
+function renderHistPagination(total,totalPages,start,end) {
+  if (histPageSize===0 || totalPages<=1){
+    return '<div class="pagination-bar"><span class="pg-info">Showing all '+total+' record</span></div>';
+  }
+
+  var html='<div class="pagination-bar">';
+  html+='<button class="pg-btn" onclick="histGoPage(1)"'+(histCurPage<=1?' disabled':'')+'>&#171;</button>';
+  html+='<button class="pg-btn" onclick="histGoPage('+(histCurPage-1)+')"'+(histCurPage<=1?' disabled':'')+'>&#8249;</button>';
+
+  var sp=Math.max(1,histCurPage-2);
+  var ep=Math.min(totalPages,histCurPage+2);
+
+  if (sp>1){
+    html+='<button class="pg-btn" onclick="histGoPage(1)">1</button>';
+    if (sp>2) html+='<span class="pg-info">...</span>';
+  }
+  for (var i=sp;i<=ep;i++){
+    html+='<button class="pg-btn'+(i===histCurPage?' active':'')+'" onclick="histGoPage('+i+')">'+i+'</button>';
+  }
+  if (ep<totalPages){
+    if (ep<totalPages-1) html+='<span class="pg-info">...</span>';
+    html+='<button class="pg-btn" onclick="histGoPage('+totalPages+')">'+totalPages+'</button>';
+  }
+  html+='<button class="pg-btn" onclick="histGoPage('+(histCurPage+1)+')"'+(histCurPage>=totalPages?' disabled':'')+'>&#8250;</button>';
+  html+='<button class="pg-btn" onclick="histGoPage('+totalPages+')"'+(histCurPage>=totalPages?' disabled':'')+'>&#187;</button>';
+  html+='<span class="pg-info">'+(start+1)+'&ndash;'+end+' of '+total+'</span>';
+  html+='</div>';
+  return html;
+}
+
+function histGoPage(pg) {
+  var tp=histPageSize===0?1:Math.ceil(histFilteredData.length/histPageSize)||1;
+  if (pg<1) pg=1;
+  if (pg>tp) pg=tp;
+  histCurPage=pg;
+  renderHistView();
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+
+function histChangePageSize(val) {
+  histPageSize=val;
+  histCurPage=1;
+  renderHistView();
+}
+
+function onHistBsartFilter(val) {
+  histBsartFilter=val;
+  histCurPage=1;
+  applyHistFilter();
+}
+
+function onHistSortOrder(val) {
+  histSortOrder=val;
+  histCurPage=1;
+  applyHistFilter();
 }
 
 /* ════════════════════════════════════════════════════════════════
