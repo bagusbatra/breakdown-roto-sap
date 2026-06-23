@@ -1443,11 +1443,10 @@ function renderList() {
 
   html+='<div class="expand-bar">'+
         '<button class="btn-exp"'+
-        ' onclick="expandAll()">'+
-        '&#9660; Expand</button>'+
-        '<button class="btn-exp"'+
-        ' onclick="collapseAll()">'+
-        '&#9650; Collapse</button></div>';
+        ' id="btnToggleExpand"'+
+        ' onclick="toggleExpandAll()">'+
+        (allExpanded?'&#9650; Collapse':'&#9660; Expand')+
+        '</button></div>';
 
   html+='<div class="pg-count">'+
         (total!==allData.length
@@ -1884,6 +1883,14 @@ function collapseAll() {
     .forEach(function(c){
       c.classList.remove('expanded');
     });
+}
+
+function toggleExpandAll() {
+  if (allExpanded) { collapseAll(); }
+  else { expandAll(); }
+  var btn=document.getElementById('btnToggleExpand');
+  if (btn) btn.innerHTML=
+    allExpanded?'&#9650; Collapse':'&#9660; Expand';
 }
 
 /* ================================================================
