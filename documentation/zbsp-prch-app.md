@@ -1,7 +1,7 @@
 # ZBSP_PRCH_APP — General Procurement PR Release
 
 Dokumentasi teknis aplikasi **Release PR Multi Kategori** versi rujukan
-sebelum merge dengan `jasa_copy`.
+(read-only, backend plant restriction).
 
 ## Informasi Umum
 
@@ -10,8 +10,8 @@ sebelum merge dengan `jasa_copy`.
 | **Nama** | ZBSP_PRCH_APP |
 | **Jenis** | BSP Application (2-file: index.htm + main.htm) |
 | **Fungsi** | Release PR multi kategori (read-only) |
-| **Plant** | 1200 (Surabaya), 1300 (Semarang), 2000 (extension) |
-| **Total LOC** | ~4.009 (index: 2062, main: 1229) |
+| **Plant** | 1200 (Surabaya), 1300 (Semarang), 2000, 1000, 1001, 1100, 3000 |
+| **Total LOC** | ~3.539 (index: 2241, main: 1298) |
 | **Status** | Versi rujukan (sebelum merge) |
 
 ## Perbedaan Kunci dengan ZPR_REL_BSP
@@ -25,7 +25,7 @@ sebelum merge dengan `jasa_copy`.
 | CSS variables | 32 design tokens | 11 |
 | Welcome modal | ✅ (localStorage, 1x/hari) | ❌ |
 | Skeleton loading | ✅ | ❌ |
-| Duplicate code | Bersih | index-merge.htm ada 11+ fungsi duplikat |
+| Duplicate code | Bersih | Ada fungsi duplikat |
 
 ## Fitur Eksklusif ZBSP_PRCH_APP
 
@@ -45,10 +45,9 @@ sebelum merge dengan `jasa_copy`.
 
 | Kode | Label | Plant |
 |:----:|-------|-------|
-| `ROTO` | PR Maintenance | 1200, 1300 |
-| `PRK9` | PR RND | 1200 |
-| `RSBR` | PR RND | 1200 |
-| `PRKS` | PR Service | 1200, 1300 |
-| `RSBT` | PR Tools (dormant) | 1200 |
-| `RSB8` | PR Rawat & Projek (dormant) | 1200 |
-| `RSM8` | PR Rawat & Projek (dormant) | 1300 |
+| Kode | Label | Plant |
+|:----:|-------|-------|
+| `ROTO` | PR Maintenance | Semua plant |
+| `PRK9` | PR RND | 1200, 2000, 1000, 1001, 1100 |
+| `RSBR` | PR RND | 1200, 2000, 1000, 1001, 1100 |
+| `PRKS` | PR Service | Semua plant |

@@ -1,13 +1,12 @@
-# Notes — Persiapan Uji Coba SE80 (Multi Kategori ROTO + RSB7)
+# Notes — Persiapan Uji Coba SE80 (Multi Kategori)
 
-> Catatan pre-flight sebelum copy-paste `ZPR_REL_BSP_up/Page with FLow
+> Catatan pre-flight sebelum copy-paste `ZPR_REL_BSP/Page with FLow
 > Logic/{main.htm,index.htm}` ke SE80. Status kode: **final per
-> 2026-06-12**, tidak perlu diedit lagi. Checklist coding lengkap ada di
-> `ZPR_REL_BSP_up/development-to-roto.md` §9.
+> 2026-06-12**, tidak perlu diedit lagi.
 
 ## 1. Prasyarat WAJIB (dilewati = pasti error)
 
-> **REVISI 2026-06-12 (lihat `development-to-roto.md` §1.1):** tidak ada
+> **REVISI 2026-06-12:** tidak ada
 > lagi pembuatan tabel SE11 / migrasi. Kode sudah di-revert memakai
 > **`ZROTO_APP_HIST`/`ZROTO_REJ_HIST` existing** (sudah aktif di sistem,
 > kolom `BSART` sudah ada). **Tidak ada prasyarat SE11 apa pun** —
@@ -49,8 +48,8 @@ REASON STRING vs CHAR 255.)
   Aman sepenuhnya: lihat daftar, search, filter, expand detail, history.
 - **Fitur approve hanya muncul untuk user `KMI-BOD`** — user lain
   read-only (by design). Tes dengan user yang tepat.
-- Badge "PR Jasa" = 0 jika belum ada PR `RSB7` pending
-  (`FRGKZ='X' AND FRGZU=' '`) di plant 1200/1300 — bukan bug.
+- Badge kategori = 0 jika belum ada PR `MTN`/`RND`/`SVC` pending
+  (`FRGKZ='X' AND FRGZU=' '`) di plant terkait — bukan bug.
 
 ## 4. Prosedur Paste Teraman di SE80
 

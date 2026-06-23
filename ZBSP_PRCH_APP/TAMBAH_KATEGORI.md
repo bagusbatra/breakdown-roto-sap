@@ -1,68 +1,50 @@
-# Panduan Aktivasi Kategori PR — RSBT, RSB8, RSM8
+# Panduan Aktivasi / Penambahan Kategori PR
 
-Aplikasi saat ini hanya menampilkan 2 kategori aktif:
-- **ROTO** (PR Maintenance) — Plant 1200 & 1300
-- **RSB7** (PR RND) — Plant 1200 & 1300
+Aplikasi saat ini memiliki 4 kategori aktif:
+- **ROTO** (PR Maintenance) — Plant 1200, 2000, 1000, 1001, 1100, 1300, 3000
+- **PRK9** (PR RND) — Plant 1200, 2000, 1000, 1001, 1100
+- **RSBR** (PR RND, alias dari PRK9) — Plant 1200, 2000, 1000, 1001, 1100
+- **PRKS** (PR Service) — Plant 1200, 2000, 1000, 1001, 1100, 1300, 3000
 
-Tiga kategori berikut sudah ada di backend/frontend tapi **di-hide**:
-- **RSBT** (PR Tools) — hanya Plant 1200
-- **RSB8** (PR Rawat & Projek) — hanya Plant 1200
-- **RSM8** (PR Rawat & Projek) — hanya Plant 1300
-
-Gunakan panduan ini untuk mengaktifkannya kembali.
+Gunakan panduan ini untuk menambah kategori baru.
 
 ---
 
-## Cara Aktivasi
+## Cara Aktivasi (Menambah Kategori Baru)
 
 ### 1. `index.htm` — Frontend
 
-#### 1a. `PR_CATEGORIES` (~line 811)
-Tambah entry kategori yang ingin diaktifkan:
+#### 1a. `CATEGORY_DEF` (~line 1024)
+Tambah entry kategori baru:
 ```js
-var PR_CATEGORIES = {
+var CATEGORY_DEF = {
   'ROTO': { label:'PR Maintenance', short:'Maintenance', icon:'&#128203;' },
-  'RSB7': { label:'PR RND',         short:'RND',         icon:'&#128736;' },
-  // ↑ Aktifkan dengan menambah di bawah ini:
-  'RSBT': { label:'PR Tools',          short:'Tools',          icon:'&#128296;' },
-  'RSB8': { label:'PR Rawat & Projek', short:'Rawat & Projek', icon:'&#127959;' },
-  'RSM8': { label:'PR Rawat & Projek', short:'Rawat & Projek', icon:'&#127959;' },
+  'PRK9': { label:'PR RND',         short:'RND',         icon:'&#128736;' },
+  'RSBR': { label:'PR RND',         short:'RND',         icon:'&#128736;' },
+  'PRKS': { label:'PR Service',     short:'Service',     icon:'&#128295;' },
+  // ↑ Tambah kategori baru di sini:
+  'XXX':  { label:'PR Baru',         short:'Baru',        icon:'&#128000;' },
 };
 ```
 
-#### 1b. `sbCounts.pending` (~line 799)
-Tambah key per plant:
+#### 1b. `PLANT_DEF` (~line 1010)
+Tambah kategori ke array plant yang sesuai:
 ```js
-var sbCounts = {
-  pending:  { '1200':{ROTO:0, RSB7:0, RSBT:0, RSB8:0},
-              '1300':{ROTO:0, RSB7:0, RSM8:0} },
+var PLANT_DEF = {
+  '1200': { label:'Surabaya', categories:['ROTO','PRK9','PRKS'] },
+  '1300': { label:'Semarang', categories:['ROTO','PRKS'] },
   ...
+  // Tambah kategori baru ke array categories plant yg relevan
 };
 ```
 
-#### 1c. `PLANT_CATEGORIES` (~line 829)
-Tambah ke array plant masing-masing:
+#### 1c. `sbCounts.pending` (~line 1078)
+Tambah key kategori di setiap plant terkait:
 ```js
-var PLANT_CATEGORIES = {
-  '1200': ['ROTO', 'RSB7', 'RSBT', 'RSB8'],
-  '1300': ['ROTO', 'RSB7', 'RSM8']
-};
-```
-
-#### 1d. `loadSidebarData()` — mapping response (~line 1029)
-Tambah parsing untuk tiap kategori:
-```js
-sbCounts.pending['1200'] = {
-  ROTO: parseInt(o1200.ROTO)||0,
-  RSB7: parseInt(o1200.RSB7)||0,
-  RSBT: parseInt(o1200.RSBT)||0,
-  RSB8: parseInt(o1200.RSB8)||0
-};
-
-sbCounts.pending['1300'] = {
-  ROTO: parseInt(o1300.ROTO)||0,
-  RSB7: parseInt(o1300.RSB7)||0,
-  RSM8: parseInt(o1300.RSM8)||0
+sbCounts = {
+  pending:  { '1200':{ROTO:0,PRK9:0,PRKS:0, XXX:0}, '1300':{ROTO:0,PRKS:0, XXX:0} },
+  hist_app: { ... },
+  hist_rej: { ... }
 };
 ```
 
@@ -70,54 +52,47 @@ sbCounts.pending['1300'] = {
 
 ### 2. `main.htm` — Backend ABAP
 
-#### 2a. Whitelist validasi di `GET_LIST` (~line 323)
+#### 2a. Whitelist validasi di `GET_LIST`
 Tambah ke kondisi `NE`:
 ```abap
 ELSEIF lv_bsart NE 'ROTO'
-   AND lv_bsart NE 'RSB7'
-   AND lv_bsart NE 'RSBT'
-   AND lv_bsart NE 'RSB8'
-   AND lv_bsart NE 'RSM8'.
+   AND lv_bsart NE 'PRK9'
+   AND lv_bsart NE 'RSBR'
+   AND lv_bsart NE 'PRKS'.
+*  AND lv_bsart NE 'XXX'.   " <-- tambah kategori baru
 ```
 
-#### 2b. `GET_SIDEBAR` — deklarasi variabel (~line 221)
-Tambah variabel string untuk tiap kategori:
+#### 2b. `GET_SIDEBAR` — deklarasi variabel
+Tambah variabel string untuk tiap kategori per plant:
 ```abap
-DATA: lv_s_1200_roto TYPE string,
-      lv_s_1200_rsb7 TYPE string,
-      lv_s_1200_rsbt TYPE string,
-      lv_s_1200_rsb8 TYPE string,
-      lv_s_1300_roto TYPE string,
-      lv_s_1300_rsb7 TYPE string,
-      lv_s_1300_rsm8 TYPE string,
+DATA: lv_s_1200_roto  TYPE string,
+      lv_s_1200_prk9  TYPE string,
+      lv_s_1200_prks  TYPE string,
+      lv_s_1300_roto  TYPE string,
+      lv_s_1300_prks  TYPE string.
+*     lv_s_1200_xxx   TYPE string.   " <-- tambah
 ```
 
-#### 2c. `GET_SIDEBAR` — `count_pending` (~line 239)
-Tambah pemanggilan macro:
+#### 2c. `GET_SIDEBAR` — `count_pending`
+Tambah pemanggilan macro untuk tiap plant:
 ```abap
 count_pending 'ROTO' '1200' lv_s_1200_roto.
-count_pending 'RSB7' '1200' lv_s_1200_rsb7.
-count_pending 'RSBT' '1200' lv_s_1200_rsbt.
-count_pending 'RSB8' '1200' lv_s_1200_rsb8.
+count_pending 'PRK9' '1200' lv_s_1200_prk9.
+count_pending 'PRKS' '1200' lv_s_1200_prks.
 count_pending 'ROTO' '1300' lv_s_1300_roto.
-count_pending 'RSB7' '1300' lv_s_1300_rsb7.
-count_pending 'RSM8' '1300' lv_s_1300_rsm8.
+count_pending 'PRKS' '1300' lv_s_1300_prks.
+*count_pending 'XXX' '1200' lv_s_1200_xxx.   " <-- tambah
 ```
 
-#### 2d. `GET_SIDEBAR` — output JSON (~line 289)
+#### 2d. `GET_SIDEBAR` — output JSON
 Tambah di objek JSON pending:
 ```abap
 '"1200":{'
   '"ROTO":' lv_s_1200_roto ','
-  '"RSB7":' lv_s_1200_rsb7 ','
-  '"RSBT":' lv_s_1200_rsbt ','
-  '"RSB8":' lv_s_1200_rsb8
+  '"PRK9":' lv_s_1200_prk9 ','
+  '"PRKS":' lv_s_1200_prks
+* ','"XXX":' lv_s_1200_xxx   " <-- tambah
 '},'
-'"1300":{'
-  '"ROTO":' lv_s_1300_roto ','
-  '"RSB7":' lv_s_1300_rsb7 ','
-  '"RSM8":' lv_s_1300_rsm8
-'}'
 ```
 
 ---
@@ -125,17 +100,19 @@ Tambah di objek JSON pending:
 ### 3. Verifikasi
 
 Setelah semua perubahan, pastikan:
-- [ ] Sidebar menampilkan menu untuk kategori yang diaktifkan
+- [ ] Sidebar menampilkan menu untuk kategori yang ditambah
 - [ ] Badge pending muncul per kategori
 - [ ] Klik menu → fetch list dengan `bsart` sesuai
 - [ ] Whitelist backend menerima kategori tersebut
 - [ ] History menampilkan data dengan label kategori yang benar
 - [ ] Approve/reject tetap berfungsi (BSART dari EBAN, bukan hardcode)
 
-> **Catatan:** RSBT & RSB8 hanya untuk Plant 1200 (Surabaya).
-> RSM8 hanya untuk Plant 1300 (Semarang).
-> Pastikan tidak ada duplikasi `DATA` di `WHEN` berbeda dan sintaks ABAP klasik.
+> **Catatan:** Pastikan category key konsisten antara `CATEGORY_DEF`,
+> `PLANT_DEF`, `sbCounts`, dan whitelist backend. Karena pendekatan
+> ZBSP_PRCH_APP masih hardcode per kombinasi plant×kategori (tidak
+> like `lt_cat_def` loop ZPR_REL_BSP), setiap kategori baru perlu
+> ditambah di 3-4 tempat.
 
 ---
 
-*Dibuat: 2026-06-18 — Panduan aktivasi kategori RSBT, RSB8, RSM8*
+*Panduan aktivasi/penambahan kategori — diperbarui 23 Juni 2026*

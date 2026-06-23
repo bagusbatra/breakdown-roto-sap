@@ -175,3 +175,51 @@ tambahan (sesuai §1.1 — pakai ulang `ZROTO_APP_HIST`/`ZROTO_REJ_HIST`
 existing). Satu-satunya hal yang perlu dipastikan user sebelum paste adalah
 nama aplikasi BSP tujuan (lihat temuan URL logout di atas) — pilih Skenario
 A atau B di `notes.md` §2.
+
+---
+
+## Screening #4 — 2026-06-23
+
+### Scope
+Full screening of the entire repository (excluding `ZPO_REL_BSP` per `.opencodeignore`) to refresh all `.md` documentation after a "start from 0" reset.
+
+### Kondisi Repo
+- Working tree: include any unstaged/untracked changes from the current documentation refresh
+- All `.md` files have been updated to reflect actual current file sizes and structure
+- Key findings: `ZPR_REL_BSP/index-merge.htm` (2811 lines per old docs) no longer exists on disk
+- `ZPR_REL_BSP_jasa` folder no longer exists
+
+### Actual File Inventory (after screening)
+
+| File | Baris | Keterangan |
+|---|---|---|
+| `.opencodeignore` | 3 | Ignore rules |
+| `README.md` | (updated) | Overview repo |
+| `flowAndLogic.md` | (updated) | Flow & logic documentation |
+| `myLearning.md` | (updated) | Learning notes |
+| `history_screaning.md` | (updated, now with #4) | This file |
+| `perbandingan.md` | (updated) | Comparison doc |
+| `perbandingan-logic.md` | (updated) | Comparison logic doc |
+| `notes.md` | (updated) | Notes |
+| `notes/investigation.md` | (updated) | Investigation notes |
+| `documentation/README.md` | (updated) | Doc index |
+| `documentation/business-process.md` | (updated) | Business process |
+| `documentation/flow.md` | (updated) | Technical flow |
+| `documentation/zbsp-prch-app.md` | (updated) | ZBSP_PRCH_APP docs |
+| `documentation/zpo-rel-bsp.md` | (updated) | ZPO_REL_BSP docs |
+| `ZBSP_PRCH_APP/erd.md` | (updated) | ERD |
+| `ZBSP_PRCH_APP/TAMBAH_KATEGORI.md` | (updated) | Add category guide |
+| `ZBSP_PRCH_APP/Page with FLow Logic/index.htm` | 2241 | Frontend |
+| `ZBSP_PRCH_APP/Page with FLow Logic/main.htm` | 1298 | Backend |
+| `ZPR_REL_BSP/Page with FLow Logic/index.htm` | 2507 | Frontend |
+| `ZPR_REL_BSP/Page with FLow Logic/main.htm` | 1325 | Backend |
+| `ZPO_REL_BSP/` | — | Excluded per `.opencodeignore` |
+
+### Temuan Kunci Screening #4
+
+1. **index-merge.htm (2811 lines, referenced in old docs) confirmed missing from disk** — file `ZPR_REL_BSP/index-merge.htm` yang tercatat di dokumentasi lama sudah tidak ada.
+2. **Both BSP apps now support 7 plants**: 1200, 1300, 2000, 1000, 1001, 1100, 3000.
+3. **ZPR_REL_BSP uses functional category codes** (MTN, RND, SVC) with dynamic `lt_cat_def` loop.
+4. **ZBSP_PRCH_APP uses technical BSART codes** (ROTO, PRK9, RSBR, PRKS) with hardcoded `count_pending`.
+5. **ZPR_REL_BSP has live approver logic** (KMI-BOD), **ZBSP_PRCH_APP is read-only** with plant restriction.
+6. **All `.md` documentation refreshed** to reflect current state.

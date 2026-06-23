@@ -9,13 +9,15 @@
 
 | Aspek | `ZBSP_PRCH_APP` | `ZPR_REL_BSP` |
 |-------|-----------------|---------------|
-| Status | Versi rujukan (sebelum merge) | Versi hasil merge dengan `jasa_copy` |
-| Total file teks | 4 file | 4 file |
-| Lokasi file utama | `Page with FLow Logic/index.htm` + `main.htm` | `Page with FLow Logic/index.htm` + `main.htm` + `index-merge.htm` (root) |
-| Dokumentasi | `erd.md` (577 baris), `TAMBAH_KATEGORI.md` (141 baris) | `Session Notes - 22 Jun 2026.md` (229 baris) |
-| Total LOC | ~4.009 | ~6.296 |
+| Status | Procurement read-only app | PR approval app (KMI-BOD) |
+| Total file teks | 4 file | 2 file |
+| Lokasi file utama | `Page with FLow Logic/index.htm` + `main.htm` | `Page with FLow Logic/index.htm` + `main.htm` |
+| Dokumentasi | `erd.md` (577 baris), `TAMBAH_KATEGORI.md` (141 baris) | — |
+| Total LOC (source) | ~3.539 | ~3.832 |
+| Total LOC (all) | ~4.257 | ~3.832 |
 | Images MIME | 4 PNG (0 byte placeholder) | 4 PNG (0 byte placeholder) |
 | Approver | Semua user **read-only** (`lv_is_approver = abap_false`) | Hanya **KMI-BOD** yang bisa approve |
+| Plants supported | 1200, 1300, 2000, 1000, 1001, 1100, 3000 | 1200, 1300, 2000, 1000, 1001, 1100, 3000 |
 
 ---
 
@@ -26,29 +28,28 @@
 ```
 ZBSP_PRCH_APP/                          ZPR_REL_BSP/
 │                                       │
-├── erd.md                              ├── index-merge.htm
-├── TAMBAH_KATEGORI.md                  ├── Session Notes - 22 Jun 2026.md
-├── MIMEs/                              ├── MIMEs/
-│   ├── background.png (0 B)            │   ├── background.png (0 B)
-│   ├── logo.png (0 B)                  │   ├── logo.png (0 B)
-│   ├── semarang.png (0 B)              │   ├── semarang.png (0 B)
-│   └── surabaya.png (0 B)              │   └── surabaya.png (0 B)
-└── Page with FLow Logic/               └── Page with FLow Logic/
-    ├── main.htm (1.229 baris)              ├── main.htm (1.154 baris)
-    └── index.htm (2.062 baris)             └── index.htm (2.241 baris)
+├── erd.md                              ├── MIMEs/
+├── TAMBAH_KATEGORI.md                  │   ├── background.png (0 B)
+├── MIMEs/                              │   ├── logo.png (0 B)
+│   ├── background.png (0 B)            │   ├── semarang.png (0 B)
+│   ├── logo.png (0 B)                  │   └── surabaya.png (0 B)
+│   ├── semarang.png (0 B)              └── Page with FLow Logic/
+│   └── surabaya.png (0 B)                  ├── main.htm (1.325 baris)
+└── Page with FLow Logic/                   └── index.htm (2.507 baris)
+    ├── main.htm (1.298 baris)
+    └── index.htm (2.241 baris)
 ```
 
-**Catatan:** Kedua direktori memiliki struktur yang identik. `ZPR_REL_BSP` memiliki tambahan file `index-merge.htm` di root yang merupakan hasil merge antara `index.htm` lama dengan versi `jasa_copy`.
+**Catatan:** `ZPR_REL_BSP` adalah aplikasi approval murni (2 file). `ZBSP_PRCH_APP` memiliki dokumentasi tambahan (ERD + panduan aktivasi kategori).
 
 ### 2.2 Perbandingan Ukuran File
 
 | File | `ZBSP_PRCH_APP` | `ZPR_REL_BSP` |
 |------|-----------------|---------------|
-| `index.htm` | 2.062 baris / 87.659 byte | 2.241 baris / 67.785 byte |
-| `main.htm` | 1.229 baris / 41.021 byte | 1.154 baris / 38.970 byte |
-| `index-merge.htm` | — | 2.672 baris / 92.592 byte |
+| `index.htm` | 2.241 baris / 98.298 byte | 2.507 baris / 85.679 byte |
+| `main.htm` | 1.298 baris / 44.082 byte | 1.325 baris / 44.187 byte |
 
-**Observasi:** `ZBSP_PRCH_APP` memiliki `main.htm` yang lebih panjang (+75 baris), sementara `ZPR_REL_BSP` memiliki `index.htm` yang lebih panjang (+179 baris) dengan lebih banyak fitur frontend.
+**Observasi:** `ZPR_REL_BSP` memiliki `index.htm` yang lebih panjang (+266 baris) dengan fitur approval workflow (FAB, multi-select, modal approve/reject). `ZBSP_PRCH_APP` memiliki `main.htm` yang hampir sama panjang dengan tambahan `check_werks_allowed` macro untuk keamanan backend.
 
 ---
 
@@ -101,7 +102,7 @@ Keduanya memanggil `BAPI_USER_GET_DETAIL` untuk mendapat nama lengkap user.
 | `CUR_USER` | ✅ (dari ABAP) | ❌ (tidak ada) |
 | `curPlant` | `''` | `''` |
 | `curMode` | ✅ `''` | ✅ `''` |
-| `curCategory` | ❌ (tidak ada) | ✅ `''` |
+| `curCategory` | ❌ (pakai `curBsart`) | ✅ `''` |
 | `curBsart` | ✅ `'ROTO'` | ✅ `''` |
 | `isApprover` | ❌ (tidak ada) | ✅ `false` |
 | `openSections` | `{}` | `{}` |
@@ -124,40 +125,49 @@ Keduanya memanggil `BAPI_USER_GET_DETAIL` untuk mendapat nama lengkap user.
 
 ### 3.5 Data Model Kategori (Perbedaan Paling Signifikan)
 
-**`ZBSP_PRCH_APP`** — Menggunakan `PR_CATEGORIES` + `PLANT_CATEGORIES`:
+**`ZBSP_PRCH_APP`** — Menggunakan `CATEGORY_DEF` (objek flat by BSART) + `PLANT_DEF`:
 ```javascript
-// Baris 999-1009
-var PR_CATEGORIES = {
+// Baris 1010-1029
+var PLANT_DEF = {
+  '1200': { label:'Surabaya', categories:['ROTO','PRK9','PRKS'] },
+  '2000': { label:'Surabaya', categories:[] },
+  '1000': { label:'Surabaya', categories:[] },
+  '1001': { label:'Surabaya', categories:[] },
+  '1100': { label:'Surabaya', categories:[] },
+  '1300': { label:'Semarang', categories:['ROTO','PRKS'] },
+  '3000': { label:'Semarang', categories:[] }
+};
+
+var CATEGORY_DEF = {
   'ROTO': { label:'PR Maintenance', short:'Maintenance', icon:'&#128203;' },
   'PRK9': { label:'PR RND',         short:'RND',         icon:'&#128736;' },
   'RSBR': { label:'PR RND',         short:'RND',         icon:'&#128736;' },
   'PRKS': { label:'PR Service',     short:'Service',     icon:'&#128295;' }
 };
-
-var PLANT_CATEGORIES = {
-  '1200': ['ROTO', 'PRK9', 'PRKS'],
-  '1300': ['ROTO', 'PRKS']
-};
 ```
 
-**`ZPR_REL_BSP`** — Menggunakan `CATEGORY_DEF` (lebih terstruktur dengan mapping plant-category-bsart):
+**`ZPR_REL_BSP`** — Menggunakan `CATEGORY_DEF` per-plant (lebih terstruktur dengan mapping plant-category-bsart):
 ```javascript
-// Baris 837-860
+// Baris 840-893
 var CATEGORY_DEF = {
   '1200': [
-    {code:'MTN', label:'PR Maintenance', short:'Maintenance', icon:'...', bsart:'ROTO'},
-    {code:'RND', label:'PR RND',         short:'RND',         icon:'...', bsart:'RSBR,PRK9'},
-    {code:'SVC', label:'PR Service',     short:'Service',     icon:'...', bsart:'PRKS'}
+    {code:'MTN', label:'PR Maintenance', bsart:'ROTO',    icon:'...'},
+    {code:'RND', label:'PR RND',         bsart:'RSBR,PRK9', icon:'...'},
+    {code:'SVC', label:'PR Service',     bsart:'PRKS',     icon:'...'}
   ],
   '1300': [
-    {code:'MTN', label:'PR Maintenance', short:'Maintenance', icon:'...', bsart:'ROTO'},
-    {code:'SVC', label:'PR Service',     short:'Service',     icon:'...', bsart:'PRKS'}
+    {code:'MTN', label:'PR Maintenance', bsart:'ROTO',    icon:'...'},
+    {code:'SVC', label:'PR Service',     bsart:'PRKS',     icon:'...'}
   ],
   '2000': [
-    {code:'MTN', label:'PR Maintenance', short:'Maintenance', icon:'...', bsart:'ROTO'},
-    {code:'RND', label:'PR RND',         short:'RND',         icon:'...', bsart:'RSBR,PRK9'},
-    {code:'SVC', label:'PR Service',     short:'Service',     icon:'...', bsart:'PRKS'}
-  ]
+    {code:'MTN', label:'PR Maintenance', bsart:'ROTO',    icon:'...'},
+    {code:'RND', label:'PR RND',         bsart:'RSBR,PRK9', icon:'...'},
+    {code:'SVC', label:'PR Service',     bsart:'PRKS',     icon:'...'}
+  ],
+  '1000': [ /* MTN,RND,SVC */ ],
+  '1001': [ /* MTN,RND,SVC */ ],
+  '1100': [ /* MTN,RND,SVC */ ],
+  '3000': [ /* MTN,SVC */ ]
 };
 ```
 
@@ -165,10 +175,10 @@ var CATEGORY_DEF = {
 | Aspek | `ZBSP_PRCH_APP` | `ZPR_REL_BSP` |
 |-------|-----------------|---------------|
 | Category codes | ROTO, PRK9, RSBR, PRKS | MTN, RND, SVC |
-| Struktur | Flat (PR_CATEGORIES) + plant mapping (PLANT_CATEGORIES) | Per-plant array (CATEGORY_DEF) |
-| Plant 2000 | Tidak ada di PLANT_CATEGORIES | Ada 3 kategori |
-| BSART mapping | implicit (via PR_CATEGORIES key) | explicit (`cat.bsart`) |
-| Dinamis | Kurang dinamis | Lebih mudah ditambah kategori baru |
+| Struktur | Flat (CATEGORY_DEF by BSART) + plant mapping (PLANT_DEF) | Per-plant array (CATEGORY_DEF) |
+| Plant 2000 dll | Ada di PLANT_DEF tapi kategori kosong | Ada 3 kategori (MTN/RND/SVC) |
+| BSART mapping | Langsung (nama key == BSART) | Explicit (`cat.bsart`) |
+| Jumlah plant | 7 plant (3 dengan kategori) | 7 plant (semua punya kategori) |
 
 ### 3.6 Fungsi-Fungsi Khas
 
@@ -318,55 +328,44 @@ var CATEGORY_DEF = {
 | `check_werks_allowed` | ✅ **(baris 183-192)** — cek user KMI-U052, U051, U151 | ❌ **Tidak ada** |
 | `fmt_date` | ✅ (baris 194-202) | ✅ (baris 172-180) |
 | `parse_bsart_range` | ✅ (baris 207-222) | ✅ **(baris 188-203)** — lebih sederhana |
-| `count_pending` | ✅ **(baris 227-244)** — SELECT + SORT + COUNT | ❌ **Tidak ada** (pakai lt_cat_def + SELECT langsung) |
+| `count_pending` | ✅ **(baris 227-244)** — SELECT + SORT + COUNT | ❌ **Tidak ada** (pakai lt_cat_def + SELECT GROUP BY langsung) |
 
 ### 4.4 Approach GET_SIDEBAR (Perbedaan Paling Signifikan)
 
-**`ZBSP_PRCH_APP`** — Menggunakan macro `count_pending` per plant + per kategori + merge 2000 ke 1200 secara manual:
+**`ZBSP_PRCH_APP`** — Menggunakan macro `count_pending` per plant + per kategori:
 ```abap
+" 7 plant × 3 kategori = 21+ panggilan count_pending
 count_pending 'ROTO' '1200' lv_s_1200_roto.
 count_pending 'RSBR,PRK9' '1200' lv_s_1200_PRK9.
 count_pending 'PRKS' '1200' lv_s_1200_PRKS.
-count_pending 'ROTO' '1300' lv_s_1300_roto.
-count_pending 'RSBR,PRK9' '1300' lv_s_1300_PRK9.
-count_pending 'PRKS' '1300' lv_s_1300_PRKS.
-count_pending 'ROTO' '2000' lv_s_2000_roto.
-count_pending 'RSBR,PRK9' '2000' lv_s_2000_PRK9.
-count_pending 'PRKS' '2000' lv_s_2000_PRKS.
-
-" Merge 2000 ke 1200
-lv_tmp_i = lv_s_1200_roto + lv_s_2000_roto...
-
+...
+count_pending 'ROTO' '3000' lv_s_3000_roto.
+count_pending 'PRKS' '3000' lv_s_3000_PRKS.
 " JSON hardcode per plant
-"1200":{ROTO,PRK9,PRKS}
-"1300":{ROTO,PRKS}
 ```
 
-**`ZPR_REL_BSP`** — Menggunakan `lt_cat_def` (internal table) + LOOP:
+**`ZPR_REL_BSP`** — Menggunakan `lt_cat_def` (internal table) + 3 query GROUP BY:
 ```abap
 lt_cat_def = VALUE #(
-  ( werks = '1200' category = 'MTN' bsart = 'RSBR,PRK9' )
+  ( werks = '1200' category = 'MTN' bsart = 'ROTO' )
+  ( werks = '1200' category = 'RND' bsart = 'RSBR,PRK9' )
   ( werks = '1200' category = 'SVC' bsart = 'PRKS' )
-  ( werks = '1300' category = 'MTN' bsart = 'ROTO' )
-  ...
+  ... 7 plant × 2-3 kategori
 ).
 
-LOOP AT lt_cat_def INTO ls_cat_def.
-  SELECT COUNT(*) ... WHERE werks = ls_cat_def-werks AND ...
-  " Output JSON dinamis
-ENDLOOP.
+" 3 query GROUP BY (pending, hist_app, hist_rej) — scalable
+" Tidak perlu 1 query per kombinasi
 ```
 
 **Perbandingan:**
 
-| Aspek | `ZBSP_PRCH_APP` (count_pending macro) | `ZPR_REL_BSP` (lt_cat_def loop) |
-|-------|---------------------------------------|----------------------------------|
-| Pendekatan | **Hardcode** — setiap plant + kategori ditulis manual | **Dinamis** — loop internal table |
+| Aspek | `ZBSP_PRCH_APP` (count_pending macro) | `ZPR_REL_BSP` (lt_cat_def + GROUP BY) |
+|-------|---------------------------------------|----------------------------------------|
+| Pendekatan | **Hardcode** — setiap plant + kategori ditulis manual | **Dinamis** — loop internal table + GROUP BY |
 | JSON output | Hardcode string CONCATENATE | Dinamis via LOOP |
-| Plant 2000 | Manual merge ke 1200 | Langsung sebagai entry di `lt_cat_def` |
-| Tambah kategori | Ubah 3-4 tempat | Cukup tambah baris di `lt_cat_def` |
-| Resiko error | Tinggi (human error) | Rendah |
-| Performa | Lebih cepat (langsung) | Sama (hanya loop kecil) |
+| Tambah plant | Ubah banyak tempat (variable, macro, JSON) | Cukup tambah baris di `lt_cat_def` |
+| Jumlah query | 1 query per kombinasi (21+ untuk 7 plant × 3 kategori) | 3 query total (GROUP BY) |
+| Performa | Query count membengkak linear dgn jumlah plant | Stabil — 3 query untuk berapa pun plant |
 
 ### 4.5 GET_LIST — WHERE Clause
 
@@ -383,10 +382,10 @@ ENDLOOP.
 | Aspek | `ZBSP_PRCH_APP` | `ZPR_REL_BSP` |
 |-------|-----------------|---------------|
 | **Approver check** | `lv_is_approver = abap_false` (HARDCODE — tidak bisa approve) | `IF lv_uname = 'KMI-BOD'` (dinamis) |
-| Release code | `'P2'` | `'P2'` |
-| Error handling | ✅ BAPI return code check (sy-subrc 1-7) | ✅ BAPI return code check (sy-subrc 1-7) |
-| Commit | ✅ BAPI_TRANSACTION_COMMIT | ✅ BAPI_TRANSACTION_COMMIT |
-| Rollback | ✅ BAPI_TRANSACTION_ROLLBACK | ✅ BAPI_TRANSACTION_ROLLBACK |
+| **Release code** | `'P2'` | `'P2'` |
+| **Error handling** | ✅ BAPI return code check (sy-subrc 1-7) | ✅ BAPI return code check (sy-subrc 1-7) |
+| **Commit** | ✅ BAPI_TRANSACTION_COMMIT | ✅ BAPI_TRANSACTION_COMMIT |
+| **Rollback** | ✅ BAPI_TRANSACTION_ROLLBACK | ✅ BAPI_TRANSACTION_ROLLBACK |
 | **Write history BEFORE delete** | ✅ Write `zroto_rej_hist` dulu, baru BAPI_DELETE | ✅ Write `zroto_rej_hist` dulu, baru BAPI_DELETE |
 | **Cleanup history on delete fail** | ✅ DELETE FROM `zroto_rej_hist` + ROLLBACK | ✅ DELETE FROM `zroto_rej_hist` + ROLLBACK |
 | Approve success message | `"PR {banfn} berhasil di-approve ({count} item)"` | `"PR {banfn} berhasil di-approve ({count} item)"` |
@@ -445,110 +444,74 @@ ENDLOOP.
 
 ---
 
-## 5. Perbandingan Plant 2000
+## 5. Perbandingan Multi-Plant Support
+
+### 5.1 Daftar Plant
+
+| Plant | Label | ZBSP_PRCH_APP | ZPR_REL_BSP |
+|:-----:|-------|:-------------:|:------------:|
+| 1200 | Surabaya | ✅ (ROTO, PRK9, PRKS) | ✅ (MTN, RND, SVC) |
+| 1300 | Semarang | ✅ (ROTO, PRKS) | ✅ (MTN, SVC) |
+| 2000 | Surabaya | ✅ (categories kosong) | ✅ (MTN, RND, SVC) |
+| 1000 | Surabaya | ✅ (categories kosong) | ✅ (MTN, RND, SVC) |
+| 1001 | Surabaya | ✅ (categories kosong) | ✅ (MTN, RND, SVC) |
+| 1100 | Surabaya | ✅ (categories kosong) | ✅ (MTN, RND, SVC) |
+| 3000 | Semarang | ✅ (categories kosong) | ✅ (MTN, SVC) |
+
+### 5.2 Plant Grouping (Surabaya: 1200+2000+1000+1001+1100)
 
 | Aspek | `ZBSP_PRCH_APP` | `ZPR_REL_BSP` |
 |-------|-----------------|---------------|
-| **Ada di `PLANT_LABELS`** | ✅ `'2000':'Surabaya'` | ✅ `'2000':'Surabaya'` |
-| **Ada di backend GET_SIDEBAR** | ✅ count_pending untuk 2000, merge ke 1200 | ✅ entry di `lt_cat_def` untuk plant 2000 |
-| **Ada di GET_LIST** | ✅ werks RANGE mencakup 2000 saat pilih 1200 | ✅ werks RANGE dari `lv_werks` (frontend kirim `'1200,2000'`) |
-| **Ada di GET_HIST_REJ** | ✅ werks RANGE mencakup 2000 | ✅ werks RANGE dari `lv_werks` |
-| **Ada di GET_HIST_APP** | ✅ werks RANGE mencakup 2000 | ✅ werks RANGE dari `lv_werks` |
-| **Frontend `getEffectiveWerks`** | ✅ `'1200'` → `'1200,2000'` | **Ada** (baris 954-957) |
-| **Frontend `getSidebarWerks`** | ✅ `'1200'` → `['1200','2000']` | **Ada** (baris 959-962) |
-| **Card badge display** | `PLANT_LABELS[pr.werks]` → `'Surabaya'` | `getPlantLabel(pr.werks)` → `'Surabaya'` |
-| **sbCounts untuk 2000** | ✅ merging ke 1200 | ✅ direct di `sbCounts.pending['2000']` |
+| **Dimana merge terjadi** | **Backend (ABAP)**: GET_SIDEBAR menjumlah count dari beberapa plant | **Frontend**: Sidebar mengirim `werks=1200,2000` sebagai comma-separated string |
+| **GET_LIST** | Backend: tambah plant 2000 ke RANGE saat `lv_werks = '1200'` | Frontend: kirim `'1200,2000'` sebagai werks, backend tinggal split |
+| **GET_HIST_REJ/APP** | Sama seperti GET_LIST | Sama seperti GET_LIST |
+| **Keuntungan** | Backend logic terpusat | Backend tidak perlu tahu tentang "grouping" plant |
+| **Kerugian** | Backend harus diubah jika grouping berubah | Setiap frontend harus implementasi grouping sendiri |
 
 ---
 
-## 6. Perbandingan `index-merge.htm` vs `index.htm` di `ZPR_REL_BSP`
-
-`ZPR_REL_BSP` memiliki **2 file frontend**: `Page with FLow Logic/index.htm` (original) dan `index-merge.htm` (hasil merge di root).
-
-### Perbedaan `index-merge.htm` dengan `index.htm` (ZPR_REL_BSP):
-
-| Fitur | `index.htm` | `index-merge.htm` |
-|-------|-------------|-------------------|
-| **Total baris** | 2.241 | 2.672 (+431 baris) |
-| **CSS variables** | 11 variabel | **32 variabel** (sama dengan `ZBSP_PRCH_APP`) |
-| **Welcome modal** | ❌ | ✅ (via Navigation Timing API, setiap refresh) |
-| **Skeleton loading** | ❌ | ✅ |
-| **ResizeObserver** | ❌ | ✅ `observeToolbarOffset()` |
-| **Google Font** | DM Sans + DM Mono | **Inter** + DM Mono |
-| **Tombol expand/collapse** | 2 tombol terpisah | **1 tombol toggle** |
-| **Toast animation** | tanpa fade | ✅ fade-out |
-| **byColor variable** | ✅ dideklarasi benar | ✅ dideklarasi benar |
-| **`onHistSearch` params** | 3 params (val, data, type) | 1 param (val) |
-| **Badge pending text** | `"Pending"` | `"In Release"` |
-| **Bug duplicate functions** | ❌ minim | ✅ **ADA** — fungsi di script block 1 di-override block 2 |
-| **Card detail table** | inline styles | class `.detail-tbl` |
-| **Scrollbar custom** | ❌ | ✅ |
-
-### Daftar fungsi DUPLIKAT di `index-merge.htm`:
-
-Akibat proses merge, fungsi-fungsi ini muncul **dua kali** (script block 1: baris 1105-2482, script block 2: baris 2483-2670):
-
-| Fungsi | Block 1 (baris) | Block 2 (baris) |
-|--------|-----------------|-----------------|
-| `renderList()` | ~1807 | ~1810 (Override) |
-| `renderHistTable()` | ~2034 | ~2034 (Sama) |
-| `buildHistTable()` | ~2080 | ~2080 (Sama) |
-| `toggleExpand()` | ~2293 | ~2296 (Sama) |
-| `expandAll()` | ~2302 | ~2305 (Sama) |
-| `collapseAll()` | ~2317 | ~2320 (Sama) |
-| `loadDetail()` | ~2328 | ~2331 (Sama) |
-| `toggleSelect()` | ~2407 | ~2410 (Sama) |
-| `toggleSelectAll()` | ~2418 | ~2421 (Sama) |
-| `syncCheckboxes()` | ~2458 | ~2461 (Sama) |
-| `updateFabInfo()` | ~2469 | ~2472 (Sama) |
-
----
-
-## 7. Perbandingan Dokumentasi
+## 6. Perbandingan Dokumentasi
 
 ### `erd.md` (`ZBSP_PRCH_APP`) — 577 baris
 - Entity Relationship Diagram lengkap
 - Menjelaskan 6 tabel (4 SAP standard + 2 Z custom)
-- Menjelaskan 5 kategori: **ROTO, RSB7, RSBT, RSB8, RSM8**
-- **Catatan:** ERD mendokumentasikan kode yang berbeda dengan implementasi aktual (kode aktual pakai ROTO/PRK9/RSBR/PRKS)
+- Menjelaskan 4 kategori: **ROTO, PRK9, RSBR, PRKS**
 - Menjelaskan constraint dan relasi antar tabel
 
 ### `TAMBAH_KATEGORI.md` (`ZBSP_PRCH_APP`) — 141 baris
-- Panduan step-by-step aktivasi 3 kategori dormant: **RSBT, RSB8, RSM8**
+- Panduan step-by-step penambahan kategori baru
 - Dengan line reference spesifik untuk index.htm dan main.htm
 - Berguna untuk pengembangan kedepan
 
-### `Session Notes - 22 Jun 2026.md` (`ZPR_REL_BSP`) — 229 baris
-- Catatan developer tentang proses merge
-- Bug fix: `byColor is not defined`
-- Perubahan welcome modal (localStorage → Navigation Timing API)
-- 12 perubahan UI/UX yang sudah dilakukan
-- 9 perbedaan visual yang tersisa
-- 6 perbedaan arsitektur yang sengaja dipertahankan
-- 4 perbedaan UX yang sengaja dipertahankan
+`ZPR_REL_BSP` tidak memiliki dokumentasi terpisah.
 
 ---
 
-## 8. Ringkasan Perbedaan Arsitektur
+## 7. Ringkasan Perbedaan Arsitektur
 
-### 8.1 Category Model
+### 7.1 Category Model
 
 ```
 ZBSP_PRCH_APP:                          ZPR_REL_BSP:
-PR_CATEGORIES = {                       CATEGORY_DEF = {
+CATEGORY_DEF = {                        CATEGORY_DEF = {
   'ROTO':{...}      ← doc type           '1200':[
   'PRK9':{...}      ← doc type             {code:'MTN', bsart:'ROTO'}
   'RSBR':{...}      ← doc type             {code:'RND', bsart:'RSBR,PRK9'}
   'PRKS':{...}      ← doc type             {code:'SVC', bsart:'PRKS'}
 }                                         ]
-PLANT_CATEGORIES = {                     '1300':[
-  '1200':['ROTO','PRK9','PRKS']            {code:'MTN', bsart:'ROTO'}
-  '1300':['ROTO','PRKS']                   {code:'SVC', bsart:'PRKS'}
-}                                         ]
+PLANT_DEF = {                           '1300':[
+  '1200':{cats:['ROTO','PRK9','PRKS']}     {code:'MTN', bsart:'ROTO'}
+  '1300':{cats:['ROTO','PRKS']}            {code:'SVC', bsart:'PRKS'}
+  '2000':{cats:[]}                       ]
+  ...                                   '2000':[...]
+}                                       '1000':[...]
+                                        '1001':[...]
+                                        '1100':[...]
+                                        '3000':[...]
                                         }
 ```
 
-### 8.2 Plant Restriction
+### 7.2 Plant Restriction
 
 ```
 ZBSP_PRCH_APP:                          ZPR_REL_BSP:
@@ -559,23 +522,22 @@ ZBSP_PRCH_APP:                          ZPR_REL_BSP:
   user filter di renderSidebar()
 ```
 
-### 8.3 Frontend-Backend Communication
+### 7.3 Frontend-Backend Communication
 
 Keduanya menggunakan pola yang sama: `fetch(API_URL + '?action=...&werks=...&bsart=...')` → JSON response.
 
-**Perbedaan:** `ZBSP_PRCH_APP` backend mengirim `is_approver` di response GET_SIDEBAR. `ZPR_REL_BSP` tidak mengirim `is_approver` di JSON — frontend mendapatkan info approver dari ABAP langsung di awal via `<%=lv_is_approver%>` (tapi ini tidak ada di index.htm).
+**Perbedaan:** `ZBSP_PRCH_APP` backend mengirim `is_approver` di response GET_SIDEBAR. `ZPR_REL_BSP` tidak mengirim `is_approver` di JSON — frontend mendapatkan info approver dari ABAP langsung di awal via `<%=lv_is_approver%>`.
 
-### 8.4 Code Duplication
+### 7.4 Code Duplication
 
 | Aspek | `ZBSP_PRCH_APP` | `ZPR_REL_BSP` |
 |-------|-----------------|---------------|
 | index.htm | **Bersih** — tidak ada duplikasi | **Bersih** — tidak ada duplikasi |
-| index-merge.htm | — | **Ada duplikasi** — 11+ fungsi muncul 2 kali |
 | main.htm | Bersih | Bersih |
 
 ---
 
-## 9. Matriks Fitur Lengkap
+## 8. Matriks Fitur Lengkap
 
 | No | Fitur | `ZBSP_PRCH_APP` | `ZPR_REL_BSP` |
 |----|-------|:---------------:|:--------------:|
@@ -604,7 +566,7 @@ Keduanya menggunakan pola yang sama: `fetch(API_URL + '?action=...&werks=...&bsa
 | 23 | User menu dropdown | ✅ | ✅ |
 | 24 | Logout | ✅ | ✅ |
 | 25 | Responsive design | ✅ (3 breakpoints) | ✅ (2 breakpoints) |
-| 26 | Plant 2000 (Surabaya extension) | ✅ | ✅ |
+| 26 | Multi-plant support (7 plant) | ✅ | ✅ |
 | 27 | User-based plant restriction | ✅ (KMI-U052, U051, U151) | ❌ (tidak ada) |
 | 28 | ResizeObserver sticky toolbar | ✅ | ❌ |
 | 29 | Scrollbar custom (Chromium) | ✅ | ❌ |
@@ -615,16 +577,15 @@ Keduanya menggunakan pola yang sama: `fetch(API_URL + '?action=...&werks=...&bsa
 | 34 | Audit trail (zroto_app_hist, zroto_rej_hist) | ✅ | ✅ |
 | 35 | ERD documentation | ✅ | ❌ |
 | 36 | Kategori activation guide | ✅ | ❌ |
-| 37 | Developer session notes | ❌ | ✅ |
-| 38 | Full backend plant restriction | ✅ | ❌ |
-| 39 | Dynamic category definitions | ❌ (hardcode) | ✅ (CATEGORY_DEF) |
-| 40 | Dynamic GET_SIDEBAR (lt_cat_def loop) | ❌ (hardcode) | ✅ (dinamis) |
+| 37 | Full backend plant restriction | ✅ | ❌ |
+| 38 | Dynamic category definitions (lt_cat_def loop) | ❌ (hardcode) | ✅ (dinamis) |
+| 39 | Backend GET_SIDEBAR GROUP BY (3 query) | ❌ (21+ query) | ✅ (3 query) |
 
 ---
 
-## 10. Analisis dan Rekomendasi
+## 9. Analisis dan Rekomendasi
 
-### 10.1 Kelebihan `ZBSP_PRCH_APP`
+### 9.1 Kelebihan `ZBSP_PRCH_APP`
 
 1. **Backend plant restriction** — `check_werks_allowed` macro melindungi data di server-side
 2. **Welcome modal** — UX lebih informatif dengan ringkasan PR
@@ -635,37 +596,36 @@ Keduanya menggunakan pola yang sama: `fetch(API_URL + '?action=...&werks=...&bsa
 7. **Dokumentasi** — ERD + panduan aktivasi kategori
 8. **Tidak ada duplikasi kode** — index.htm bersih
 
-### 10.2 Kelebihan `ZPR_REL_BSP`
+### 9.2 Kelebihan `ZPR_REL_BSP`
 
 1. **Approver logic** — Bisa melakukan approve/reject (KMI-BOD)
 2. **FAB + Multi-select** — UI workflow approval yang lebih lengkap
-3. **CATEGORY_DEF dinamis** — Struktur data kategori lebih modular
-4. **GET_SIDEBAR dinamis** — Loop lt_cat_def lebih mudah di-maintain
-5. **index-merge.htm** — Hasil merge dengan fitur lebih lengkap
-6. **Session notes** — Dokumentasi proses development
+3. **CATEGORY_DEF per plant** — Struktur data kategori lebih modular
+4. **GET_SIDEBAR GROUP BY** — Hanya 3 query untuk semua plant (scalable)
+5. **7 plant semua aktif** — Setiap plant punya kategori terdefinisi
+6. **Plant grouping di frontend** — Decoupling, backend tidak perlu tahu grouping
 
-### 10.3 Rekomendasi
+### 9.3 Rekomendasi
 
 **Arsitektur terbaik** adalah menggabungkan kelebihan keduanya:
 
 1. **Dari `ZBSP_PRCH_APP`**: Backend plant restriction (`check_werks_allowed`), welcome modal, skeleton loading, ResizeObserver, CSS lengkap, 1 tombol toggle
-2. **Dari `ZPR_REL_BSP`**: Approver logic (KMI-BOD), CATEGORY_DEF dinamis, FAB + multi-select, lt_cat_def loop, error handling cleanup history
-3. **Dari keduanya**: Plant 2000 support (sudah ada di kedua versi)
+2. **Dari `ZPR_REL_BSP`**: Approver logic (KMI-BOD), CATEGORY_DEF per plant, FAB + multi-select, lt_cat_def + GROUP BY loop, plant grouping di frontend
 
 **Prioritas tinggi:**
 - Tambahkan `check_werks_allowed` ke `ZPR_REL_BSP` untuk keamanan server-side
-- Pindahkan welcome modal & skeleton loading dari `ZBSP_PRCH_APP` ke `ZPR_REL_BSP`
-- Bersihkan duplikasi fungsi di `index-merge.htm`
+- Port welcome modal & skeleton loading dari `ZBSP_PRCH_APP` ke `ZPR_REL_BSP`
+- Port GROUP BY pattern dari `ZPR_REL_BSP` ke `ZBSP_PRCH_APP` untuk mengurangi jumlah query
 
 ---
 
-## 11. Identifikasi Perbedaan Paling Fundamental
+## 10. Identifikasi Perbedaan Paling Fundamental
 
-Bagian ini merangkum **7 perbedaan paling signifikan** yang mempengaruhi arsitektur, keamanan, maintainability, dan user experience secara fundamental.
+Bagian ini merangkum **6 perbedaan paling signifikan** yang mempengaruhi arsitektur, keamanan, maintainability, dan user experience secara fundamental.
 
 ---
 
-### 11.1 Perbedaan #1: Model Kategori — "Doc Type sebagai Key" vs "Business Function sebagai Key"
+### 10.1 Perbedaan #1: Model Kategori — "Doc Type sebagai Key" vs "Business Function sebagai Key"
 
 **Ini adalah perbedaan arsitektur paling mendasar antara kedua codebase.**
 
@@ -678,15 +638,15 @@ Bagian ini merangkum **7 perbedaan paling signifikan** yang mempengaruhi arsitek
 | BSART mapping | Implisit (nama key == doc type) | Eksplisit (property `bsart`) |
 
 **Dampak:**
-- **`ZBSP_PRCH_APP`**: Kode lebih sederhana untuk programmer SAP (karena nama category = doc type), tapi repot jika satu kategori punya multiple doc type (makanya `RSBR` dan `PRK9` jadi duplikasi dengan label sama).
-- **`ZPR_REL_BSP`**: Lebih abstrak dan business-oriented. Jika requirements berubah (misal: PR RND pakai doc type baru `RND1`), cukup update satu property `bsart` — tidak perlu bikin entry baru. Juga lebih mudah dipahami oleh non-SAP stakeholder.
+- **`ZBSP_PRCH_APP`**: Kode lebih sederhana untuk programmer SAP (karena nama category = doc type), tapi RSBR dan PRK9 adalah BSART berbeda yang punya label sama.
+- **`ZPR_REL_BSP`**: Lebih abstrak dan business-oriented. Jika requirements berubah (misal: PR RND pakai doc type baru), cukup update satu property `bsart` — tidak perlu bikin entry baru.
 - **Keduanya incompatible**: Data JSON dari backend `ZBSP_PRCH_APP` mengembalikan `{"1200":{"ROTO":5}}`, sedangkan `ZPR_REL_BSP` mengembalikan `{"1200":{"MTN":5}}`. Frontend tidak bisa saling tukar.
 
 **Kesimpulan:** `ZPR_REL_BSP` (functional) lebih unggul untuk maintainability jangka panjang.
 
 ---
 
-### 11.2 Perbedaan #2: Keamanan — Plant Restriction "Full Backend+Frontend" vs "Frontend Only"
+### 10.2 Perbedaan #2: Keamanan — Plant Restriction "Full Backend+Frontend" vs "Frontend Only"
 
 | Aspek | `ZBSP_PRCH_APP` | `ZPR_REL_BSP` |
 |-------|-----------------|---------------|
@@ -696,63 +656,28 @@ Bagian ini merangkum **7 perbedaan paling signifikan** yang mempengaruhi arsitek
 | Tingkat keamanan | **High** — double security | **Low** — hanya client-side |
 
 **Dampak:**
-- Di `ZPR_REL_BSP`, user KMI-U151 bisa mengirim request `POST main.htm?action=GET_LIST&werks=1300` langsung (via browser dev tools atau curl) dan **backend akan mengembalikan data Semarang** karena tidak ada validasi.
-- Di `ZBSP_PRCH_APP`, macro `check_werks_allowed` akan memblokir request tersebut dengan response `"Anda tidak memiliki akses ke plant ini"`.
+- Di `ZPR_REL_BSP`, user bisa mengirim request langsung (via browser dev tools atau curl) dan **backend akan mengembalikan data plant lain** karena tidak ada validasi.
+- Di `ZBSP_PRCH_APP`, macro `check_werks_allowed` akan memblokir request tersebut.
 
 **Kesimpulan:** `ZBSP_PRCH_APP` **jauh lebih aman**. Ini adalah critical security issue di `ZPR_REL_BSP`.
 
 ---
 
-### 11.3 Perbedaan #3: Arsitektur GET_SIDEBAR — "Hardcode Statement" vs "Dynamic Loop"
+### 10.3 Perbedaan #3: Arsitektur GET_SIDEBAR — "21+ Query Hardcode" vs "3 Query GROUP BY Dinamis"
 
 | Aspek | `ZBSP_PRCH_APP` | `ZPR_REL_BSP` |
 |-------|-----------------|---------------|
-| Metode | Panggil `count_pending` macro untuk **setiap** plant+kategori (9 kali) | LOOP `lt_cat_def` yang berisi definisi plant+kategori (8 entry) |
-| Tambah kategori baru | Ubah macro call + JSON concatenation (3-4 tempat) | Cukup tambah 1 baris di `lt_cat_def` |
+| Metode | Panggil `count_pending` macro untuk **setiap** plant+kategori (21+ kali) | 3 query GROUP BY dari `lt_cat_def` |
+| Tambah kategori baru | Ubah macro call + JSON concatenation (3-4 tempat) | Cukup tambah baris di `lt_cat_def` |
 | Tambah plant baru | Ubah macro call + variabel + JSON (banyak tempat) | Cukup tambah baris di `lt_cat_def` |
 | Resiko human error | **Tinggi** — lupa update satu tempat saja sudah error | **Rendah** — cukup update satu file |
-| Kode JSON output | String CONCATENATE manual — rentan typo | Dinamis dari LOOP + CONDENSE |
+| Scalability | **Buruk** — query count = plant × kategori | **Baik** — selalu 3 query |
 
-**Contoh konkret:** Misal ingin menambah plant `1400` (Bandung) dengan kategori MTN dan SVC.
-
-Di **`ZBSP_PRCH_APP`** perlu:
-1. Tambah variabel `lv_s_1400_roto`, `lv_s_1400_prks`, `lv_rj_1400`, `lv_ra_1400`
-2. Tambah 2 baris `count_pending` untuk plant 1400
-3. Tambah SELECT untuk hist_rej 1400
-4. Tambah SELECT untuk hist_app 1400
-5. Update user restriction (zero-out)
-6. Update CONCATENATE JSON (4 tempat)
-
-Di **`ZPR_REL_BSP`** cukup:
-1. Tambah 2 baris di `lt_cat_def`:
-   ```abap
-   ls_cat_def-werks = '1400'. ls_cat_def-category = 'MTN'. ls_cat_def-bsart_cs = 'ROTO'.
-   ls_cat_def-werks = '1400'. ls_cat_def-category = 'SVC'. ls_cat_def-bsart_cs = 'PRKS'.
-   ```
-
-**Kesimpulan:** `ZPR_REL_BSP` **jauh lebih maintainable** untuk jangka panjang.
+**Kesimpulan:** `ZPR_REL_BSP` **jauh lebih maintainable dan scalable** untuk jangka panjang.
 
 ---
 
-### 11.4 Perbedaan #4: CODE DUPLICATION — "Bersih" vs "Bermasalah"
-
-| Aspek | `index.htm (ZBSP_PRCH_APP)` | `index-merge.htm (ZPR_REL_BSP)` | `index.htm (ZPR_REL_BSP)` |
-|-------|------------------------------|----------------------------------|----------------------------|
-| Fungsi duplikat | ❌ **0** | ✅ **11+ fungsi** muncul 2x | ❌ **0** |
-| Penyebab | Tidak ada proses merge | Hasil merge dari `jasa_copy` — 2 script block tidak digabung | Tidak ada proses merge |
-| Dampak | ✅ Berfungsi normal | ❌ Berpotensi bug (fungsi block 1 di-override block 2, tapi state variable bisa berbeda) | ✅ Berfungsi normal |
-| File size overhead | — | +431 baris dari duplikasi yang tidak perlu | — |
-
-**Fungsi yang terduplikasi (muncul di kedua script block):**
-`renderList`, `renderHistTable`, `buildHistTable`, `toggleExpand`, `expandAll`, `collapseAll`, `loadDetail`, `toggleSelect`, `toggleSelectAll`, `syncCheckboxes`, `updateFabInfo`
-
-**Risiko:** Jika ada perubahan di fungsi block 1 tapi tidak di block 2 (atau sebaliknya), akan terjadi **inconsistent behavior**. Block 2 menimpa block 1, jadi developer harus selalu ingat untuk mengedit block 2 saja. Ini jebakan bagi developer baru.
-
-**Kesimpulan:** `ZBSP_PRCH_APP` lebih bersih secara code quality. `index-merge.htm` perlu refactoring.
-
----
-
-### 11.5 Perbedaan #5: Workflow Approval — "Read-Only Total" vs "Read-Write (KMI-BOD only)"
+### 10.4 Perbedaan #4: Workflow Approval — "Read-Only Total" vs "Read-Write (KMI-BOD only)"
 
 | Aspek | `ZBSP_PRCH_APP` | `ZPR_REL_BSP` |
 |-------|-----------------|---------------|
@@ -771,35 +696,22 @@ Di **`ZPR_REL_BSP`** cukup:
 
 ---
 
-### 11.6 Perbedaan #6: Strategi Merge Plant 2000 — "Backend Merge" vs "Frontend Passthrough"
+### 10.5 Perbedaan #5: Strategi Multi-Plant — "Backend Merge" vs "Frontend Passthrough"
 
-Kedua codebase mendukung plant 2000 digabung ke Surabaya 1200, tapi dengan strategi berbeda:
+Kedua codebase mendukung 7 plant, tapi dengan strategi berbeda:
 
 | Aspek | `ZBSP_PRCH_APP` | `ZPR_REL_BSP` |
 |-------|-----------------|---------------|
-| Dimana merge terjadi | **Backend (ABAP)**: `GET_SIDEBAR` menghitung count 1200 + 2000 lalu dijumlah | **Frontend**: Sidebar mengirim `werks=1200,2000` sebagai comma-separated string |
-| GET_LIST | Backend: `IF lv_werks = '1200'` → include plant 2000 di RANGE | Frontend: kirim `'1200,2000'` sebagai werks, backend tinggal split |
-| GET_HIST_REJ/APP | Sama seperti GET_LIST | Sama seperti GET_LIST |
-| Keuntungan | Backend logic terpusat — semua client behave sama | Backend tidak perlu tahu tentang "grouping" plant |
-| Kerugian | Backend harus diubah jika grouping berubah | Setiap frontend harus implementasi grouping sendiri |
+| Dimana merge terjadi | **Backend (ABAP)**: GET_SIDEBAR menjumlah count dari 1200+2000+1000+1001+1100 | **Frontend**: Sidebar mengirim comma-separated werks |
+| GET_LIST | Backend: tambah plant grouping ke RANGE | Frontend: kirim multiple werks, backend split |
+| Keuntungan | Backend logic terpusat | Backend tidak perlu tahu grouping |
+| Kerugian | Backend harus diubah jika grouping berubah | Setiap frontend harus implementasi grouping |
 
-**Ilustrasi aliran data:**
-
-```
-ZBSP_PRCH_APP:
-Frontend: click Surabaya → curPlant='1200' → fetch 'werks=1200'
-Backend:  lv_werks='1200' → IF '1200' THEN include '2000' → SELECT werks IN ('1200','2000')
-
-ZPR_REL_BSP:
-Frontend: click Surabaya → getEffectiveWerks('1200')='1200,2000' → curPlant='1200,2000' → fetch 'werks=1200,2000'
-Backend:  SPLIT '1200,2000' → lt_werks_rng → SELECT werks IN lt_werks_rng
-```
-
-**Kesimpulan:** `ZPR_REL_BSP` lebih **decoupled** (backend tidak perlu tahu grouping). `ZBSP_PRCH_APP` lebih **centralized** (satu tempat aturan).
+**Kesimpulan:** `ZPR_REL_BSP` lebih **decoupled**. `ZBSP_PRCH_APP` lebih **centralized**.
 
 ---
 
-### 11.7 Perbedaan #7: Fitur-Fitur yang Hanya Ada di Satu Versi
+### 10.6 Perbedaan #6: Fitur-Fitur yang Hanya Ada di Satu Versi
 
 #### Fitur eksklusif `ZBSP_PRCH_APP`:
 
@@ -823,36 +735,35 @@ Backend:  SPLIT '1200,2000' → lt_werks_rng → SELECT werks IN lt_werks_rng
 |-------|---------------|
 | **Approver workflow (KMI-BOD)** | **Business** — aplikasi bisa digunakan untuk approval sungguhan |
 | **FAB + Multi-select** | UX — workflow approval lebih efisien (sekali proses banyak PR) |
-| **CATEGORY_DEF dinamis** | **Maintainability** — tambah kategori gampang |
-| **lt_cat_def loop (GET_SIDEBAR)** | **Maintainability** — tambah plant gampang |
+| **CATEGORY_DEF per plant** | **Maintainability** — tambah kategori/plant gampang |
+| **GROUP BY GET_SIDEBAR** | **Performance** — hanya 3 query untuk semua plant |
 | **Dynamic plant grouping** | **Decoupling** — backend tidak perlu tahu grouping plant |
-| **Session notes documentation** | **Developer** — memahami riwayat perubahan |
 
 ---
 
-## 12. Kesimpulan Akhir
+## 11. Kesimpulan Akhir
 
 | Aspek | Pemenang | Alasan |
 |-------|----------|--------|
 | **Keamanan** | `ZBSP_PRCH_APP` | Backend plant restriction (check_werks_allowed) |
-| **Maintainability** | `ZPR_REL_BSP` | CATEGORY_DEF dinamis + lt_cat_def loop |
-| **Code Quality** | `ZBSP_PRCH_APP` | Tidak ada duplikasi fungsi |
+| **Maintainability** | `ZPR_REL_BSP` | CATEGORY_DEF per plant + lt_cat_def + GROUP BY |
+| **Scalability** | `ZPR_REL_BSP` | 3 query GROUP BY vs 21+ query hardcode |
 | **Business Value** | `ZPR_REL_BSP` | Bisa approve/reject PR |
 | **UX Maturity** | `ZBSP_PRCH_APP` | Welcome modal, skeleton, animasi, ResizeObserver |
 | **Aksesibilitas** | `ZBSP_PRCH_APP` | prefers-reduced-motion |
 | **Arsitektur (decoupling)** | `ZPR_REL_BSP` | Plant grouping di frontend, backend unaware |
-| **Dokumentasi** | Seimbang | ERD (ZBSP) vs Session Notes (ZPR) |
-| **Overall** | **`ZBSP_PRCH_APP`** | Lebih aman, lebih matang UX, code lebih bersih |
+| **Dokumentasi** | `ZBSP_PRCH_APP` | ERD + panduan aktivasi kategori |
+| **Overall** | **`ZBSP_PRCH_APP`** | Lebih aman, lebih matang UX |
 
 **Catatan penting:** Kedua codebase memiliki kelebihan masing-masing. Idealnya, ambil `ZBSP_PRCH_APP` sebagai basis (karena lebih aman dan matang) lalu porting fitur-fitur dari `ZPR_REL_BSP`:
 - Approver logic (KMI-BOD bisa approve)
-- CATEGORY_DEF dinamis + lt_cat_def loop
+- CATEGORY_DEF per plant + lt_cat_def + GROUP BY
 - FAB + Multi-select
 - Dynamic plant grouping via frontend
 
 ---
 
-## 13. Saran Pengembangan UI Siap Implementasi di SE80
+## 12. Saran Pengembangan UI Siap Implementasi di SE80
 
 Bagian ini berisi **8 rekomendasi fitur UI** yang bisa ditambahkan ke codebase. Setiap rekomendasi:
 - ✅ Bisa diimplementasikan di SAP SE80 (BSP) tanpa library eksternal
@@ -862,7 +773,7 @@ Bagian ini berisi **8 rekomendasi fitur UI** yang bisa ditambahkan ke codebase. 
 
 ---
 
-### 13.1 Dark Mode Toggle
+### 12.1 Dark Mode Toggle
 
 **Nilai tambah:** Meningkatkan kenyamanan penggunaan di ruang redup/gudang malam.
 
@@ -931,7 +842,7 @@ if (localStorage.getItem('darkMode') === '1') {
 
 ---
 
-### 13.2 Export History ke CSV
+### 12.2 Export History ke CSV
 
 **Nilai tambah:** User bisa mendownload history approve/reject untuk diolah di Excel.
 
@@ -980,7 +891,7 @@ function exportCSV(type) {
 
 ---
 
-### 13.3 Auto-Refresh Timer
+### 12.3 Auto-Refresh Timer
 
 **Nilai tambah:** User bisa memantau PR pending secara real-time tanpa klik manual setiap saat.
 
@@ -1042,7 +953,7 @@ function toggleRefresh() {
 
 ---
 
-### 13.4 Column Sorting pada History Table
+### 12.4 Column Sorting pada History Table
 
 **Nilai tambah:** User bisa mengurutkan history berdasarkan kolom manapun dengan klik header.
 
@@ -1085,7 +996,7 @@ html+='<th onclick="sortHistory(\'bsart\')" style="cursor:pointer;">Kategori '+
 
 ---
 
-### 13.5 Copy PR Number to Clipboard
+### 12.5 Copy PR Number to Clipboard
 
 **Nilai tambah:** User bisa copy No PR dengan satu klik untuk mencari di transaksi SAP lain (ME5A, ME53N, dll).
 
@@ -1129,7 +1040,7 @@ html+='<td style="cursor:pointer;font-family:\'DM Mono\',monospace;font-weight:6
 
 ---
 
-### 13.6 Keyboard Shortcuts
+### 12.6 Keyboard Shortcuts
 
 **Nilai tambah:** Power user bisa navigasi lebih cepat tanpa mouse.
 
@@ -1208,7 +1119,7 @@ function showShortcutHelp() {
 
 ---
 
-### 13.7 Quick Filter Chips (Today/This Week/This Month)
+### 12.7 Quick Filter Chips (Today/This Week/This Month)
 
 **Nilai tambah:** User bisa cepat memfilter history berdasarkan periode waktu umum tanpa harus scroll pagination.
 
@@ -1256,7 +1167,7 @@ function setQuickFilter(period) {
 
 ---
 
-### 13.8 Sticky Table Header untuk History
+### 12.8 Sticky Table Header untuk History
 
 **Nilai tambah:** Header kolom tetap terlihat saat scroll panjang history table.
 
@@ -1302,7 +1213,7 @@ if (wrap) {
 
 ---
 
-## 14. Refactoring Maintainability — ZBSP_PRCH_APP → ZPR_REL_BSP Pattern
+## 13. Refactoring Maintainability — ZBSP_PRCH_APP → ZPR_REL_BSP Pattern
 
 Pada 23 Juni 2026, `ZBSP_PRCH_APP/index.htm` direfaktor untuk mendekati maintainability `ZPR_REL_BSP` **tanpa mengubah logic/flow sistem**.
 
@@ -1331,7 +1242,7 @@ Pada 23 Juni 2026, `ZBSP_PRCH_APP/index.htm` direfaktor untuk mendekati maintain
 
 Berikut sengaja **tidak disentuh** karena akan mengubah flow/logic:
 - Plant grouping logic (masih di backend `main.htm`, bukan frontend seperti ZPR_REL_BSP)
-- Approver logic (KMI-BOD belum bisa approve — masih using logic berbeda)
+- Approver logic (KMI-BOD belum bisa approve — masih read-only)
 - Event handling pattern (masih inline `onclick` — aman di BSP/SE80)
 - String concatenation HTML (masih `html+=` — tidak ada template engine di SE80)
 
@@ -1345,4 +1256,4 @@ Berikut sengaja **tidak disentuh** karena akan mengubah flow/logic:
 | **Decoupling** | ⚠️ Perlu porting | Plant grouping masih di backend — perlu porting `getEffectiveWerks()` dari ZPR_REL_BSP |
 | **Event handling** | ❌ Masih inline | ~30+ inline `onclick` — terlalu berat untuk direfaktor tanpa test |
 
-*Laporan dibuat berdasarkan analisis kode sumber tanggal 23 Juni 2026. Total 2.062→2.108 baris (ZBSP_PRCH_APP) dan 2.372 baris (ZPR_REL_BSP) dianalisis secara menyeluruh.*
+*Laporan dibuat berdasarkan analisis kode sumber tanggal 23 Juni 2026. Total 2.241 baris (ZBSP_PRCH_APP) dan 2.507 baris (ZPR_REL_BSP) dianalisis secara menyeluruh.*

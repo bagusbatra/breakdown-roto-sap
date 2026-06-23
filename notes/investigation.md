@@ -27,20 +27,22 @@ Pola ini cukup generic dan bisa jadi **template** untuk kategori PR lain:
 - **Pola sidebar dengan badge counter** per plant/kategori, dengan endpoint
   ringan terpisah (`GET_SIDEBAR`) supaya tidak perlu load semua data di awal.
 
-## 2. Hal yang Hardcode & Perlu Diparameterisasi (lihat juga business-process.md §10)
+## 2. Hal yang Hardcode & Perlu Diparameterisasi
 
 - `BSART = 'ROTO'` — muncul di `GET_SIDEBAR`, `GET_LIST`.
-- Plant `1200`/`1300` — hardcode di `GET_SIDEBAR` (4x SELECT terpisah) dan di
-  `index.htm` (`PLANT_LABELS`, `renderSidebar` array `plants`).
+- Plant `1200`/`1300`/`2000`/`1000`/`1001`/`1100`/`3000` — hardcode di `GET_SIDEBAR`
+  dan di `index.htm` (`PLANT_LABELS`, `renderSidebar`).
 - `lv_uname = 'KMI-BOD'` — single approver hardcode.
 - `rel_code = 'P2'` — release code untuk approve.
 - Nama tabel custom `ZROTO_APP_HIST` / `ZROTO_REJ_HIST` — hardcode di
   beberapa `TYPES` dan `MODIFY`/`SELECT`.
 
-> Saran saat membuat versi untuk kategori lain: jadikan `BSART`, daftar
-> plant, release code, dan nama tabel history sebagai **konstanta di satu
-> tempat** (atau parameter URL/config table `Z*` tersendiri), supaya 1 set
-> kode bisa dipakai untuk banyak kategori PR dengan konfigurasi berbeda.
+> Sekarang aplikasi sudah mendukung 7 plant dengan konfigurasi terpusat
+> di `CATEGORY_DEF`/`lt_cat_def`. Untuk kategori lain, jadikan `BSART`,
+> daftar plant, release code, dan nama tabel history sebagai **konstanta
+> di satu tempat** (atau parameter URL/config table `Z*` tersendiri),
+> supaya 1 set kode bisa dipakai untuk banyak kategori PR dengan
+> konfigurasi berbeda.
 
 ## 3. Potensi Bug / Hal yang Perlu Diverifikasi ke Tim/Functional
 
@@ -217,8 +219,8 @@ berikutnya.
 
 ### 6.3 Arsitektur & Maintainability
 
-1. **Single-file monolith** — `index.htm` (2065 baris) dan `main.htm`
-   (1011 baris) menggabungkan HTML+CSS+JS / semua action ABAP dalam satu
+1. **Single-file monolith** — `index.htm` (2507 baris) dan `main.htm`
+   (1325 baris) menggabungkan HTML+CSS+JS / semua action ABAP dalam satu
    file. Untuk kategori PR baru, pertimbangkan:
    - Pisahkan CSS/JS ke MIME object terpisah (`style.css`, `app.js`) agar
      lebih mudah di-diff/di-review di git.

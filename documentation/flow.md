@@ -6,13 +6,12 @@ Dokumen ini menjelaskan alur teknis untuk semua aplikasi BSP di repo ini.
 
 ## 1. Ringkasan Arsitektur
 
-### 1.1 Tiga Model Arsitektur
+### 1.1 Dua Model Arsitektur
 
 | Model | Aplikasi | Struktur | Data Loading |
 |-------|----------|----------|-------------|
 | **2-file SPA** | `ZPR_REL_BSP`, `ZBSP_PRCH_APP` | `index.htm` (UI) + `main.htm` (API) | On-demand via AJAX |
 | **Single-file monolitik** | `ZPO_REL_BSP` | 1 file `main.htm` (ABAP+HTML+CSS+JS) | Pre-load di ABAP, embed JSON |
-| **Merge hybrid** | `ZPR_REL_BSP/index-merge.htm` | 1 file hasil merge (2811 baris) | Campuran kedua model |
 
 ### 1.2 Komunikasi Klien-Server
 
@@ -54,7 +53,7 @@ count_pending 'PRK9' '1200' lv_s_1200_PRK9.
 " ...manual untuk setiap plant+kategori...
 ```
 
-**Pendekatan Dinamis (ZPR_REL_BSP index-merge):**
+**Pendekatan Dinamis (ZPR_REL_BSP — CATEGORY_DEF):**
 ```abap
 lt_cat_def = VALUE #(
   ( werks = '1200' category = 'MTN' bsart = 'ROTO' )
@@ -68,8 +67,8 @@ ENDLOOP.
 
 ### 2.3 Perbedaan Model Kategori
 
-| Aspek | ZBSP_PRCH_APP | ZPR_REL_BSP (index-merge) |
-|-------|---------------|---------------------------|
+| Aspek | ZBSP_PRCH_APP | ZPR_REL_BSP |
+|-------|---------------|-------------|
 | Paradigma | Technical (doc type = key) | Functional (business process = key) |
 | Struktur | `PR_CATEGORIES` flat + `PLANT_CATEGORIES` | `CATEGORY_DEF` per-plant array |
 | Contoh | `'ROTO':{label:'Maintenance'}` | `{code:'MTN', bsart:'ROTO'}` |
@@ -85,7 +84,7 @@ ENDLOOP.
 | Closed PR (`statu='B'`) muncul | Tambah `statu NE 'B'` | main.htm |
 | PR tanpa item open | Validasi item-level SELECT SINGLE | main.htm |
 
-### 2.5 UI Changes dari Merge jasa_copy (index-merge.htm)
+### 2.5 UI Changes (ZPR_REL_BSP — Hasil Pengembangan)
 
 | Area | Perubahan |
 |------|-----------|
@@ -94,14 +93,13 @@ ENDLOOP.
 | Badge pending | "Pending" → "In Release" |
 | Expand/collapse | 2 tombol → 1 tombol toggle |
 | Toast animation | Tanpa fade → fade-out (opacity + translateX) |
-| Welcome modal | Tidak ada → muncul setiap refresh (Navigation Timing API) |
+| Welcome modal | Tidak ada → muncul setiap refresh |
 | Skeleton loading | Tidak ada → shimmer animation |
 | ResizeObserver | Tidak ada → sticky toolbar dinamis |
 | Empty state padding | 40px → 50px |
 | MRP filter colors | Hardcode hex → CSS variables |
 | Card detail table | Inline styles → class `.detail-tbl` |
 | History search params | 3 params (val, data, type) → 1 param (val) |
-| Duplicate functions | 11+ fungsi muncul di 2 script block (perlu dibersihkan) |
 
 ### 2.6 Remaining Visual Differences (Belum Diselaraskan)
 

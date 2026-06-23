@@ -1,9 +1,9 @@
-# Perbandingan ZPR_REL_BSP_jasa vs ZPO_REL_BSP
+# Perbandingan ZPR_REL_BSP vs ZPO_REL_BSP
 
 ## Ringkasan
 
-| Aspek | ZPR_REL_BSP_jasa (PR Release) | ZPO_REL_BSP (PO Release) |
-|-------|-------------------------------|---------------------------|
+| Aspek | ZPR_REL_BSP (PR Release) | ZPO_REL_BSP (PO Release) |
+|-------|--------------------------|---------------------------|
 | **Dokumen yang diproses** | Purchase Requisition (PR) — `EBAN` | Purchase Order (PO) — `EKKO` / `EKPO` |
 | **Key field** | `banfn` (nomor PR) | `ebeln` (nomor PO) |
 | **Tujuan** | Persetujuan PR sebelum dikonversi ke PO | Persetujuan PO yang sudah jadi |
@@ -12,8 +12,8 @@
 
 ## Struktur Data
 
-| Aspek | ZPR_REL_BSP_jasa | ZPO_REL_BSP |
-|-------|-------------------|-------------|
+| Aspek | ZPR_REL_BSP | ZPO_REL_BSP |
+|-------|-------------|-------------|
 | **Tipe data header** | `ty_eban_head` (EBAN langsung) | `ztymmr068` (DDIC structure via FM `Z_FM_YMMR068`) |
 | **Tipe data item** | `ty_eban_item` (EBAN langsung) | `ztymmr068po` (DDIC structure via FM `Z_FM_YMMR068`) |
 | **Sumber data** | SELECT langsung dari `EBAN` + `MAKT` | FM `Z_FM_YMMR068` (query internal complex) |
@@ -24,7 +24,7 @@
 
 ## Mapping Kategori / Plant
 
-| Aspek | ZPR_REL_BSP_jasa | ZPO_REL_BSP |
+| Aspek | ZPR_REL_BSP | ZPO_REL_BSP |
 |-------|-------------------|-------------|
 | **Struktur kategori** | Langsung pakai BSART (`ROTO`, `RSB7`, `RSBT`, `RSB8`, `RSM8`) | `POTYPE_MAP` — grup BSART per kategori (JASA, BAHAN, SPAREPART, dll) |
 | **Kategori Plant 1200** | 4 kategori: ROTO, RSB7, RSBT, RSB8 | 7 kategori: JASA (`PSB7`), JASA_PROD (`POK1`), BAHAN (`PSB1/3/4`), PENUNJANG (`PSB2`), SPAREPART (`PSB8/9/BT`), UTILITY (`PSB5/6`), EXIM (`PSBI/POK9`) |
@@ -33,7 +33,7 @@
 
 ## Backend (ABAP) — Perbandingan per Action
 
-| Action | ZPR_REL_BSP_jasa | ZPO_REL_BSP |
+| Action | ZPR_REL_BSP | ZPO_REL_BSP |
 |--------|-------------------|-------------|
 | **GET_SIDEBAR / count** | Macro `count_pending` per bsart+werks + hitung history | `GET_HISTORY_COUNT` — query CDHDR+CDPOS untuk rel & rej hari ini |
 | **GET_LIST / GET_OGR** | SELECT distinct `banfn` dr EBAN → validasi item open → detail items | `GET_OGR` — query EKKO+EKPO untuk outstanding GR |
@@ -46,7 +46,7 @@
 
 ## Frontend (JavaScript/HTML/CSS)
 
-| Fitur | ZPR_REL_BSP_jasa | ZPO_REL_BSP |
+| Fitur | ZPR_REL_BSP | ZPO_REL_BSP |
 |-------|-------------------|-------------|
 | **Search** | Client-side, filter `allData` (300ms debounce) | Client-side (PO/OGR) + Server-side (History, 400ms) |
 | **Field search** | `banfn`, `ernam_full`, `ernam`, `txz01`, `ekgrp`, `estkz_label`, `badat`, `total_value`, `bsart`, `werks` | PO: `ebeln`, `name1`; OGR: `ebeln`, `name1`, `matnr`, `txz01`, `bsart`; History: server-side |
@@ -64,7 +64,7 @@
 
 ## Proses Approval
 
-| Tahap | ZPR_REL_BSP_jasa | ZPO_REL_BSP |
+| Tahap | ZPR_REL_BSP | ZPO_REL_BSP |
 |-------|-------------------|-------------|
 | **Approval method** | Per-item: `BAPI_REQUISITION_RELEASE` (rel_code='P2') | Per-PO: `Z_PO_RELEASE2` (release code dari field `frgco`) |
 | **Eksekusi** | Satu PR selesai → commit → history → lanjut PR berikutnya | Semua PO dalam 1 loop → 1 commit di akhir |
@@ -73,7 +73,7 @@
 
 ## Proses Reject
 
-| Tahap | ZPR_REL_BSP_jasa | ZPO_REL_BSP |
+| Tahap | ZPR_REL_BSP | ZPO_REL_BSP |
 |-------|-------------------|-------------|
 | **Method** | `BAPI_REQUISITION_DELETE` (delete_ind='L') — hapus PR | `Z_PO_COMMENT_UPDATE` + `Z_PO_REJECT` |
 | **Alasan reject** | Opsional, disimpan di `ZROTO_REJ_HIST.reason` | Wajib, disimpan sebagai SAP text (ID `F01`, object `EKKO`) |
@@ -82,7 +82,7 @@
 
 ## Perbedaan Arsitektur Signifikan
 
-| Aspek | ZPR_REL_BSP_jasa | ZPO_REL_BSP |
+| Aspek | ZPR_REL_BSP | ZPO_REL_BSP |
 |-------|-------------------|-------------|
 | **Loading data** | On-demand (AJAX per kategori) | Pre-load semua data di ABAP → embed ke JS sebagai JSON |
 | **Pagination data** | Client-side (semua data di-load, dipotong di frontend) | Client-side (PO/OGR) + Server-side offset/limit (History) |
@@ -92,3 +92,5 @@
 | **Cek approver** | Ya — hanya user `KMI-BOD` | Tidak — semua user bisa approve/reject |
 | **Pengecekan wewenang** | Hardcoded username di ABAP | Tidak ada |
 | **Fitur unik** | ESTKZ filter (MRP / Non-MRP), search 10 field | OGR monitoring, history date range filter, popstate URL |
+
+> **Multi-Plant Support:** ZPR_REL_BSP mendukung 7 plant: 1200 (Surabaya), 1300 (Semarang), 2000, 1000, 1001, 1100, 3000. Masing-masing dengan konfigurasi kategori per plant di `CATEGORY_DEF` (frontend) dan `lt_cat_def` (backend).

@@ -1,9 +1,9 @@
 # ERD — Entity Relationship Diagram
 
-**Aplikasi:** ZPR_REL_BSP_jasa (Release PR Multi Kategori)  
+**Aplikasi:** ZBSP_PRCH_APP (Procurement PR Viewer)  
 **Platform:** SAP NetWeaver AS ABAP — BSP (Business Server Pages)  
-**Tujuan:** Portal BOD untuk approve/reject PR (Purchase Requisition)  
-**Lingkup:** Plant 1200 (Surabaya) & 1300 (Semarang) — 5 kategori: ROTO, RSB7, RSBT, RSB8, RSM8
+**Tujuan:** Portal viewer untuk monitoring PR (Purchase Requisition) — read-only  
+**Lingkup:** 7 plant — 4 kategori: ROTO, PRK9, RSBR, PRKS
 
 ---
 
@@ -16,8 +16,8 @@ erDiagram
     EBAN_HEAD {
         char banfn        PK  "No. PR (Purchase Requisition)"
         date badat            "Tanggal PR"
-        char werks            "Plant (1200 / 1300)"
-        char bsart            "Document type (ROTO, RSB7, RSBT, RSB8, RSM8)"
+        char werks            "Plant (1200 / 1300 / 2000 / 1000 / 1001 / 1100 / 3000)"
+        char bsart            "Document type (ROTO, PRK9, RSBR, PRKS)"
         char txz01            "Deskripsi / item text"
         char ernam            "Pembuat PR (SAP username)"
         char ekgrp            "Purchasing group"
@@ -133,8 +133,8 @@ field-field berikut (didefinisikan di ABAP type `ty_eban_head`):
 |-------|-------------|--------|:-------:|-----------|----------------|
 | `BANFN` | BANFN | BANFN | 10 | Nomor PR (Purchase Requisition) — key header | `main.htm:340` |
 | `BADAT` | BADAT | DATUM | 8 | Tanggal PR dibuat | `main.htm:340` |
-| `WERKS` | WERKS_D | WERKS | 4 | Plant (1200 = Surabaya, 1300 = Semarang) | `main.htm:340` |
-| `BSART` | BSART | BSART | 4 | Document type (kategori PR): `ROTO`, `RSB7`, `RSBT`, `RSB8`, `RSM8` | `main.htm:340` |
+| `WERKS` | WERKS_D | WERKS | 4 | Plant (1200/1300/2000/1000/1001/1100/3000) | `main.htm:340` |
+| `BSART` | BSART | BSART | 4 | Document type (kategori PR): `ROTO`, `PRK9`, `RSBR`, `PRKS` | `main.htm:340` |
 | `TXZ01` | TXZ01 | TXZ01 | 40 | Deskripsi singkat / short text | `main.htm:340` |
 | `ERNAM` | ERNAM | USNAM | 12 | Username pembuat PR | `main.htm:340` |
 | `EKGRP` | EKGRP | EKGRP | 3 | Purchasing group (kelompok pembelian) | `main.htm:340` |
@@ -228,8 +228,8 @@ meskipun data asli EBAN sudah berubah.
 | `MANDT` | MANDT | 3 | PK | Client |
 | `BANFN` | BANFN | 10 | PK | No. PR (snapshot dari EBAN) |
 | `BNFPO` | BNFPO | 5 | PK | No. item PR (snapshot dari EBAN) |
-| `WERKS` | WERKS_D | 4 | | Plant (1200/1300) |
-| `BSART` | BSART | 4 | | Document type (ROTO/RSB7/RSBT/RSB8/RSM8) |
+| `WERKS` | WERKS_D | 4 | | Plant (1200/1300/2000/1000/1001/1100/3000) |
+| `BSART` | BSART | 4 | | Document type (ROTO/PRK9/RSBR/PRKS) |
 | `TXZ01` | TXZ01 | 40 | | Deskripsi item (snapshot) |
 | `ERNAM` | ERNAM | 12 | | Username pembuat PR (snapshot) |
 | `ERDAT` | ERDAT | 8 | | Tanggal PR dibuat (snapshot dari EBAN-BADAT) |
@@ -268,8 +268,8 @@ seperti tabel reject, data diisi sebagai **snapshot**.
 | `MANDT` | MANDT | 3 | PK | Client |
 | `BANFN` | BANFN | 10 | PK | No. PR (snapshot dari EBAN) |
 | `BNFPO` | BNFPO | 5 | PK | No. item PR (snapshot dari EBAN) |
-| `WERKS` | WERKS_D | 4 | | Plant (1200/1300) |
-| `BSART` | BSART | 4 | | Document type (ROTO/RSB7/RSBT/RSB8/RSM8) |
+| `WERKS` | WERKS_D | 4 | | Plant (1200/1300/2000/1000/1001/1100/3000) |
+| `BSART` | BSART | 4 | | Document type (ROTO/PRK9/RSBR/PRKS) |
 | `TXZ01` | TXZ01 | 40 | | Deskripsi item (snapshot) |
 | `ERNAM` | ERNAM | 12 | | Username pembuat PR (snapshot) |
 | `ERDAT` | ERDAT | 8 | | Tanggal PR dibuat (snapshot dari EBAN-BADAT) |
@@ -322,29 +322,34 @@ konsep penting yang dipetakan di kode frontend (JavaScript) dan backend
 |:----:|------|---------|
 | `1200` | Surabaya | PT. KMI — Plant Surabaya |
 | `1300` | Semarang | PT. KMI — Plant Semarang |
+| `2000` | Surabaya | PT. KMI — Plant Surabaya |
+| `1000` | Surabaya | PT. KMI — Plant Surabaya |
+| `1001` | Surabaya | PT. KMI — Plant Surabaya |
+| `1100` | Surabaya | PT. KMI — Plant Surabaya |
+| `3000` | Semarang | PT. KMI — Plant Semarang |
 
 **Sumber di kode:**
-- ABAP: `GET_SIDEBAR` menggunakan hardcode string `'1200'` dan `'1300'`
-  untuk SELECT count pending dan history (`main.htm:239-281`).
-- JS: Array `plants` di `renderSidebar()` (`index.htm:1062-1067`).
-- JS: Objek `PLANT_LABELS` untuk mapping kode → nama (`index.htm:806-809`).
+- ABAP: `GET_SIDEBAR` multiple `count_pending` calls untuk tiap plant
+  (`main.htm:311-332`).
+- JS: Objek `PLANT_DEF` untuk mapping kode → label dan kategori
+  (`index.htm:1010-1018`).
+- JS: Objek `PLANT_LABELS` (alias backward compat) (`index.htm:1107`).
 
 ### 3.2 Kategori PR (Document Type)
 
 | Kode | Label | Plant | Ikon |
 |:----:|-------|:-----:|------|
-| `ROTO` | PR One Time Off | 1200, 1300 | &#128203; |
-| `RSB7` | PR Jasa | 1200, 1300 | &#128736; |
-| `RSBT` | PR Tools | 1200 | &#128296; |
-| `RSB8` | PR Rawat & Projek | 1200 | &#127959; |
-| `RSM8` | PR Rawat & Projek | 1300 | &#127959; |
+| `ROTO` | PR Maintenance | 1200, 2000, 1000, 1001, 1100, 1300, 3000 | &#128203; |
+| `PRK9` | PR RND | 1200, 2000, 1000, 1001, 1100 | &#128736; |
+| `RSBR` | PR RND (alias) | 1200, 2000, 1000, 1001, 1100 | &#128736; |
+| `PRKS` | PR Service | 1200, 2000, 1000, 1001, 1100, 1300, 3000 | &#128295; |
 
 **Sumber di kode:**
-- JS: Objek `PR_CATEGORIES` untuk label/icon (`index.htm:811-827`).
-- JS: Objek `PLANT_CATEGORIES` untuk mapping tiap plant ke kategorinya
-  (`index.htm:829-831`).
-- ABAP: Whitelist di `GET_LIST` (`main.htm:323-336`) dan pemanggilan
-  `count_pending` di `GET_SIDEBAR` (`main.htm:239-245`).
+- JS: Objek `CATEGORY_DEF` untuk label/icon (`index.htm:1024-1029`).
+- JS: Objek `PLANT_DEF` untuk mapping tiap plant ke kategorinya
+  (`index.htm:1010-1018`).
+- ABAP: Whitelist di `GET_LIST` (`main.htm`) dan pemanggilan
+  `count_pending` di `GET_SIDEBAR` (`main.htm:311-332`).
 
 ### 3.3 Approver
 
@@ -376,7 +381,7 @@ konsep penting yang dipetakan di kode frontend (JavaScript) dan backend
 | `E` | External | Sumber eksternal |
 
 **Sumber di kode:**
-- JS: `ESTKZ_MAP` di `index.htm:826-834`.
+- JS: `ESTKZ_MAP` di `index.htm:1032-1040`.
 - Filter cepat di toolbar: "Semua PR / MRP saja (B) / Non-MRP saja".
 
 ---
@@ -388,13 +393,13 @@ GET_SIDEBAR
     │
     ├─ SELECT EBAN (count_pending macro)
     │    WHERE bsart=&1, werks=&2, frgkz='X', frgzu=' ', loekz=' ', statu NE 'B'
-    │    → hitung per (plant, kategori) → JSON pending:{1200:{ROTO:N, RSB7:N, ...}, 1300:{...}}
+    │    → hitung per (plant, kategori) → JSON pending:{1200:{ROTO:N, PRK9:N, ...}, 1300:{...}}
     │
     ├─ SELECT zroto_rej_hist (count distinct banfn WHERE werks=...)
-    │    → JSON hist_rej:{1200:N, 1300:N}
+    │    → JSON hist_rej:{1200:N, 1300:N, ...}
     │
     └─ SELECT zroto_app_hist (count distinct banfn WHERE werks=...)
-         → JSON hist_app:{1200:N, 1300:N}
+         → JSON hist_app:{1200:N, 1300:N, ...}
 
 
 GET_LIST
@@ -505,14 +510,15 @@ PROCESS (reject)
      `statu NE 'B'`) untuk tetap muncul di daftar.
 
 2. **Whitelist Kategori:**
-   - Hanya 5 kategori yang dilayani: ROTO, RSB7, RSBT, RSB8, RSM8.
+   - Hanya 4 kategori yang dilayani: ROTO, PRK9, RSBR, PRKS.
    - Request dengan `bsart` di luar whitelist → error `"bsart tidak valid"`.
    - Default: `ROTO` (kompatibel mundur).
 
 3. **Plant per Kategori:**
-   - RSBT, RSB8 → hanya plant 1200 (Surabaya).
-   - RSM8 → hanya plant 1300 (Semarang).
-   - ROTO, RSB7 → kedua plant (1200 dan 1300).
+   - ROTO → semua plant (1200, 1300, 2000, 1000, 1001, 1100, 3000).
+   - PRK9, RSBR → plant 1200, 2000, 1000, 1001, 1100 (kecuali 1300, 3000).
+   - PRKS → semua plant (1200, 1300, 2000, 1000, 1001, 1100, 3000).
+   - Plant 2000, 1000, 1001, 1100, 3000 dikelola di sidebar via plant grouping.
 
 4. **Snapshot History:** Data di `ZROTO_*_HIST` adalah kopian penuh dari
    data item PR pada saat aksi, sehingga tidak terpengaruh perubahan data
@@ -534,22 +540,22 @@ PROCESS (reject)
 
 | Action | Query | Frekuensi | Data |
 |--------|-------|-----------|------|
-| `GET_SIDEBAR` | `SELECT COUNT(DISTINCT banfn) FROM EBAN WHERE ...` | Setiap load/refresh sidebar | 7× (per kategori per plant) |
-| `GET_SIDEBAR` | `SELECT COUNT(DISTINCT banfn) FROM ZROTO_REJ_HIST WHERE werks=` | Sama | 2× (per plant) |
-| `GET_SIDEBAR` | `SELECT COUNT(DISTINCT banfn) FROM ZROTO_APP_HIST WHERE werks=` | Sama | 2× (per plant) |
+| `GET_SIDEBAR` | `SELECT COUNT(DISTINCT banfn) FROM EBAN WHERE ...` | Setiap load/refresh sidebar | 21× (per kombinasi plant×kategori) |
+| `GET_SIDEBAR` | `SELECT COUNT(DISTINCT banfn) FROM ZROTO_REJ_HIST WHERE werks=` | Sama | 7× (per plant) |
+| `GET_SIDEBAR` | `SELECT COUNT(DISTINCT banfn) FROM ZROTO_APP_HIST WHERE werks=` | Sama | 7× (per plant) |
 | `GET_LIST` | `SELECT ... FROM EBAN WHERE bsart= AND werks= AND frgkz= AND frgzu= AND loekz= AND statu=` | Setiap klik kategori | 1× |
 | `GET_DETAIL` | `SELECT ... FROM EBAN WHERE banfn= AND loekz=` | Setiap expand card | 1× per card |
 | `PROCESS` | `SELECT ... FROM EBAN WHERE banfn= AND loekz=` | Setiap approve/reject | 1× |
 
-### Potensi Bottleneck
+### Catatan Performa
 
-- `EBAN` adalah tabel SAP yang bisa sangat besar. Query `GET_LIST` dengan
-  filter `bsart`, `werks`, `frgkz`, `frgzu`, `loekz`, `statu` sudah cukup
-  selektif karena hanya mengambil PR yang pending (biasanya jumlahnya kecil
-  dibanding total transaksi).
-- `ZROTO_*_HIST` bisa membesar seiring waktu. Query `COUNT(DISTINCT banfn)`
-  tanpa filter tanggal bisa mahal — aplikasi tidak memiliki filter rentang
-  tanggal di sidebar.
+- ZBSP_PRCH_APP menjalankan **21+ query** untuk GET_SIDEBAR (per kombinasi
+  plant×kategori). Bandingkan dengan ZPR_REL_BSP yang hanya butuh 3 query
+  GROUP BY.
+- `EBAN` adalah tabel SAP yang bisa sangat besar. Query `GET_LIST` sudah
+  cukup selektif karena hanya mengambil PR yang pending.
+- `ZROTO_*_HIST` bisa membesar seiring waktu. Pertimbangkan filter rentang
+  tanggal untuk pengembangan ke depan.
 
 ---
 

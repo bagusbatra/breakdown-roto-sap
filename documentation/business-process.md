@@ -10,7 +10,6 @@ Dokumen ini menjelaskan **proses bisnis** di balik aplikasi pengadaan
 | Aplikasi | Fungsi | Dokumen | Status |
 |----------|--------|---------|--------|
 | `ZPR_REL_BSP` | Release PR (Purchase Requisition) | PR ROTO (single kategori) | Baseline |
-| `ZPR_REL_BSP_jasa` | Release PR Multi Kategori | PR: ROTO, RSB7, RSBT, RSB8, RSM8 | Development fork |
 | `ZBSP_PRCH_APP` | Release PR Multi Kategori (v2) | PR: ROTO, PRK9, RSBR, PRKS | Rujukan merge |
 | `ZPO_REL_BSP` | Release PO (Purchase Order) | PO: Semua tipe per plant | Live/Production |
 
@@ -34,26 +33,29 @@ sebelum bisa lanjut ke proses Purchase Order (PO).
 | `1200` | Surabaya | Plant utama |
 | `1300` | Semarang | Plant kedua |
 | `2000` | Surabaya (extension) | Digabung dengan 1200 |
+| `1000` | Jakarta | Plant tambahan |
+| `1001` | Jakarta 2 | Plant tambahan |
+| `1100` | Bandung | Plant tambahan |
+| `3000` | Makassar | Plant tambahan |
 
 ### 2.3 Kategori PR (Multi Kategori)
 
-Di versi terbaru (BASIS `ZBSP_PRCH_APP` / `ZPR_REL_BSP` merge), aplikasi
-mendukung **multi kategori**:
+Aplikasi mendukung **multi kategori** dengan dua model berbeda:
 
 #### Model `ZBSP_PRCH_APP` — Doc Type sebagai Key
 
 | Kode | Label | Plant |
 |:----:|-------|-------|
-| `ROTO` | PR Maintenance | 1200, 1300 |
+| `ROTO` | PR Maintenance | 1200, 1300, 2000 |
 | `PRK9` | PR RND | 1200 |
 | `RSBR` | PR RND | 1200 |
 | `PRKS` | PR Service | 1200, 1300 |
 
-#### Model `ZPR_REL_BSP` (index-merge) — Business Function sebagai Key
+#### Model `ZPR_REL_BSP` — Business Function sebagai Key (CATEGORY_DEF)
 
 | Kode | Label | BSART | Plant |
 |:----:|-------|-------|-------|
-| `MTN` | PR Maintenance | ROTO | 1200, 1300, 2000 |
+| `MTN` | PR Maintenance | ROTO | 1200, 1300, 2000, 1000, 1001, 1100, 3000 |
 | `RND` | PR RND | RSBR, PRK9 | 1200, 2000 |
 | `SVC` | PR Service | PRKS | 1200, 1300, 2000 |
 
@@ -318,4 +320,4 @@ Tabel tambahan untuk ZPO_REL_BSP: `EKKO`, `EKPO`, `EKBE`, `CDHDR`, `CDPOS`,
 | Closed PR masih muncul | Tambah `statu NE 'B'` di semua query |
 | PR tanpa item open | Validasi item-level SELECT SINGLE |
 | Welcome modal | Setiap refresh (F5/Ctrl+R), bukan 1x/hari |
-| UI alignment | 12+ perubahan visual dari jasa_copy (CSS, animasi, badge, dll) |
+| UI alignment | 12+ perubahan visual (CSS, animasi, badge, dll) |
