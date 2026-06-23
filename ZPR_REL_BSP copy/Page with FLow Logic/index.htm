@@ -1791,17 +1791,33 @@ function buildHistTable(data,type) {
 }
 
 /* search & pagination di history */
-var histSearchTimer=null;
 var histPageSize=10;
 var histCurPage=1;
 var histSearchKw='';
 
-function onHistSearch(val) {
-  clearTimeout(histSearchTimer);
-  histSearchTimer=setTimeout(function(){
-    histSearchKw=val; histCurPage=1;
-    renderHistContent();
-  },300);
+function onHistSearchTrigger(val) {
+  histSearchKw=val.trim(); histCurPage=1;
+  renderHistContent();
+}
+
+/* Sama konsepnya dengan getFiltered() di list pending: cari di
+   semua field yang relevan/terlihat di tabel, termasuk Plant dan
+   Kategori yang sekarang ditampilkan sebagai kolom. */
+function getFilteredHist() {
+  if (!histSearchKw) return histData;
+  var kw=histSearchKw.toLowerCase();
+  return histData.filter(function(h){
+    return h.banfn.toLowerCase().indexOf(kw)>-1||
+      (h.txz01&&h.txz01.toLowerCase().indexOf(kw)>-1)||
+      (h.ernam&&h.ernam.toLowerCase().indexOf(kw)>-1)||
+      (h.ekgrp&&h.ekgrp.toLowerCase().indexOf(kw)>-1)||
+      ((h.app_by||h.del_by)&&
+       (h.app_by||h.del_by).toLowerCase().indexOf(kw)>-1)||
+      ((PLANT_LABELS[h.werks]||'')
+        .toLowerCase().indexOf(kw)>-1)||
+      (getCategoryLabelByBsart(h.werks,h.bsart)
+        .toLowerCase().indexOf(kw)>-1);
+  });
 }
 
 function renderHistContent() {
@@ -1815,16 +1831,7 @@ function renderHistContent() {
   var catDef=getCategoryDef(primaryPlant,curCategory);
   var catLbl=catDef?catDef.label:(curCategory==='ALL'?'All PR':'PR');
 
-  var kw=histSearchKw.trim().toLowerCase();
-  var filtered=kw
-    ?histData.filter(function(h){
-        return h.banfn.toLowerCase().indexOf(kw)>-1||
-          (h.txz01&&h.txz01.toLowerCase().indexOf(kw)>-1)||
-          (h.ernam&&h.ernam.toLowerCase().indexOf(kw)>-1)||
-          ((h.app_by||h.del_by)&&
-           (h.app_by||h.del_by).toLowerCase().indexOf(kw)>-1);
-      })
-    :histData;
+  var filtered=getFilteredHist();
 
   var total=filtered.length;
   var totalPages=histPageSize===0
@@ -1856,9 +1863,11 @@ function renderHistContent() {
         '<span>&#128269;</span>'+
         '<input type="text"'+
         ' id="histSearchInp"'+
-        ' placeholder="Cari No PR, Item..."'+
+        ' placeholder="Cari No PR, Pembuat, Plant..."'+
         ' value="'+escHtml(histSearchKw)+'"'+
-        ' oninput="onHistSearch(this.value)">'+
+        ' onkeydown="if(event.key===\'Enter\')'+
+        'onHistSearchTrigger(this.value)"'+
+        ' onblur="onHistSearchTrigger(this.value)">'+
         '</div>'+
         '<select class="page-size-select"'+
         ' onchange="histChangePageSize('+
