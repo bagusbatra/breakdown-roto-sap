@@ -432,6 +432,19 @@ body.sb-collapsed .main     { margin-left:0; }
   background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%231d4ed8' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
 }
 
+.sort-select {
+  height:36px; padding:0 30px 0 12px;
+  border:1.5px solid var(--border); background:var(--surface);
+  border-radius:var(--radius-sm);
+  font-size:13px; font-weight:600; color:var(--text-soft);
+  cursor:pointer; appearance:none;
+  background-repeat:no-repeat; background-position:right 10px center;
+  outline:none;
+  transition:border-color var(--dur-fast) var(--ease);
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236b7690' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+}
+.sort-select:hover { border-color:var(--muted-lt); }
+
 .expand-bar { display:flex; align-items:center; gap:8px; }
 .btn-exp {
   height:36px; padding:0 14px;
@@ -1115,6 +1128,7 @@ var isApprover     = false;
 var openSections   = {};
 var openCategories = {};
 var curEstkzFilter = '';
+var curSort      = 'newest';
 
 var allData      = [];
 var selBanfns    = {};
@@ -1125,6 +1139,9 @@ var allExpanded  = false;
 var filteredData = [];
 var histData  = null;
 var histType  = '';
+var histPageSize = 10;
+var histCurPage  = 1;
+var histSearchKw = '';
 
 /* Daftar kategori PR per plant. bsart bisa berisi lebih dari satu
    doc type dipisah koma (contoh 'RSBR,PRK9') — backend akan
@@ -1786,22 +1803,32 @@ function onEstkzFilter(val) {
    GET FILTERED (client-side search)
    ================================================================ */
 function getFiltered() {
-  if (!searchKw) return allData.slice();
-  var kw=searchKw.toLowerCase();
-  return allData.filter(function(d){
-    return d.banfn.toLowerCase().indexOf(kw)>-1||
-      (d.ernam_full&&
-       d.ernam_full.toLowerCase().indexOf(kw)>-1)||
-      (d.ernam&&
-       d.ernam.toLowerCase().indexOf(kw)>-1)||
-      (d.txz01&&
-       d.txz01.toLowerCase().indexOf(kw)>-1)||
-      (d.ekgrp&&
-       d.ekgrp.toLowerCase().indexOf(kw)>-1)||
-      (d.estkz&&
-       getEstkzLabel(d.estkz)
-         .toLowerCase().indexOf(kw)>-1);
-  });
+  var arr=searchKw
+    ?allData.filter(function(d){
+        var kw=searchKw.toLowerCase();
+        return d.banfn.toLowerCase().indexOf(kw)>-1||
+          (d.ernam_full&&
+           d.ernam_full.toLowerCase().indexOf(kw)>-1)||
+          (d.ernam&&
+           d.ernam.toLowerCase().indexOf(kw)>-1)||
+          (d.txz01&&
+           d.txz01.toLowerCase().indexOf(kw)>-1)||
+          (d.ekgrp&&
+           d.ekgrp.toLowerCase().indexOf(kw)>-1)||
+          (d.estkz&&
+           getEstkzLabel(d.estkz)
+             .toLowerCase().indexOf(kw)>-1);
+      })
+    :allData.slice();
+  if (curSort==='oldest')
+    arr.sort(function(a,b){
+      return (a.badat||'').localeCompare(b.badat||'');
+    });
+  else
+    arr.sort(function(a,b){
+      return (b.badat||'').localeCompare(a.badat||'');
+    });
+  return arr;
 }
 
 /* ================================================================
@@ -1857,7 +1884,9 @@ function renderList() {
         '<input type="text" id="searchInp"'+
         ' placeholder="Cari No PR, Pembuat..."'+
         ' value="'+escHtml(searchKw)+'"'+
-        ' oninput="onSearchInput(this.value)">'+
+        ' onkeydown="if(event.key===\'Enter\')'+
+        'onSearchTrigger(this.value)"'+
+        ' onblur="onSearchTrigger(this.value)">'+
         '</div>';
 
   html+='<select class="page-size-select"'+
@@ -1869,6 +1898,16 @@ function renderList() {
           (s===0?'All':s+' per page')+
           '</option>';
   });
+  html+='</select>';
+
+  html+='<select class="sort-select"'+
+        ' onchange="onSortChange(this.value)">';
+  html+='<option value="newest"'+
+        (curSort==='newest'?' selected':'')+
+        '>&#8595; Terbaru</option>';
+  html+='<option value="oldest"'+
+        (curSort==='oldest'?' selected':'')+
+        '>&#8593; Terlama</option>';
   html+='</select>';
 
   html+='<select class="estkz-select"'+
@@ -2033,44 +2072,9 @@ function renderList() {
 function renderHistTable(data,type) {
   histData=data;
   histType=type;
-
-  var isApp =(type==='approve');
-  var title =isApp
-    ?'&#10003; History Approve &mdash; '
-    :'&#128465; History Reject &mdash; ';
-  var color =isApp
-    ?'var(--success-d)':'var(--danger-d)';
-
-  var html='';
-  html+='<div class="sticky-top">'+
-        '<div class="pg-hdr">'+
-        '<div class="pg-title"'+
-        ' style="color:'+color+';">'+
-        title+getPlantLabel(curPlant)+
-        '</div>'+
-        '<div class="pg-sub">'+
-        data.length+' record '+
-        (isApp?'approved':'rejected')+
-        '</div></div></div>';
-
-  /* Search */
-  html+='<div style="margin-bottom:16px;">'+
-        '<div class="search-wrap"'+
-        ' style="max-width:340px;">'+
-        '<span>&#128269;</span>'+
-        '<input type="text"'+
-        ' id="histSearchInp"'+
-        ' placeholder="Cari No PR, Item..."'+
-        ' oninput="onHistSearch(this.value)">'+
-        '</div></div>';
-
-  html+='<div id="histTableWrap">';
-  html+=buildHistTable(data,type);
-  html+='</div>';
-
-  document.getElementById('mainContent')
-    .innerHTML=html;
-  document.getElementById('fab').className='fab';
+  histCurPage=1;
+  histSearchKw='';
+  renderHistContent();
 }
 
 /* ================================================================
@@ -2179,31 +2183,158 @@ function buildHistTable(data,type) {
   return html;
 }
 
-/* search di history */
+/* search & pagination di history */
 var histSearchTimer=null;
+
 function onHistSearch(val) {
   clearTimeout(histSearchTimer);
   histSearchTimer=setTimeout(function(){
-    var kw=val.trim().toLowerCase();
-    var filtered=kw
-      ?histData.filter(function(h){
-          return h.banfn.toLowerCase()
-                   .indexOf(kw)>-1||
-                 (h.txz01&&h.txz01.toLowerCase()
-                   .indexOf(kw)>-1)||
-                 (h.ernam&&h.ernam.toLowerCase()
-                   .indexOf(kw)>-1)||
-                 ((h.app_by||h.del_by)&&
-                  (h.app_by||h.del_by).toLowerCase()
-                   .indexOf(kw)>-1);
-        })
-      :histData;
-    var wrap=document.getElementById(
-      'histTableWrap');
-    if (wrap)
-      wrap.innerHTML=buildHistTable(
-        filtered,histType);
+    histSearchKw=val; histCurPage=1;
+    renderHistContent();
   },300);
+}
+
+function renderHistContent() {
+  var isApp=(histType==='approve');
+  var title=isApp
+    ?'&#10003; History Approve &mdash; '
+    :'&#128465; History Reject &mdash; ';
+  var color=isApp
+    ?'var(--success-d)':'var(--danger-d)';
+
+  var kw=histSearchKw.trim().toLowerCase();
+  var filtered=kw
+    ?histData.filter(function(h){
+        return h.banfn.toLowerCase().indexOf(kw)>-1||
+          (h.txz01&&h.txz01.toLowerCase().indexOf(kw)>-1)||
+          (h.ernam&&h.ernam.toLowerCase().indexOf(kw)>-1)||
+          ((h.app_by||h.del_by)&&
+           (h.app_by||h.del_by).toLowerCase().indexOf(kw)>-1);
+      })
+    :histData;
+
+  var total=filtered.length;
+  var totalPages=histPageSize===0
+    ?1:Math.ceil(total/histPageSize)||1;
+  if (histCurPage>totalPages) histCurPage=1;
+  var start=histPageSize===0
+    ?0:(histCurPage-1)*histPageSize;
+  var end=histPageSize===0
+    ?total:Math.min(start+histPageSize,total);
+  var pageData=filtered.slice(start,end);
+
+  var html='';
+  html+='<div class="sticky-top">'+
+        '<div class="pg-hdr">'+
+        '<div class="pg-title"'+
+        ' style="color:'+color+';">'+
+        title+getPlantLabel(curPlant)+
+        '</div>'+
+        '<div class="pg-sub">'+
+        total+' record '+
+        (isApp?'approved':'rejected')+
+        '</div></div></div>';
+
+  html+='<div style="margin-bottom:16px;'+
+        ' display:flex;align-items:center;'+
+        ' gap:10px;">'+
+        '<div class="search-wrap"'+
+        ' style="max-width:340px;">'+
+        '<span>&#128269;</span>'+
+        '<input type="text"'+
+        ' id="histSearchInp"'+
+        ' placeholder="Cari No PR, Item..."'+
+        ' value="'+escHtml(histSearchKw)+'"'+
+        ' oninput="onHistSearch(this.value)">'+
+        '</div>'+
+        '<select class="page-size-select"'+
+        ' onchange="histChangePageSize('+
+        'parseInt(this.value))">';
+  [10,25,50,0].forEach(function(s){
+    html+='<option value="'+s+'"'+
+          (histPageSize===s?' selected':'')+'>'+
+          (s===0?'All':s+' per page')+
+          '</option>';
+  });
+  html+='</select></div>';
+
+  html+='<div id="histTableWrap">';
+  html+=buildHistTable(pageData,histType);
+  html+='</div>';
+
+  if (histPageSize!==0&&totalPages>1){
+    html+=renderHistPagination(total,totalPages,start,end,histCurPage);
+  } else {
+    html+='<div class="pagination-bar">'+
+          '<span class="pg-info">'+
+          'Showing all '+total+' records</span></div>';
+  }
+
+  document.getElementById('mainContent').innerHTML=html;
+  document.getElementById('fab').className='fab';
+}
+
+function renderHistPagination(total,totalPages,start,end,curPg) {
+  var html='<div class="pagination-bar">';
+  html+='<button class="pg-btn"'+
+        ' onclick="histGoPage(1)"'+
+        (curPg<=1?' disabled':'')+
+        '>&#171;</button>';
+  html+='<button class="pg-btn"'+
+        ' onclick="histGoPage('+(curPg-1)+')"'+
+        (curPg<=1?' disabled':'')+
+        '>&#8249;</button>';
+
+  var sp=Math.max(1,curPg-2);
+  var ep=Math.min(totalPages,curPg+2);
+
+  if (sp>1){
+    html+='<button class="pg-btn"'+
+          ' onclick="histGoPage(1)">1</button>';
+    if (sp>2)
+      html+='<span class="pg-info">...</span>';
+  }
+  for (var i=sp;i<=ep;i++){
+    html+='<button class="pg-btn'+
+          (i===curPg?' active':'')+'"'+
+          ' onclick="histGoPage('+i+')">'+
+          i+'</button>';
+  }
+  if (ep<totalPages){
+    if (ep<totalPages-1)
+      html+='<span class="pg-info">...</span>';
+    html+='<button class="pg-btn"'+
+          ' onclick="histGoPage('+totalPages+')">'+
+          totalPages+'</button>';
+  }
+  html+='<button class="pg-btn"'+
+        ' onclick="histGoPage('+(curPg+1)+')"'+
+        (curPg>=totalPages?' disabled':'')+
+        '>&#8250;</button>';
+  html+='<button class="pg-btn"'+
+        ' onclick="histGoPage('+totalPages+')"'+
+        (curPg>=totalPages?' disabled':'')+
+        '>&#187;</button>';
+  html+='<span class="pg-info">'+
+        (start+1)+'&ndash;'+end+
+        ' of '+total+'</span>';
+  html+='</div>';
+  return html;
+}
+
+function histGoPage(pg) {
+  var total=histData.length;
+  var tp=histPageSize===0
+    ?1:Math.ceil(total/histPageSize)||1;
+  if (pg<1) pg=1;
+  if (pg>tp) pg=tp;
+  histCurPage=pg;
+  renderHistContent();
+}
+
+function histChangePageSize(val) {
+  histPageSize=val; histCurPage=1;
+  renderHistContent();
 }
 
 /* ================================================================
@@ -2280,13 +2411,14 @@ function changePageSize(val) {
   window.scrollTo({top:0,behavior:'smooth'});
 }
 
-var searchTimer=null;
-function onSearchInput(val) {
-  clearTimeout(searchTimer);
-  searchTimer=setTimeout(function(){
-    searchKw=val.trim(); curPage=1;
-    selBanfns={}; renderList();
-  },300);
+function onSearchTrigger(val) {
+  searchKw=val.trim(); curPage=1;
+  selBanfns={}; renderList();
+}
+
+function onSortChange(val) {
+  curSort=val; curPage=1;
+  renderList();
 }
 
 /* ================================================================

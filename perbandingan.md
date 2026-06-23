@@ -659,4 +659,197 @@ Keduanya menggunakan pola yang sama: `fetch(API_URL + '?action=...&werks=...&bsa
 
 ---
 
+## 11. Identifikasi Perbedaan Paling Fundamental
+
+Bagian ini merangkum **7 perbedaan paling signifikan** yang mempengaruhi arsitektur, keamanan, maintainability, dan user experience secara fundamental.
+
+---
+
+### 11.1 Perbedaan #1: Model Kategori — "Doc Type sebagai Key" vs "Business Function sebagai Key"
+
+**Ini adalah perbedaan arsitektur paling mendasar antara kedua codebase.**
+
+| Aspek | `ZBSP_PRCH_APP` | `ZPR_REL_BSP` |
+|-------|-----------------|---------------|
+| Paradigma | **Technical** — kategori = doc type SAP | **Functional** — kategori = business process |
+| Key category | `ROTO`, `PRK9`, `RSBR`, `PRKS` | `MTN` (Maintenance), `RND` (R&D), `SVC` (Service) |
+| Contoh isi | `'ROTO':{label:'Maintenance'}` | `'MTN':{label:'Maintenance', bsart:'ROTO'}` |
+| Jumlah kode kategori | 4 (ROTO, PRK9, RSBR, PRKS) | 3 (MTN, RND, SVC) |
+| BSART mapping | Implisit (nama key == doc type) | Eksplisit (property `bsart`) |
+
+**Dampak:**
+- **`ZBSP_PRCH_APP`**: Kode lebih sederhana untuk programmer SAP (karena nama category = doc type), tapi repot jika satu kategori punya multiple doc type (makanya `RSBR` dan `PRK9` jadi duplikasi dengan label sama).
+- **`ZPR_REL_BSP`**: Lebih abstrak dan business-oriented. Jika requirements berubah (misal: PR RND pakai doc type baru `RND1`), cukup update satu property `bsart` — tidak perlu bikin entry baru. Juga lebih mudah dipahami oleh non-SAP stakeholder.
+- **Keduanya incompatible**: Data JSON dari backend `ZBSP_PRCH_APP` mengembalikan `{"1200":{"ROTO":5}}`, sedangkan `ZPR_REL_BSP` mengembalikan `{"1200":{"MTN":5}}`. Frontend tidak bisa saling tukar.
+
+**Kesimpulan:** `ZPR_REL_BSP` (functional) lebih unggul untuk maintainability jangka panjang.
+
+---
+
+### 11.2 Perbedaan #2: Keamanan — Plant Restriction "Full Backend+Frontend" vs "Frontend Only"
+
+| Aspek | `ZBSP_PRCH_APP` | `ZPR_REL_BSP` |
+|-------|-----------------|---------------|
+| Backend check | ✅ **Ada** — `check_werks_allowed` macro di SETIAP action (GET_LIST, GET_HIST_REJ, GET_HIST_APP) | ❌ **Tidak ada** — backend percaya pada `lv_werks` yang dikirim frontend |
+| Frontend filter | ✅ Filter sidebar sesuai user | ✅ Filter sidebar sesuai user |
+| User yg direstriksi | KMI-U052 (1200), KMI-U151 (1200), KMI-U051 (1300) | Tidak ada |
+| Tingkat keamanan | **High** — double security | **Low** — hanya client-side |
+
+**Dampak:**
+- Di `ZPR_REL_BSP`, user KMI-U151 bisa mengirim request `POST main.htm?action=GET_LIST&werks=1300` langsung (via browser dev tools atau curl) dan **backend akan mengembalikan data Semarang** karena tidak ada validasi.
+- Di `ZBSP_PRCH_APP`, macro `check_werks_allowed` akan memblokir request tersebut dengan response `"Anda tidak memiliki akses ke plant ini"`.
+
+**Kesimpulan:** `ZBSP_PRCH_APP` **jauh lebih aman**. Ini adalah critical security issue di `ZPR_REL_BSP`.
+
+---
+
+### 11.3 Perbedaan #3: Arsitektur GET_SIDEBAR — "Hardcode Statement" vs "Dynamic Loop"
+
+| Aspek | `ZBSP_PRCH_APP` | `ZPR_REL_BSP` |
+|-------|-----------------|---------------|
+| Metode | Panggil `count_pending` macro untuk **setiap** plant+kategori (9 kali) | LOOP `lt_cat_def` yang berisi definisi plant+kategori (8 entry) |
+| Tambah kategori baru | Ubah macro call + JSON concatenation (3-4 tempat) | Cukup tambah 1 baris di `lt_cat_def` |
+| Tambah plant baru | Ubah macro call + variabel + JSON (banyak tempat) | Cukup tambah baris di `lt_cat_def` |
+| Resiko human error | **Tinggi** — lupa update satu tempat saja sudah error | **Rendah** — cukup update satu file |
+| Kode JSON output | String CONCATENATE manual — rentan typo | Dinamis dari LOOP + CONDENSE |
+
+**Contoh konkret:** Misal ingin menambah plant `1400` (Bandung) dengan kategori MTN dan SVC.
+
+Di **`ZBSP_PRCH_APP`** perlu:
+1. Tambah variabel `lv_s_1400_roto`, `lv_s_1400_prks`, `lv_rj_1400`, `lv_ra_1400`
+2. Tambah 2 baris `count_pending` untuk plant 1400
+3. Tambah SELECT untuk hist_rej 1400
+4. Tambah SELECT untuk hist_app 1400
+5. Update user restriction (zero-out)
+6. Update CONCATENATE JSON (4 tempat)
+
+Di **`ZPR_REL_BSP`** cukup:
+1. Tambah 2 baris di `lt_cat_def`:
+   ```abap
+   ls_cat_def-werks = '1400'. ls_cat_def-category = 'MTN'. ls_cat_def-bsart_cs = 'ROTO'.
+   ls_cat_def-werks = '1400'. ls_cat_def-category = 'SVC'. ls_cat_def-bsart_cs = 'PRKS'.
+   ```
+
+**Kesimpulan:** `ZPR_REL_BSP` **jauh lebih maintainable** untuk jangka panjang.
+
+---
+
+### 11.4 Perbedaan #4: CODE DUPLICATION — "Bersih" vs "Bermasalah"
+
+| Aspek | `index.htm (ZBSP_PRCH_APP)` | `index-merge.htm (ZPR_REL_BSP)` | `index.htm (ZPR_REL_BSP)` |
+|-------|------------------------------|----------------------------------|----------------------------|
+| Fungsi duplikat | ❌ **0** | ✅ **11+ fungsi** muncul 2x | ❌ **0** |
+| Penyebab | Tidak ada proses merge | Hasil merge dari `jasa_copy` — 2 script block tidak digabung | Tidak ada proses merge |
+| Dampak | ✅ Berfungsi normal | ❌ Berpotensi bug (fungsi block 1 di-override block 2, tapi state variable bisa berbeda) | ✅ Berfungsi normal |
+| File size overhead | — | +431 baris dari duplikasi yang tidak perlu | — |
+
+**Fungsi yang terduplikasi (muncul di kedua script block):**
+`renderList`, `renderHistTable`, `buildHistTable`, `toggleExpand`, `expandAll`, `collapseAll`, `loadDetail`, `toggleSelect`, `toggleSelectAll`, `syncCheckboxes`, `updateFabInfo`
+
+**Risiko:** Jika ada perubahan di fungsi block 1 tapi tidak di block 2 (atau sebaliknya), akan terjadi **inconsistent behavior**. Block 2 menimpa block 1, jadi developer harus selalu ingat untuk mengedit block 2 saja. Ini jebakan bagi developer baru.
+
+**Kesimpulan:** `ZBSP_PRCH_APP` lebih bersih secara code quality. `index-merge.htm` perlu refactoring.
+
+---
+
+### 11.5 Perbedaan #5: Workflow Approval — "Read-Only Total" vs "Read-Write (KMI-BOD only)"
+
+| Aspek | `ZBSP_PRCH_APP` | `ZPR_REL_BSP` |
+|-------|-----------------|---------------|
+| `lv_is_approver` | Hardcode `abap_false` | Dinamis: `IF lv_uname = 'KMI-BOD'` |
+| Tombol Approve/Reject | Tidak pernah muncul | Muncul untuk KMI-BOD |
+| FAB | ❌ Tidak ada | ✅ Ada |
+| Multi-select PR | ❌ Tidak bisa | ✅ Bisa pilih beberapa PR |
+| BISA approve | Tidak ada user | KMI-BOD |
+| Mode aplikasi | **Viewer only** | **Approver tool** |
+
+**Dampak:**
+- `ZBSP_PRCH_APP`: Aman untuk publikasi lebih luas (tidak ada risiko approve salah), tapi tidak berguna untuk workflow approval.
+- `ZPR_REL_BSP`: Fungsional untuk proses bisnis, tapi perlu kontrol akses yang lebih ketat (lihat perbedaan #2 — tidak ada backend restriction).
+
+**Kesimpulan:** `ZPR_REL_BSP` memiliki business value lebih tinggi, `ZBSP_PRCH_APP` lebih aman.
+
+---
+
+### 11.6 Perbedaan #6: Strategi Merge Plant 2000 — "Backend Merge" vs "Frontend Passthrough"
+
+Kedua codebase mendukung plant 2000 digabung ke Surabaya 1200, tapi dengan strategi berbeda:
+
+| Aspek | `ZBSP_PRCH_APP` | `ZPR_REL_BSP` |
+|-------|-----------------|---------------|
+| Dimana merge terjadi | **Backend (ABAP)**: `GET_SIDEBAR` menghitung count 1200 + 2000 lalu dijumlah | **Frontend**: Sidebar mengirim `werks=1200,2000` sebagai comma-separated string |
+| GET_LIST | Backend: `IF lv_werks = '1200'` → include plant 2000 di RANGE | Frontend: kirim `'1200,2000'` sebagai werks, backend tinggal split |
+| GET_HIST_REJ/APP | Sama seperti GET_LIST | Sama seperti GET_LIST |
+| Keuntungan | Backend logic terpusat — semua client behave sama | Backend tidak perlu tahu tentang "grouping" plant |
+| Kerugian | Backend harus diubah jika grouping berubah | Setiap frontend harus implementasi grouping sendiri |
+
+**Ilustrasi aliran data:**
+
+```
+ZBSP_PRCH_APP:
+Frontend: click Surabaya → curPlant='1200' → fetch 'werks=1200'
+Backend:  lv_werks='1200' → IF '1200' THEN include '2000' → SELECT werks IN ('1200','2000')
+
+ZPR_REL_BSP:
+Frontend: click Surabaya → getEffectiveWerks('1200')='1200,2000' → curPlant='1200,2000' → fetch 'werks=1200,2000'
+Backend:  SPLIT '1200,2000' → lt_werks_rng → SELECT werks IN lt_werks_rng
+```
+
+**Kesimpulan:** `ZPR_REL_BSP` lebih **decoupled** (backend tidak perlu tahu grouping). `ZBSP_PRCH_APP` lebih **centralized** (satu tempat aturan).
+
+---
+
+### 11.7 Perbedaan #7: Fitur-Fitur yang Hanya Ada di Satu Versi
+
+#### Fitur eksklusif `ZBSP_PRCH_APP`:
+
+| Fitur | Kenapa penting |
+|-------|---------------|
+| **Backend plant restriction** (`check_werks_allowed`) | **KEAMANAN** — melindungi data dari akses tidak sah via API |
+| **Welcome modal** | UX — memberi ringkasan jumlah PR pending setiap hari |
+| **Skeleton loading** | UX — mengurangi persepsi "lambat" saat loading sidebar |
+| **ResizeObserver sticky toolbar** | UX — posisi toolbar lebih konsisten saat scroll |
+| **9 CSS animations** | UX — transisi lebih halus dan profesional |
+| **3 responsive breakpoints** | UX — lebih baik di tablet |
+| **Custom scrollbar** | UX — tampilan lebih rapi |
+| **`prefers-reduced-motion`** | **Aksesibilitas** — menghormati preferensi pengguna |
+| **ERD documentation** | **Developer** — memahami relasi data |
+| **Kategori activation guide** | **Developer** — panduan penambahan kategori |
+| **1 toggle button (Expand/Collapse)** | UX — tombol lebih ringkas |
+
+#### Fitur eksklusif `ZPR_REL_BSP`:
+
+| Fitur | Kenapa penting |
+|-------|---------------|
+| **Approver workflow (KMI-BOD)** | **Business** — aplikasi bisa digunakan untuk approval sungguhan |
+| **FAB + Multi-select** | UX — workflow approval lebih efisien (sekali proses banyak PR) |
+| **CATEGORY_DEF dinamis** | **Maintainability** — tambah kategori gampang |
+| **lt_cat_def loop (GET_SIDEBAR)** | **Maintainability** — tambah plant gampang |
+| **Dynamic plant grouping** | **Decoupling** — backend tidak perlu tahu grouping plant |
+| **Session notes documentation** | **Developer** — memahami riwayat perubahan |
+
+---
+
+## 12. Kesimpulan Akhir
+
+| Aspek | Pemenang | Alasan |
+|-------|----------|--------|
+| **Keamanan** | `ZBSP_PRCH_APP` | Backend plant restriction (check_werks_allowed) |
+| **Maintainability** | `ZPR_REL_BSP` | CATEGORY_DEF dinamis + lt_cat_def loop |
+| **Code Quality** | `ZBSP_PRCH_APP` | Tidak ada duplikasi fungsi |
+| **Business Value** | `ZPR_REL_BSP` | Bisa approve/reject PR |
+| **UX Maturity** | `ZBSP_PRCH_APP` | Welcome modal, skeleton, animasi, ResizeObserver |
+| **Aksesibilitas** | `ZBSP_PRCH_APP` | prefers-reduced-motion |
+| **Arsitektur (decoupling)** | `ZPR_REL_BSP` | Plant grouping di frontend, backend unaware |
+| **Dokumentasi** | Seimbang | ERD (ZBSP) vs Session Notes (ZPR) |
+| **Overall** | **`ZBSP_PRCH_APP`** | Lebih aman, lebih matang UX, code lebih bersih |
+
+**Catatan penting:** Kedua codebase memiliki kelebihan masing-masing. Idealnya, ambil `ZBSP_PRCH_APP` sebagai basis (karena lebih aman dan matang) lalu porting fitur-fitur dari `ZPR_REL_BSP`:
+- Approver logic (KMI-BOD bisa approve)
+- CATEGORY_DEF dinamis + lt_cat_def loop
+- FAB + Multi-select
+- Dynamic plant grouping via frontend
+
+---
+
 *Laporan dibuat berdasarkan analisis kode sumber tanggal 23 Juni 2026. Total 4.009 baris (ZBSP_PRCH_APP) dan 6.296 baris (ZPR_REL_BSP) dianalisis secara menyeluruh.*
