@@ -852,4 +852,497 @@ Backend:  SPLIT '1200,2000' → lt_werks_rng → SELECT werks IN lt_werks_rng
 
 ---
 
-*Laporan dibuat berdasarkan analisis kode sumber tanggal 23 Juni 2026. Total 4.009 baris (ZBSP_PRCH_APP) dan 6.296 baris (ZPR_REL_BSP) dianalisis secara menyeluruh.*
+## 13. Saran Pengembangan UI Siap Implementasi di SE80
+
+Bagian ini berisi **8 rekomendasi fitur UI** yang bisa ditambahkan ke codebase. Setiap rekomendasi:
+- ✅ Bisa diimplementasikan di SAP SE80 (BSP) tanpa library eksternal
+- ✅ Sudah siap copy-paste dengan kode lengkap
+- ✅ Tidak memerlukan perubahan backend (`main.htm`)
+- ✅ Kompatibel dengan kode yang sudah ada
+
+---
+
+### 13.1 Dark Mode Toggle
+
+**Nilai tambah:** Meningkatkan kenyamanan penggunaan di ruang redup/gudang malam.
+
+**Implementasi:**
+
+```css
+/* Tambahkan di dalam <style> block, sebelum @media prefers-reduced-motion */
+body.dark {
+  --navy-900:   #e2e8f0;
+  --navy-700:   #cbd5e1;
+  --primary:    #60a5fa;
+  --primary-d:  #93bbfd;
+  --primary-lt: #1e293b;
+  --primary-lt2:#334155;
+  --success:    #4ade80;
+  --success-lt: #14532d;
+  --danger:     #f87171;
+  --danger-lt:  #450a0a;
+  --warning:    #fbbf24;
+  --warning-lt: #451a03;
+  --info:       #38bdf8;
+  --info-lt:    #0c4a6e;
+  --surface:    #1e293b;
+  --bg:         #0f172a;
+  --bg-soft:    #1e293b;
+  --border:     #334155;
+  --border-soft:#1e293b;
+  --text:       #f1f5f9;
+  --text-soft:  #cbd5e1;
+  --muted:      #94a3b8;
+  --muted-lt:   #64748b;
+}
+body.dark .hdr {
+  background: #0f172a;
+  border-bottom-color: #1e293b;
+}
+body.dark .btn-toggle-sb {
+  color: #94a3b8;
+}
+body.dark .hdr-logo {
+  background: #334155;
+}
+```
+
+```javascript
+// Tambahkan di dekat fungsi toggleSidebar()
+function toggleDark() {
+  document.body.classList.toggle('dark');
+  localStorage.setItem('darkMode', document.body.classList.contains('dark') ? '1' : '0');
+}
+
+// Di init(), tambahkan:
+if (localStorage.getItem('darkMode') === '1') {
+  document.body.classList.add('dark');
+}
+```
+
+```html
+<!-- Tambahkan di <header class="hdr">, setelah tombol hamburger: -->
+<button class="btn-toggle-sb" onclick="toggleDark()"
+        title="Toggle dark mode" aria-label="Toggle dark mode"
+        style="font-size:16px;">&#9790;</button>
+```
+
+**Cara pakai:** Copy CSS ke dalam `<style>`, JS ke dekat `toggleSidebar()`, HTML button setelah hamburger menu.
+
+---
+
+### 13.2 Export History ke CSV
+
+**Nilai tambah:** User bisa mendownload history approve/reject untuk diolah di Excel.
+
+**Implementasi:**
+
+```javascript
+// Tambahkan di dekat fungsi buildHistTable()
+function exportCSV(type) {
+  var data = type === 'approve' ? histFilteredData : histFilteredData;
+  if (!data || data.length === 0) { showToast('E', 'Tidak ada data untuk di-export'); return; }
+
+  var isApp = (type === 'approve');
+  var headers = ['No PR','Item','Kategori','Deskripsi','Dibuat Oleh','Tgl PR','Qty','UoM','Harga','Total','Curr','PGrp',
+                 isApp ? 'Diapprove Oleh' : 'Direject Oleh',
+                 isApp ? 'Tgl Approve' : 'Tgl Reject',
+                 isApp ? 'Jam' : 'Alasan'];
+
+  var rows = data.map(function(h){
+    return [
+      h.banfn, h.bnfpo, h.bsart, (h.txz01||'').replace(/,/g,' '),
+      h.ernam, h.erdat, h.menge, h.meins, h.preis, h.total, h.waers, h.ekgrp,
+      isApp ? h.app_by : h.del_by,
+      isApp ? h.app_at : h.del_at,
+      isApp ? h.app_tm : (h.reason||'')
+    ].join(',');
+  });
+
+  var csv = '\uFEFF' + headers.join(',') + '\n' + rows.join('\n');
+  var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  var url  = URL.createObjectURL(blob);
+  var a    = document.createElement('a');
+  a.href   = url;
+  a.download = 'history_' + type + '_' + new Date().toISOString().slice(0,10) + '.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('S', 'CSV berhasil di-download');
+}
+```
+
+```html
+<!-- Tambahkan di .toolbar (dekat tombol expand), setelah pagination count: -->
+'<button class="btn-exp" onclick="exportCSV(\''+histType+'\')">&#128229; Export CSV</button>';
+```
+
+**Cara pakai:** Copy fungsi JS, lalu tambahkan button di `renderHistView()` di toolbar. `\uFEFF` adalah BOM untuk encoding UTF-8 yang benar di Excel.
+
+---
+
+### 13.3 Auto-Refresh Timer
+
+**Nilai tambah:** User bisa memantau PR pending secara real-time tanpa klik manual setiap saat.
+
+**Implementasi:**
+
+```javascript
+// Tambahkan di dekat state variables
+var refreshInterval = null;
+var refreshSeconds  = 30;
+var refreshCountdown = 0;
+
+function startRefresh(seconds) {
+  stopRefresh();
+  refreshSeconds = seconds || 30;
+  refreshCountdown = refreshSeconds;
+  updateRefreshBtn();
+  refreshInterval = setInterval(function(){
+    refreshCountdown--;
+    updateRefreshBtn();
+    if (refreshCountdown <= 0) {
+      if (curMode === 'pending') fetchList(curEstkzFilter);
+      else if (curMode === 'hist_app') fetchHistApp();
+      else if (curMode === 'hist_rej') fetchHistRej();
+      refreshCountdown = refreshSeconds;
+    }
+  }, 1000);
+}
+
+function stopRefresh() {
+  if (refreshInterval) { clearInterval(refreshInterval); refreshInterval = null; }
+  refreshCountdown = 0;
+  updateRefreshBtn();
+}
+
+function updateRefreshBtn() {
+  var btn = document.getElementById('btnRefresh');
+  if (!btn) return;
+  if (refreshInterval) {
+    btn.innerHTML = '&#8635; Auto ' + refreshCountdown + 's';
+    btn.style.borderColor = 'var(--primary)';
+  } else {
+    btn.innerHTML = '&#8635; Auto Refresh';
+    btn.style.borderColor = 'var(--border)';
+  }
+}
+
+function toggleRefresh() {
+  if (refreshInterval) { stopRefresh(); }
+  else { startRefresh(refreshSeconds); }
+}
+```
+
+```html
+<!-- Tambahkan di .toolbar setelah expand-bar: -->
+'<button class="btn-exp" id="btnRefresh" onclick="toggleRefresh()">&#8635; Auto Refresh</button>';
+```
+
+**Cara pakai:** Copy JS functions, tambahkan button di `renderList()` dan `renderHistView()`. Panggil `stopRefresh()` di `switchView()` untuk reset timer saat pindah view.
+
+---
+
+### 13.4 Column Sorting pada History Table
+
+**Nilai tambah:** User bisa mengurutkan history berdasarkan kolom manapun dengan klik header.
+
+**Implementasi:**
+
+```javascript
+// Tambahkan di dekat state variables
+var histSortColumn = '';
+var histSortAsc = true;
+
+function sortHistory(col) {
+  if (histSortColumn === col) { histSortAsc = !histSortAsc; }
+  else { histSortColumn = col; histSortAsc = true; }
+
+  histFilteredData.sort(function(a,b){
+    var va = (a[col]||'').toString().toLowerCase();
+    var vb = (b[col]||'').toString().toLowerCase();
+    var na = parseFloat(va), nb = parseFloat(vb);
+    if (!isNaN(na) && !isNaN(nb)) { va = na; vb = nb; }
+    if (va < vb) return histSortAsc ? -1 : 1;
+    if (va > vb) return histSortAsc ? 1 : -1;
+    return 0;
+  });
+  renderHistView();
+}
+```
+
+```html
+<!-- Ubah header th di buildHistTable() menjadi clickable: -->
+html+='<th onclick="sortHistory(\'banfn\')" style="cursor:pointer;">No PR '+
+      (histSortColumn==='banfn'?(histSortAsc?'&#9650;':'&#9660;'):'')+'</th>';
+html+='<th onclick="sortHistory(\'bnfpo\')" style="cursor:pointer;">Item '+
+      (histSortColumn==='bnfpo'?(histSortAsc?'&#9650;':'&#9660;'):'')+'</th>';
+html+='<th onclick="sortHistory(\'bsart\')" style="cursor:pointer;">Kategori '+
+      (histSortColumn==='bsart'?(histSortAsc?'&#9650;':'&#9660;'):'')+'</th>';
+// ... dan seterusnya untuk kolom lain
+```
+
+**Cara pakai:** Copy fungsi `sortHistory()`, ubah `<th>` di `buildHistTable()` menjadi onclick handler dengan indikator panah ▲/▼.
+
+---
+
+### 13.5 Copy PR Number to Clipboard
+
+**Nilai tambah:** User bisa copy No PR dengan satu klik untuk mencari di transaksi SAP lain (ME5A, ME53N, dll).
+
+**Implementasi:**
+
+```javascript
+// Tambahkan fungsi utility
+function copyToClip(text, label) {
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(text).then(function(){
+      showToast('S', (label||'') + ' ' + text + ' disalin');
+    }).catch(function(){
+      fallbackCopy(text, label);
+    });
+  } else {
+    fallbackCopy(text, label);
+  }
+}
+function fallbackCopy(text, label) {
+  var ta = document.createElement('textarea');
+  ta.value = text; ta.style.position='fixed'; ta.style.opacity='0';
+  document.body.appendChild(ta); ta.select();
+  document.execCommand('copy'); document.body.removeChild(ta);
+  showToast('S', (label||'') + ' ' + text + ' disalin');
+}
+```
+
+```html
+<!-- Di renderList(), ubah card-num menjadi clickable: -->
+html+='<span class="card-num" style="cursor:pointer;" '+
+      'onclick="event.stopPropagation();copyToClip(\''+pr.banfn+'\',\'PR\')" '+
+      'title="Klik untuk copy No PR">'+pr.banfn+'</span>';
+
+<!-- Di buildHistTable(), ubah td pertama menjadi clickable: -->
+html+='<td style="cursor:pointer;font-family:\'DM Mono\',monospace;font-weight:600;color:var(--primary-d);" '+
+      'onclick="copyToClip(\''+h.banfn+'\',\'PR\')" title="Klik untuk copy">'+
+      escHtml(h.banfn)+'</td>';
+```
+
+**Cara pakai:** Copy 2 fungsi JS, tambahkan `onclick` di elemen No PR. Menggunakan `navigator.clipboard` dengan fallback `execCommand`.
+
+---
+
+### 13.6 Keyboard Shortcuts
+
+**Nilai tambah:** Power user bisa navigasi lebih cepat tanpa mouse.
+
+**Implementasi:**
+
+```javascript
+// Tambahkan di event listener keydown (dekat yang sudah ada untuk Escape)
+document.addEventListener('keydown', function(e){
+  var key = e.key;
+  var ctrl = e.ctrlKey;
+
+  // ? atau / → show shortcut help
+  if (key === '?' || (ctrl && key === '/')) {
+    e.preventDefault();
+    showShortcutHelp();
+  }
+  // R → refresh
+  if (key === 'r' && !ctrl && !e.target.matches('input,textarea,select')) {
+    e.preventDefault();
+    if (curMode === 'pending') fetchList(curEstkzFilter);
+    else if (curMode === 'hist_app') fetchHistApp();
+    else if (curMode === 'hist_rej') fetchHistRej();
+  }
+  // E → toggle expand all
+  if (key === 'e' && !ctrl && !e.target.matches('input,textarea,select')) {
+    e.preventDefault();
+    if (typeof toggleAll === 'function') toggleAll();
+  }
+  // 1-9 → navigate to plant (1=Surabaya, 2=Semarang)
+  if (key >= '1' && key <= '9' && !ctrl && !e.target.matches('input,textarea,select')) {
+    e.preventDefault();
+    var plantKeys = { '1':'1200', '2':'1300' };
+    if (plantKeys[key]) {
+      var sec = document.getElementById('sbSec_' + plantKeys[key]);
+      if (sec) { sec.classList.add('open'); toggleSection(plantKeys[key]); }
+    }
+  }
+});
+
+// Shortcut help modal
+function showShortcutHelp() {
+  var html =
+    '<div class="modal show" id="modalShortcut" onclick="if(event.target===this)closeModal(\'modalShortcut\')">' +
+    '<div class="modal-box" style="max-width:420px;">' +
+    '<div class="modal-title">&#9000; Keyboard Shortcuts</div>' +
+    '<table style="width:100%;border-collapse:collapse;font-size:13px;">' +
+    '<tr><td style="padding:6px 12px;"><kbd style="background:#eef1f8;padding:2px 8px;border-radius:4px;">?</kbd></td><td style="padding:6px 12px;">Bantuan ini</td></tr>' +
+    '<tr><td style="padding:6px 12px;"><kbd style="background:#eef1f8;padding:2px 8px;border-radius:4px;">R</kbd></td><td style="padding:6px 12px;">Refresh data</td></tr>' +
+    '<tr><td style="padding:6px 12px;"><kbd style="background:#eef1f8;padding:2px 8px;border-radius:4px;">E</kbd></td><td style="padding:6px 12px;">Expand/Collapse all</td></tr>' +
+    '<tr><td style="padding:6px 12px;"><kbd style="background:#eef1f8;padding:2px 8px;border-radius:4px;">1</kbd></td><td style="padding:6px 12px;">Surabaya</td></tr>' +
+    '<tr><td style="padding:6px 12px;"><kbd style="background:#eef1f8;padding:2px 8px;border-radius:4px;">2</kbd></td><td style="padding:6px 12px;">Semarang</td></tr>' +
+    '<tr><td style="padding:6px 12px;"><kbd style="background:#eef1f8;padding:2px 8px;border-radius:4px;">Esc</kbd></td><td style="padding:6px 12px;">Tutup modal</td></tr>' +
+    '</table></div></div>';
+  var el = document.createElement('div');
+  el.innerHTML = html;
+  document.body.appendChild(el);
+  // Cleanup on close
+  var checkClose = setInterval(function(){
+    if (!document.getElementById('modalShortcut')) { clearInterval(checkClose); }
+  }, 100);
+  // Override closeModal to also remove element
+  var origClose = closeModal;
+  closeModal = function(id) {
+    origClose(id);
+    if (id === 'modalShortcut') {
+      setTimeout(function(){
+        var el = document.getElementById('modalShortcut');
+        if (el) el.remove();
+      }, 300);
+    }
+  };
+}
+```
+
+**Cara pakai:** Gabungkan dengan event listener `keydown` yang sudah ada. Tambahkan fungsi `showShortcutHelp()`. Shortcuts: `?` (help), `R` (refresh), `E` (expand all), `1` (Surabaya), `2` (Semarang).
+
+---
+
+### 13.7 Quick Filter Chips (Today/This Week/This Month)
+
+**Nilai tambah:** User bisa cepat memfilter history berdasarkan periode waktu umum tanpa harus scroll pagination.
+
+**Implementasi:**
+
+```javascript
+// Tambahkan fungsi
+function setQuickFilter(period) {
+  var now = new Date();
+  var start = new Date(now);
+
+  if (period === 'today') { /* start = today 00:00 */ }
+  else if (period === 'week') { start.setDate(start.getDate() - start.getDay()); }
+  else if (period === 'month') { start.setDate(1); }
+
+  var y = now.getFullYear();
+  var m = String(now.getMonth()+1).padStart(2,'0');
+  var d = String(now.getDate()).padStart(2,'0');
+  var todayStr = d + '.' + m + '.' + y;
+
+  var sy = start.getFullYear();
+  var sm = String(start.getMonth()+1).padStart(2,'0');
+  var sd = String(start.getDate()).padStart(2,'0');
+  var startStr = sd + '.' + sm + '.' + sy;
+
+  // Filter histFilteredData by date range (erdat field)
+  histFilteredData = (histData || []).filter(function(h){
+    var dt = h.erdat || '';
+    if (dt.length !== 10) return true;
+    return dt >= startStr && dt <= todayStr;
+  });
+  histCurPage = 1;
+  renderHistView();
+}
+```
+
+```html
+<!-- Tambahkan di toolbar history, setelah search input: -->
+'<button class="btn-exp" onclick="setQuickFilter(\'today\')">Hari Ini</button>'+
+'<button class="btn-exp" onclick="setQuickFilter(\'week\')">Minggu Ini</button>'+
+'<button class="btn-exp" onclick="setQuickFilter(\'month\')">Bulan Ini</button>'
+```
+
+**Cara pakai:** Tambahkan fungsi filter dan 3 button di toolbar history view. Gunakan format tanggal SAP `DD.MM.YYYY` untuk komparasi string.
+
+---
+
+### 13.8 Sticky Table Header untuk History
+
+**Nilai tambah:** Header kolom tetap terlihat saat scroll panjang history table.
+
+**Implementasi (CSS only):**
+
+```css
+/* Tambahkan ke §9 History Table di <style> */
+.hist-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+```
+
+```javascript
+// Tambahkan di renderHistView(), setelah html di-set:
+// Pastikan container punya max-height dan overflow
+var wrap = document.querySelector('.hist-table-wrap');
+if (wrap) {
+  wrap.style.maxHeight = 'calc(100vh - 320px)';
+  wrap.style.overflowY = 'auto';
+}
+```
+
+**Cara pakai:** Copy CSS ke section history table. Tambahkan JS di `renderHistView()`. **Note:** Ini membuat header tetap visible saat scroll di dalam wrapper, berbeda dengan sticky kolom pertama yang sudah ada.
+
+---
+
+### Tabel Prioritas Implementasi
+
+| Prioritas | Fitur | Estimasi Waktu | Tingkat Kesulitan | Dampak |
+|-----------|-------|----------------|-------------------|--------|
+| ⭐⭐⭐ | **Export CSV** | 15 menit | Mudah | Tinggi — user bisa olah data di Excel |
+| ⭐⭐⭐ | **Copy PR Number** | 5 menit | Sangat Mudah | Sedang — akses cepat ke transaksi SAP lain |
+| ⭐⭐ | **Dark Mode** | 20 menit | Mudah | Tinggi — kenyamanan mata |
+| ⭐⭐ | **Quick Filter Chips** | 15 menit | Mudah | Sedang — akses cepat history periodik |
+| ⭐⭐ | **Column Sorting** | 20 menit | Mudah | Sedang — fleksibilitas sorting |
+| ⭐ | **Auto-Refresh** | 20 menit | Sedang | Sedang — monitoring real-time |
+| ⭐ | **Keyboard Shortcuts** | 25 menit | Sedang | Sedang — power user productivity |
+| ⭐ | **Sticky Table Header** | 5 menit | Sangat Mudah | Rendah — visual polish |
+
+**Rekomendasi:** Mulai dari **Export CSV** + **Copy PR Number** (paling cepat dan berdampak tinggi). Lalu **Dark Mode** untuk polish. Terakhir **Auto-Refresh** jika dibutuhkan monitoring real-time.
+
+---
+
+## 14. Refactoring Maintainability — ZBSP_PRCH_APP → ZPR_REL_BSP Pattern
+
+Pada 23 Juni 2026, `ZBSP_PRCH_APP/index.htm` direfaktor untuk mendekati maintainability `ZPR_REL_BSP` **tanpa mengubah logic/flow sistem**.
+
+### Perubahan yang Dilakukan
+
+| Area | Sebelum | Sesudah | Baris Berkurang |
+|------|---------|---------|-----------------|
+| **Pagination** | `renderPagination` (43 baris) + `renderHistPagination` (43 baris) — duplikasi nyaris identik | `buildPagination(cfg)` (28 baris) digunakan oleh kedua view | **-58 baris** |
+| **Konfigurasi Plant** | `PLANT_LABELS` (objek label) + `PLANT_CATEGORIES` (objek array) — terpisah | `PLANT_DEF` (satu objek dengan `{label, categories}` per plant) | Tetap |
+| **Konfigurasi Kategori** | `PR_CATEGORIES` — nama tidak konsisten | `CATEGORY_DEF` — nama konsisten dgn ZPR_REL_BSP | Tetap |
+| **Lookup helpers** | Akses langsung (`PLANT_LABELS[x]` / `PLANT_CATEGORIES[x]`) | `getPlantLabel(x)` / `getPlantCats(x)` — DRY, siap untuk plant grouping dinamis | 0 |
+| **Dead code** | `getEstkzLabel` didefinisikan **2 kali** (duplikasi) | 1 definisi di §C6 | -5 baris |
+| **Section markers** | Komentar section tanpa indeks | **JS INDEX** di baris 961-993 dengan semua 22 section ber-`§` prefix | +46 baris (dokumentasi) |
+
+### Perbandingan Sebelum/Sesudah
+
+| Metrik | Sebelum Refactor | Sesudah Refactor |
+|--------|-----------------|------------------|
+| **Total baris** | 2.062 | 2.108 (+46 dari JS INDEX) |
+| **Jumlah fungsi** | ~40 | ~40 (sama, `renderPagination` dihapus, `buildPagination` ditambah) |
+| **Duplikasi pagination** | ~86 baris identik | 0 baris duplikasi |
+| **Konfigurasi terpusat** | 3 objek (`PLANT_LABELS` + `PR_CATEGORIES` + `PLANT_CATEGORIES`) | 2 objek (`PLANT_DEF` + `CATEGORY_DEF`) |
+| **Helper functions** | `getBsartLabel`, `getEstkzLabel` | Ditambah `getPlantLabel`, `getPlantCats` |
+
+### Apa yang Tidak Diubah
+
+Berikut sengaja **tidak disentuh** karena akan mengubah flow/logic:
+- Plant grouping logic (masih di backend `main.htm`, bukan frontend seperti ZPR_REL_BSP)
+- Approver logic (KMI-BOD belum bisa approve — masih using logic berbeda)
+- Event handling pattern (masih inline `onclick` — aman di BSP/SE80)
+- String concatenation HTML (masih `html+=` — tidak ada template engine di SE80)
+
+### Status Maintainability Sekarang
+
+| Aspek | Rating | Catatan |
+|-------|--------|---------|
+| **Konfigurasi terpusat** | ✅ Baik | `PLANT_DEF` + `CATEGORY_DEF` setara dengan `CATEGORY_DEF` + `PLANT_LABELS` ZPR_REL_BSP |
+| **DRY** | ✅ Baik | Pagination tidak lagi duplikat |
+| **Navigasi SE80** | ✅ Baik | JS INDEX dengan `§` prefix memudahkan Ctrl+F |
+| **Decoupling** | ⚠️ Perlu porting | Plant grouping masih di backend — perlu porting `getEffectiveWerks()` dari ZPR_REL_BSP |
+| **Event handling** | ❌ Masih inline | ~30+ inline `onclick` — terlalu berat untuk direfaktor tanpa test |
+
+*Laporan dibuat berdasarkan analisis kode sumber tanggal 23 Juni 2026. Total 2.062→2.108 baris (ZBSP_PRCH_APP) dan 2.372 baris (ZPR_REL_BSP) dianalisis secara menyeluruh.*

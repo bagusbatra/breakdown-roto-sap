@@ -959,60 +959,67 @@ body.sb-collapsed .main     { margin-left:0; }
 
 <script>
 /* ════════════════════════════════════════════════════════════════
-   STATE & CONSTANTS
-   (Tidak ada perubahan logic dari versi sebelumnya — hanya visual)
+   ZBSP_PRCH_APP — JAVASCRIPT INDEX (cari § di SE80)
+   ────────────────────────────────────────────────────────────────
+     §C1  CONFIGURATION         — PLANT_DEF, CATEGORY_DEF, ESTKZ_MAP
+     §C2  STATE (View)          — curPlant, curMode, curBsart, ...
+     §C3  STATE (PR List)       — allData, pageSize, curPage, ...
+     §C4  STATE (History)       — histData, histType, ...
+     §C5  STATE (Sidebar)       — sbCounts
+     §C6  DERIVED HELPERS       — getPlantLabel, getBsartLabel, ...
+     §C7  BACKWARD COMPAT       — PLANT_LABELS, PLANT_CATEGORIES
+     §U1  UTILITY               — escHtml, parseNum, fmtAmt, ...
+     §U2  STICKY TOOLBAR OFFSET — ResizeObserver
+     §U3  HEADER / SIDEBAR      — toggleSidebar, toggleUserMenu
+     §U4  LOGOUT                — doLogout
+     §U5  TOAST                 — showToast
+     §U6  MODAL                 — closeModal, welcome modal
+     §U7  INIT                  — init()
+     §U8  LOAD SIDEBAR          — loadSidebarData, renderSidebar
+     §U9  RENDER SIDEBAR        — renderSidebar, toggleSection
+     §U10 SWITCH VIEW           — switchView
+     §U11 FETCH LIST            — fetchList
+     §U12 FETCH HISTORY         — fetchHistApp, fetchHistRej
+     §U13 ESTKZ FILTER          — onEstkzFilter
+     §U14 GET FILTERED          — getFiltered (client-side search)
+     §U15 RENDER LIST           — renderList
+     §U16 RENDER HISTORY TABLE  — renderHistTable, applyHistFilter, renderHistView
+     §U17 BUILD HISTORY TABLE   — buildHistTable
+     §U18 HISTORY SEARCH        — applyHistSearchCommit, onHistSearchKey, ...
+     §U19 PAGINATION            — buildPagination, goPage, changePageSize
+     §U20 HISTORY PAGINATION    — renderHistPagination, histGoPage, ...
+     §U21 EXPAND / COLLAPSE     — toggleExpand, toggleAll, expandAll, ...
+     §U22 LOAD DETAIL           — loadDetail
    ════════════════════════════════════════════════════════════════ */
-var API_URL        = 'main.htm';
-var CUR_USER       = '<%=lv_uname2%>';
-var curPlant       = '';
-var curMode        = '';
-var curBsart       = 'ROTO';
-var openSections   = {};
-var curEstkzFilter = '';
 
-var allData      = [];
-var pageSize     = 10;
-var curPage      = 1;
-var searchKw     = '';
-var allExpanded  = false;
-var filteredData = [];
+/* ════════════════════════════════════════════════════════════════
+   §C1  CONFIGURATION   (→ ZPR_REL_BSP: CATEGORY_DEF + PLANT_LABELS)
+   Semua mapping bisnis di satu tempat — gampang dicari & diubah.
+   ════════════════════════════════════════════════════════════════ */
+var API_URL  = 'main.htm';
+var CUR_USER = '<%=lv_uname2%>';
 
-var histData = [];
-var histType = '';
-var histPageSize = 10;
-var histCurPage = 1;
-var histFilteredData = [];
-var histBsartFilter = '';
-var histSortOrder = '';
-
-var sbCounts = {
-  pending:  { '1200':{ROTO:0,PRK9:0,PRKS:0}, '1300':{ROTO:0,PRK9:0,PRKS:0} },
-  hist_app: { '1200':0, '1300':0 },
-  hist_rej: { '1200':0, '1300':0 }
+/* ── Plant Definition ──
+   Setiap plant punya: label (nama), categories (bsart yg available).
+   Plant 2000 dikelompokkan ke Surabaya di backend (main.htm). */
+var PLANT_DEF = {
+  '1200': { label:'Surabaya', categories:['ROTO','PRK9','PRKS'] },
+  '2000': { label:'Surabaya', categories:[] },
+  '1300': { label:'Semarang', categories:['ROTO','PRKS'] }
 };
 
-var PLANT_LABELS = { '1200':'Surabaya', '2000':'Surabaya', '1300':'Semarang' };
-
-/* Kategori PRK9 mencakup doc type RSBR,PRK9 — disamakan dgn
-   ZPR_REL_BSP. PR dgn bsart RSBR ditampilkan dengan label/style
-   yang sama seperti PRK9 (lihat getBsartLabel & bcls). */
-var PR_CATEGORIES = {
+/* ── Category Definition ──
+   Kategori PRK9 mencakup doc type RSBR,PRK9 — disamakan dgn
+   ZPR_REL_BSP. PR dgn bsart RSBR ditampilkan dgn label/style
+   yg sama seperti PRK9 (lihat getBsartLabel & bcls di history). */
+var CATEGORY_DEF = {
   'ROTO': { label:'PR Maintenance', short:'Maintenance', icon:'&#128203;' },
   'PRK9': { label:'PR RND',         short:'RND',         icon:'&#128736;' },
   'RSBR': { label:'PR RND',         short:'RND',         icon:'&#128736;' },
   'PRKS': { label:'PR Service',     short:'Service',     icon:'&#128295;' }
 };
 
-var PLANT_CATEGORIES = {
-  '1200': ['ROTO', 'PRK9', 'PRKS'],
-  '1300': ['ROTO', 'PRKS']
-};
-
-function getBsartLabel(bs) {
-  if (!bs) return '-';
-  return (PR_CATEGORIES[bs] && PR_CATEGORIES[bs].label) || bs;
-}
-
+/* ── ESTKZ Mapping ── */
 var ESTKZ_MAP = {
   'B':'MRP',        'D':'Direct',
   'F':'Prod.Order', 'G':'Store Order',
@@ -1022,6 +1029,72 @@ var ESTKZ_MAP = {
   'I':'SAP IBP',    'T':'S4CRM',
   'S':'Self-Svc',   'E':'External'
 };
+
+/* ════════════════════════════════════════════════════════════════
+   §C2  STATE — View
+   ════════════════════════════════════════════════════════════════ */
+var curPlant       = '';
+var curMode        = '';
+var curBsart       = 'ROTO';
+var openSections   = {};
+var curEstkzFilter = '';
+
+/* ════════════════════════════════════════════════════════════════
+   §C3  STATE — PR List (Pending)
+   ════════════════════════════════════════════════════════════════ */
+var allData      = [];
+var pageSize     = 10;
+var curPage      = 1;
+var searchKw     = '';
+var allExpanded  = false;
+var filteredData = [];
+
+/* ════════════════════════════════════════════════════════════════
+   §C4  STATE — History (Approve / Reject)
+   ════════════════════════════════════════════════════════════════ */
+var histData          = [];
+var histType          = '';
+var histPageSize      = 10;
+var histCurPage       = 1;
+var histFilteredData  = [];
+var histBsartFilter   = '';
+var histSortOrder     = '';
+
+/* ════════════════════════════════════════════════════════════════
+   §C5  STATE — Sidebar Counts
+   ════════════════════════════════════════════════════════════════ */
+var sbCounts = {
+  pending:  { '1200':{ROTO:0,PRK9:0,PRKS:0}, '1300':{ROTO:0,PRK9:0,PRKS:0} },
+  hist_app: { '1200':0, '1300':0 },
+  hist_rej: { '1200':0, '1300':0 }
+};
+
+/* ════════════════════════════════════════════════════════════════
+   §C6  DERIVED HELPERS — lookup dari config di atas
+   ════════════════════════════════════════════════════════════════ */
+function getPlantLabel(w) {
+  return (PLANT_DEF[w] && PLANT_DEF[w].label) || w;
+}
+function getPlantCats(w) {
+  return (PLANT_DEF[w] && PLANT_DEF[w].categories) || [];
+}
+function getBsartLabel(bs) {
+  if (!bs) return '-';
+  return (CATEGORY_DEF[bs] && CATEGORY_DEF[bs].label) || bs;
+}
+function getEstkzLabel(e) {
+  if (!e) return '-';
+  return ESTKZ_MAP[e] || e;
+}
+
+/* ════════════════════════════════════════════════════════════════
+   §C7  ALIASES — backward compat (jika ada referensi luar)
+   ════════════════════════════════════════════════════════════════ */
+/* Diperlukan oleh kode lama — dibaca, tidak ditulis.
+   Gunakan getPlantLabel() / getPlantCats() / CATEGORY_DEF untuk
+   kode baru. */
+var PLANT_LABELS    = {}; Object.keys(PLANT_DEF).forEach(function(k){ PLANT_LABELS[k]=PLANT_DEF[k].label; });
+var PLANT_CATEGORIES = {}; Object.keys(PLANT_DEF).forEach(function(k){ PLANT_CATEGORIES[k]=PLANT_DEF[k].categories; });
 
 /* ════════════════════════════════════════════════════════════════
    UTILITY
@@ -1070,11 +1143,6 @@ function postOpts(body) {
     headers:{ 'Content-Type':'application/x-www-form-urlencoded' },
     body:body
   };
-}
-
-function getEstkzLabel(e) {
-  if (!e) return '-';
-  return ESTKZ_MAP[e] || e;
 }
 
 function curClass(w) {
@@ -1383,7 +1451,7 @@ function renderSidebar() {
     var isOpen=(curPlant===p.code) || (openSections[p.code]===true);
     var pendObj=sbCounts.pending[p.code]||{};
 
-    var plantCats = PLANT_CATEGORIES[p.code]||[];
+    var plantCats = getPlantCats(p.code);
     var pend = 0;
     plantCats.forEach(function(bs){ pend += (pendObj[bs]||0); });
 
@@ -1404,7 +1472,7 @@ function renderSidebar() {
     html+='<div class="sb-submenu">';
 
     plantCats.forEach(function(bs){
-      var cat = PR_CATEGORIES[bs];
+      var cat = CATEGORY_DEF[bs];
       if (!cat) return;
       var cnt = pendObj[bs]||0;
       var isAct = (curPlant===p.code && curMode==='pending' && curBsart===bs);
@@ -1459,7 +1527,7 @@ function switchView(plant,mode,bsart) {
   curEstkzFilter = '';
 
   var t='Release PR';
-  if (mode==='pending' && PR_CATEGORIES[curBsart]) t+=' '+PR_CATEGORIES[curBsart].short;
+  if (mode==='pending' && CATEGORY_DEF[curBsart]) t+=' '+CATEGORY_DEF[curBsart].short;
   else if (mode==='hist_app') t+=' - History Approve';
   else if (mode==='hist_rej') t+=' - History Reject';
   document.title = t+' - PT. Kayu Mebel Indonesia';
@@ -1549,10 +1617,10 @@ function renderList() {
   var pageData = filteredData.slice(start,end);
 
   var html='';
-  var cat = PR_CATEGORIES[curBsart] || {label:curBsart, icon:'&#128203;'};
+  var cat = CATEGORY_DEF[curBsart] || {label:curBsart, icon:'&#128203;'};
 
   html+='<div class="sticky-top"><div class="pg-hdr">';
-  html+='<div class="pg-title">'+cat.icon+' Pending '+cat.label+' &mdash; '+PLANT_LABELS[curPlant]+'</div>';
+  html+='<div class="pg-title">'+cat.icon+' Pending '+cat.label+' &mdash; '+getPlantLabel(curPlant)+'</div>';
   html+='<div class="pg-sub">'+total+' PR menunggu approval';
   if (curEstkzFilter==='MRP')
     html+=' &mdash; <span style="color:var(--info);font-weight:700;">MRP only</span>';
@@ -1615,7 +1683,7 @@ function renderList() {
       html+='<div class="card-top">';
       html+='<span class="card-num">'+pr.banfn+'</span>';
       html+='<span class="badge b-pending">In Release</span>';
-      html+='<span class="badge b-plant">'+escHtml(pr.werks)+' '+escHtml(PLANT_LABELS[pr.werks]||'')+'</span>';
+      html+='<span class="badge b-plant">'+escHtml(pr.werks)+' '+escHtml(getPlantLabel(pr.werks))+'</span>';
       html+='<span class="badge '+ecls+'">'+escHtml(elbl)+'</span>';
       if (itCnt>0) html+='<span class="badge b-items">'+itCnt+' item</span>';
 
@@ -1645,7 +1713,11 @@ function renderList() {
   }
 
   html+='</div>'; /* cardContainer */
-  html+=renderPagination(total,totalPages,start,end);
+  html+=buildPagination({
+    total:total, totalPages:totalPages, start:start, end:end,
+    curPage:curPage, pageSize:pageSize,
+    goFn:'goPage', label:'PR'
+  });
 
   document.getElementById('mainContent').innerHTML=html;
 
@@ -1714,7 +1786,7 @@ function renderHistView() {
 
   var html='';
   html+='<div class="sticky-top"><div class="pg-hdr">';
-  html+='<div class="pg-title" style="color:'+color+';">'+title+PLANT_LABELS[curPlant]+'</div>';
+  html+='<div class="pg-title" style="color:'+color+';">'+title+getPlantLabel(curPlant)+'</div>';
   html+='<div class="pg-sub">'+total+' record '+(isApp?'approved':'rejected')+'</div>';
   html+='</div></div>';
 
@@ -1726,9 +1798,9 @@ function renderHistView() {
 
   html+='<select class="estkz-select" onchange="onHistBsartFilter(this.value)">';
   html+='<option value=""'+(histBsartFilter===''?' selected':'')+'>Semua Kategori</option>';
-  Object.keys(PR_CATEGORIES).forEach(function(bs){
+  Object.keys(CATEGORY_DEF).forEach(function(bs){
     html+='<option value="'+bs+'"'+(histBsartFilter===bs?' selected':'')+'>'+
-          PR_CATEGORIES[bs].label+'</option>';
+          CATEGORY_DEF[bs].label+'</option>';
   });
   html+='</select>';
 
@@ -1838,36 +1910,32 @@ function onHistSearchBlur() {
 }
 
 /* ════════════════════════════════════════════════════════════════
-   PAGINATION
+   PAGINATION (unified — digunakan oleh PR list & history)
    ════════════════════════════════════════════════════════════════ */
-function renderPagination(total,totalPages,start,end) {
-  if (pageSize===0 || totalPages<=1){
-    return '<div class="pagination-bar"><span class="pg-info">Showing all '+total+' PR</span></div>';
-  }
-
-  var html='<div class="pagination-bar">';
-  html+='<button class="pg-btn" onclick="goPage(1)"'+(curPage<=1?' disabled':'')+'>&#171;</button>';
-  html+='<button class="pg-btn" onclick="goPage('+(curPage-1)+')"'+(curPage<=1?' disabled':'')+'>&#8249;</button>';
-
-  var sp=Math.max(1,curPage-2);
-  var ep=Math.min(totalPages,curPage+2);
-
+function buildPagination(cfg) {
+  var cur=cfg.curPage, sz=cfg.pageSize, gfn=cfg.goFn;
+  var total=cfg.total, totalPages=cfg.totalPages;
+  var start=cfg.start, end=cfg.end, label=cfg.label||'item';
+  if (sz===0||totalPages<=1)
+    return '<div class="pagination-bar"><span class="pg-info">Showing all '+total+' '+label+'</span></div>';
+  var h='<div class="pagination-bar">';
+  h+='<button class="pg-btn" onclick="'+gfn+'(1)"'+(cur<=1?' disabled':'')+'>&#171;</button>';
+  h+='<button class="pg-btn" onclick="'+gfn+'('+(cur-1)+')"'+(cur<=1?' disabled':'')+'>&#8249;</button>';
+  var sp=Math.max(1,cur-2), ep=Math.min(totalPages,cur+2);
   if (sp>1){
-    html+='<button class="pg-btn" onclick="goPage(1)">1</button>';
-    if (sp>2) html+='<span class="pg-info">...</span>';
+    h+='<button class="pg-btn" onclick="'+gfn+'(1)">1</button>';
+    if (sp>2) h+='<span class="pg-info">...</span>';
   }
-  for (var i=sp;i<=ep;i++){
-    html+='<button class="pg-btn'+(i===curPage?' active':'')+'" onclick="goPage('+i+')">'+i+'</button>';
-  }
+  for (var i=sp;i<=ep;i++)
+    h+='<button class="pg-btn'+(i===cur?' active':'')+'" onclick="'+gfn+'('+i+')">'+i+'</button>';
   if (ep<totalPages){
-    if (ep<totalPages-1) html+='<span class="pg-info">...</span>';
-    html+='<button class="pg-btn" onclick="goPage('+totalPages+')">'+totalPages+'</button>';
+    if (ep<totalPages-1) h+='<span class="pg-info">...</span>';
+    h+='<button class="pg-btn" onclick="'+gfn+'('+totalPages+')">'+totalPages+'</button>';
   }
-  html+='<button class="pg-btn" onclick="goPage('+(curPage+1)+')"'+(curPage>=totalPages?' disabled':'')+'>&#8250;</button>';
-  html+='<button class="pg-btn" onclick="goPage('+totalPages+')"'+(curPage>=totalPages?' disabled':'')+'>&#187;</button>';
-  html+='<span class="pg-info">'+(start+1)+'&ndash;'+end+' of '+total+'</span>';
-  html+='</div>';
-  return html;
+  h+='<button class="pg-btn" onclick="'+gfn+'('+(cur+1)+')"'+(cur>=totalPages?' disabled':'')+'>&#8250;</button>';
+  h+='<button class="pg-btn" onclick="'+gfn+'('+totalPages+')"'+(cur>=totalPages?' disabled':'')+'>&#187;</button>';
+  h+='<span class="pg-info">'+(start+1)+'&ndash;'+end+' of '+total+'</span></div>';
+  return h;
 }
 
 function goPage(pg) {
@@ -1906,36 +1974,14 @@ function onSearchBlur() {
 }
 
 /* ════════════════════════════════════════════════════════════════
-   HISTORY PAGINATION
+   HISTORY PAGINATION (wrapper untuk buildPagination)
    ════════════════════════════════════════════════════════════════ */
 function renderHistPagination(total,totalPages,start,end) {
-  if (histPageSize===0 || totalPages<=1){
-    return '<div class="pagination-bar"><span class="pg-info">Showing all '+total+' record</span></div>';
-  }
-
-  var html='<div class="pagination-bar">';
-  html+='<button class="pg-btn" onclick="histGoPage(1)"'+(histCurPage<=1?' disabled':'')+'>&#171;</button>';
-  html+='<button class="pg-btn" onclick="histGoPage('+(histCurPage-1)+')"'+(histCurPage<=1?' disabled':'')+'>&#8249;</button>';
-
-  var sp=Math.max(1,histCurPage-2);
-  var ep=Math.min(totalPages,histCurPage+2);
-
-  if (sp>1){
-    html+='<button class="pg-btn" onclick="histGoPage(1)">1</button>';
-    if (sp>2) html+='<span class="pg-info">...</span>';
-  }
-  for (var i=sp;i<=ep;i++){
-    html+='<button class="pg-btn'+(i===histCurPage?' active':'')+'" onclick="histGoPage('+i+')">'+i+'</button>';
-  }
-  if (ep<totalPages){
-    if (ep<totalPages-1) html+='<span class="pg-info">...</span>';
-    html+='<button class="pg-btn" onclick="histGoPage('+totalPages+')">'+totalPages+'</button>';
-  }
-  html+='<button class="pg-btn" onclick="histGoPage('+(histCurPage+1)+')"'+(histCurPage>=totalPages?' disabled':'')+'>&#8250;</button>';
-  html+='<button class="pg-btn" onclick="histGoPage('+totalPages+')"'+(histCurPage>=totalPages?' disabled':'')+'>&#187;</button>';
-  html+='<span class="pg-info">'+(start+1)+'&ndash;'+end+' of '+total+'</span>';
-  html+='</div>';
-  return html;
+  return buildPagination({
+    total:total, totalPages:totalPages, start:start, end:end,
+    curPage:histCurPage, pageSize:histPageSize,
+    goFn:'histGoPage', label:'record'
+  });
 }
 
 function histGoPage(pg) {
