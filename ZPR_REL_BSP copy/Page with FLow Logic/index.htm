@@ -1005,6 +1005,15 @@ function getPlantLabel(werks) {
   return PLANT_LABELS[primary]||primary;
 }
 
+function getCategoryLabelByBsart(werks,bsart) {
+  var list=CATEGORY_DEF[werks]||[];
+  for (var i=0;i<list.length;i++){
+    if (list[i].bsart.split(',').indexOf(bsart)>-1)
+      return list[i].label;
+  }
+  return bsart||'-';
+}
+
 function getPlantTotalPending(werks) {
   var codes = getSidebarWerks(werks);
   var total=0;
@@ -1671,6 +1680,8 @@ function buildHistTable(data,type) {
     '<thead><tr>'+
     '<th>No PR</th>'+
     '<th>Item</th>'+
+    '<th>Plant</th>'+
+    '<th>Kategori</th>'+
     '<th>Deskripsi</th>'+
     '<th>Dibuat Oleh</th>'+
     '<th>Tgl PR</th>'+
@@ -1710,6 +1721,17 @@ function buildHistTable(data,type) {
     html+='<td style="font-family:\'DM Mono\','+
           'monospace;font-size:12px;">'+
           escHtml(h.bnfpo)+'</td>';
+    html+='<td><span style="background:#f1f5f9;'+
+          'padding:2px 6px;border-radius:4px;'+
+          'font-size:11px;">'+
+          escHtml(h.werks)+' '+
+          escHtml(PLANT_LABELS[h.werks]||'')+
+          '</span></td>';
+    html+='<td><span style="background:#f1f5f9;'+
+          'padding:2px 6px;border-radius:4px;'+
+          'font-size:11px;">'+
+          escHtml(getCategoryLabelByBsart(h.werks,h.bsart))+
+          '</span></td>';
     html+='<td style="font-weight:500;'+
           'max-width:180px;">'+
           escHtml(h.txz01||'-')+'</td>';
