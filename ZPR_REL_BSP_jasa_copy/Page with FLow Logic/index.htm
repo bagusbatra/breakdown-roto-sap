@@ -1580,8 +1580,8 @@ function renderList() {
   html+='</select>';
 
   html+='<div class="expand-bar">'+
-        '<button class="btn-exp" onclick="expandAll()">&#9660; Expand</button>'+
-        '<button class="btn-exp" onclick="collapseAll()">&#9650; Collapse</button></div>';
+        '<button class="btn-exp" id="btnAll" onclick="toggleAll()">'+
+        (allExpanded?'&#9650; Collapse':'&#9660; Expand')+'</button></div>';
 
   html+='<div class="pg-count">'+(total!==allData.length?total+' of '+allData.length:total)+' PR</div>';
   html+='</div></div>';
@@ -1974,6 +1974,16 @@ function toggleExpand(banfn) {
   var wasExp=card.classList.contains('expanded');
   card.classList.toggle('expanded');
   if (!wasExp) loadDetail(banfn);
+}
+
+function toggleAll() {
+  if (allExpanded) { collapseAll(); } else { expandAll(); }
+  updateAllBtn();
+}
+
+function updateAllBtn() {
+  var btn=document.getElementById('btnAll');
+  if (btn) btn.innerHTML=allExpanded?'&#9650; Collapse':'&#9660; Expand';
 }
 
 function expandAll() {
