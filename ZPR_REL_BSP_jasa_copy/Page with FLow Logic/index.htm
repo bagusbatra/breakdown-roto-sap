@@ -1364,12 +1364,15 @@ function renderSidebar() {
   ];
 
   /* KMI-BOD & BASIS: tidak difilter (lihat semua plant).
-     KMI-U052: hanya Surabaya. KMI-U051: hanya Semarang. */
+     KMI-U052: hanya Surabaya. KMI-U051: hanya Semarang.
+     KMI-U151: hanya Surabaya. */
   var ucUser = (CUR_USER||'').toUpperCase();
   if (ucUser==='KMI-U052') {
     plants = plants.filter(function(p){ return p.code==='1200'; });
   } else if (ucUser==='KMI-U051') {
     plants = plants.filter(function(p){ return p.code==='1300'; });
+  } else if (ucUser==='KMI-U151') {
+    plants = plants.filter(function(p){ return p.code==='1200'; });
   }
 
   var html='';

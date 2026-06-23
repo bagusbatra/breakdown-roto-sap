@@ -176,11 +176,14 @@ END-OF-DEFINITION.
 
 " Cek apakah user saat ini boleh akses plant &1 (werks)
 " KMI-U052 = Surabaya (1200) only, KMI-U051 = Semarang (1300) only
+" KMI-U151 = Surabaya (1200) only
 DEFINE check_werks_allowed.
   lv_plant_ok = abap_true.
   IF lv_uname_uc = 'KMI-U052' AND &1 NE '1200'.
     lv_plant_ok = abap_false.
   ELSEIF lv_uname_uc = 'KMI-U051' AND &1 NE '1300'.
+    lv_plant_ok = abap_false.
+  ELSEIF lv_uname_uc = 'KMI-U151' AND &1 NE '1200'.
     lv_plant_ok = abap_false.
   ENDIF.
 END-OF-DEFINITION.
