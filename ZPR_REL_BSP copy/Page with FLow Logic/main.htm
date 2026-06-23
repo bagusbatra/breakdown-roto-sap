@@ -373,19 +373,19 @@ CASE lv_action.
         AND frgkz = 'X'
         AND frgzu = ' '
         AND loekz = ' '
-      GROUP BY werks, bsart.
+      GROUP BY werks bsart.
 
     SELECT werks bsart COUNT(*) AS cnt
       FROM zroto_rej_hist
       INTO TABLE lt_rj_grp
       WHERE werks IN lt_werks_rng_sb
-      GROUP BY werks, bsart.
+      GROUP BY werks bsart.
 
     SELECT werks bsart COUNT(*) AS cnt
       FROM zroto_app_hist
       INTO TABLE lt_ap_grp
       WHERE werks IN lt_werks_rng_sb
-      GROUP BY werks, bsart.
+      GROUP BY werks bsart.
 
     " Map bsart -> kategori (global, sama untuk semua plant) lalu
     " jumlahkan ke lt_acc. RND = RSBR + PRK9, tapi satu PR (banfn)
