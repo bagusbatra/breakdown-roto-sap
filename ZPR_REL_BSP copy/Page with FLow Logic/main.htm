@@ -989,11 +989,14 @@ CASE lv_action.
 *--- APPROVE -----------------------------------------------------------
     IF lv_pr_action = 'approve'.
 
-      DATA: lv_ap_ok   TYPE i,
-            lv_ap_ok_s TYPE string,
-            lv_ap_err  TYPE string.
+      DATA: lv_ap_ok     TYPE i,
+            lv_ap_ok_s   TYPE string,
+            lv_ap_err    TYPE string,
+            lv_ap_err1   TYPE string,
+            lv_ap_bnfpo  TYPE string.
+      DATA: lt_items_ok TYPE STANDARD TABLE OF ty_eban_item.
 
-      CLEAR: lv_ap_ok, lv_ap_err.
+      CLEAR: lv_ap_ok, lv_ap_err, lt_items_ok.
 
       LOOP AT lt_items INTO ls_item.
         CLEAR: lt_return, lv_rel_status, lv_rel_ind.
@@ -1021,28 +1024,43 @@ CASE lv_action.
 
         IF sy-subrc = 0.
           lv_ap_ok = lv_ap_ok + 1.
+          " Hanya item yang BENAR-BENAR sukses di-release yang
+          " akan disimpan ke ZROTO_APP_HIST (lihat blok di bawah).
+          APPEND ls_item TO lt_items_ok.
         ELSE.
           READ TABLE lt_return INTO ls_return
             WITH KEY type = 'E'.
           IF sy-subrc = 0.
-            lv_ap_err = ls_return-message.
+            lv_ap_err1 = ls_return-message.
           ELSE.
             CASE sy-subrc.
-              WHEN 1. lv_ap_err =
+              WHEN 1. lv_ap_err1 =
                 'Authority check failed'.
-              WHEN 2. lv_ap_err =
+              WHEN 2. lv_ap_err1 =
                 'PR not found'.
-              WHEN 3. lv_ap_err =
+              WHEN 3. lv_ap_err1 =
                 'Enqueue failed'.
-              WHEN 4. lv_ap_err =
+              WHEN 4. lv_ap_err1 =
                 'Prerequisite failed'.
-              WHEN 5. lv_ap_err =
+              WHEN 5. lv_ap_err1 =
                 'Already released'.
-              WHEN 6. lv_ap_err =
+              WHEN 6. lv_ap_err1 =
                 'Responsibility failed'.
-              WHEN OTHERS. lv_ap_err =
+              WHEN OTHERS. lv_ap_err1 =
                 'Unknown error'.
             ENDCASE.
+          ENDIF.
+          " Kumpulkan SEMUA pesan error per item (bukan cuma
+          " yang terakhir), supaya tidak ada kegagalan yang
+          " tertutup oleh kegagalan item lain.
+          lv_ap_bnfpo = ls_item-bnfpo.
+          CONDENSE lv_ap_bnfpo NO-GAPS.
+          IF lv_ap_err IS INITIAL.
+            CONCATENATE 'Item' lv_ap_bnfpo ':' lv_ap_err1
+              INTO lv_ap_err SEPARATED BY space.
+          ELSE.
+            CONCATENATE lv_ap_err '| Item' lv_ap_bnfpo ':'
+              lv_ap_err1 INTO lv_ap_err SEPARATED BY space.
           ENDIF.
         ENDIF.
       ENDLOOP.
@@ -1052,12 +1070,15 @@ CASE lv_action.
         CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
           EXPORTING wait = 'X'.
 
-        " Simpan ke ZROTO_APP_HIST
+        " Simpan ke ZROTO_APP_HIST HANYA item yang sukses
+        " (lt_items_ok), supaya item yang gagal release TIDAK
+        " ikut tercatat sebagai approved dan tetap pending agar
+        " bisa di-approve ulang.
         " bsart diambil dari ls_item-bsart (data asli PR),
         " BUKAN hardcode 'ROTO', supaya history PR RND/Service
         " tersimpan dengan doc type yang benar.
         DATA: ls_zapp TYPE zroto_app_hist.
-        LOOP AT lt_items INTO ls_item.
+        LOOP AT lt_items_ok INTO ls_item.
           CLEAR ls_zapp.
           ls_zapp-banfn  = ls_item-banfn.
           ls_zapp-bnfpo  = ls_item-bnfpo.
@@ -1081,11 +1102,20 @@ CASE lv_action.
 
         lv_ap_ok_s = lv_ap_ok.
         CONDENSE lv_ap_ok_s NO-GAPS.
-        CONCATENATE
-          '{"status":"S","message":"PR '
-          lv_banfn ' berhasil di-approve ('
-          lv_ap_ok_s ' item)"}'
-          INTO lv_output.
+        IF lv_ap_err IS INITIAL.
+          CONCATENATE
+            '{"status":"S","message":"PR '
+            lv_banfn ' berhasil di-approve ('
+            lv_ap_ok_s ' item)"}'
+            INTO lv_output.
+        ELSE.
+          escape_json lv_ap_err.
+          CONCATENATE
+            '{"status":"S","message":"PR '
+            lv_banfn ' sebagian berhasil di-approve ('
+            lv_ap_ok_s ' item). Gagal: ' lv_ap_err '"}'
+            INTO lv_output.
+        ENDIF.
       ELSE.
         CALL FUNCTION 'BAPI_TRANSACTION_ROLLBACK'.
         escape_json lv_ap_err.
@@ -1098,31 +1128,10 @@ CASE lv_action.
 *--- DELETE / REJECT ---------------------------------------------------
     ELSEIF lv_pr_action = 'delete'.
 
-      DATA: ls_zroto TYPE zroto_rej_hist.
-
-      LOOP AT lt_items INTO ls_item.
-        CLEAR ls_zroto.
-        ls_zroto-banfn  = ls_item-banfn.
-        ls_zroto-bnfpo  = ls_item-bnfpo.
-        ls_zroto-werks  = ls_item-werks.
-        ls_zroto-bsart  = ls_item-bsart.
-        ls_zroto-txz01  = ls_item-txz01.
-        ls_zroto-ernam  = ls_item-ernam.
-        ls_zroto-erdat  = ls_item-badat.
-        ls_zroto-menge  = ls_item-menge.
-        ls_zroto-meins  = ls_item-meins.
-        ls_zroto-preis  = ls_item-preis.
-        ls_zroto-peinh  = ls_item-peinh.
-        ls_zroto-waers  = ls_item-waers.
-        ls_zroto-ekgrp  = ls_item-ekgrp.
-        ls_zroto-del_by = sy-uname.
-        ls_zroto-del_at = sy-datum.
-        ls_zroto-del_tm = sy-uzeit.
-        ls_zroto-reason = lv_notes.
-        MODIFY zroto_rej_hist FROM ls_zroto.
-      ENDLOOP.
-      COMMIT WORK AND WAIT.
-
+      " Urutan: panggil BAPI_REQUISITION_DELETE DULU. History
+      " (ZROTO_REJ_HIST) hanya ditulis & di-commit kalau delete
+      " benar-benar sukses, supaya tidak ada history "reject"
+      " yang tercatat padahal PR-nya masih ada di SAP.
       CLEAR lt_delitem.
       LOOP AT lt_items INTO ls_item.
         CLEAR ls_delitem.
@@ -1142,17 +1151,43 @@ CASE lv_action.
       READ TABLE lt_return INTO ls_return
         WITH KEY type = 'E'.
       IF sy-subrc NE 0.
+        " Delete sukses -> commit BAPI, baru simpan history.
+        CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+          EXPORTING wait = 'X'.
+
+        DATA: ls_zroto TYPE zroto_rej_hist.
+        LOOP AT lt_items INTO ls_item.
+          CLEAR ls_zroto.
+          ls_zroto-banfn  = ls_item-banfn.
+          ls_zroto-bnfpo  = ls_item-bnfpo.
+          ls_zroto-werks  = ls_item-werks.
+          ls_zroto-bsart  = ls_item-bsart.
+          ls_zroto-txz01  = ls_item-txz01.
+          ls_zroto-ernam  = ls_item-ernam.
+          ls_zroto-erdat  = ls_item-badat.
+          ls_zroto-menge  = ls_item-menge.
+          ls_zroto-meins  = ls_item-meins.
+          ls_zroto-preis  = ls_item-preis.
+          ls_zroto-peinh  = ls_item-peinh.
+          ls_zroto-waers  = ls_item-waers.
+          ls_zroto-ekgrp  = ls_item-ekgrp.
+          ls_zroto-del_by = sy-uname.
+          ls_zroto-del_at = sy-datum.
+          ls_zroto-del_tm = sy-uzeit.
+          ls_zroto-reason = lv_notes.
+          MODIFY zroto_rej_hist FROM ls_zroto.
+        ENDLOOP.
+        COMMIT WORK AND WAIT.
+
         CONCATENATE
           '{"status":"S","message":"PR '
           lv_banfn ' berhasil di-reject\/delete"}'
           INTO lv_output.
       ELSE.
+        CALL FUNCTION 'BAPI_TRANSACTION_ROLLBACK'.
         DATA: lv_del_err TYPE string.
         lv_del_err = ls_return-message.
         escape_json lv_del_err.
-        DELETE FROM zroto_rej_hist
-          WHERE banfn = lv_banfn_e.
-        COMMIT WORK AND WAIT.
         CONCATENATE
           '{"status":"E","message":"'
           lv_del_err '"}'
