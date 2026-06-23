@@ -234,9 +234,6 @@ CASE lv_action.
 *   Surabaya (1200,2000,1000,1001,1100) : MTN=ROTO | RND=RSBR,PRK9 | SVC=PRKS
 *   Semarang (1300,3000)                : MTN=ROTO | SVC=PRKS
     DATA: lv_is_app_s   TYPE string.
-    DATA: lt_sb_uniq    TYPE STANDARD TABLE OF eban,
-          lt_rj_uniq    TYPE STANDARD TABLE OF zroto_rej_hist,
-          lt_ra_uniq    TYPE STANDARD TABLE OF zroto_app_hist.
     DATA: lv_cnt        TYPE i,
           lv_cnt_s      TYPE string.
 
@@ -296,6 +293,140 @@ CASE lv_action.
 
     CLEAR: lv_sb_pend, lv_sb_app, lv_sb_rej.
 
+*----------------------------------------------------------------------
+* Hitung semua count lewat 3 query GROUP BY (bukan 1 query per
+* kombinasi plant x kategori x pending/app/rej). Supaya jumlah query
+* tidak ikut membengkak setiap kali ada plant baru ditambahkan.
+*----------------------------------------------------------------------
+    DATA: BEGIN OF ls_grp,
+            werks TYPE eban-werks,
+            bsart TYPE eban-bsart,
+            cnt   TYPE i,
+          END OF ls_grp.
+    DATA: lt_pd_grp LIKE STANDARD TABLE OF ls_grp,
+          lt_rj_grp LIKE STANDARD TABLE OF ls_grp,
+          lt_ap_grp LIKE STANDARD TABLE OF ls_grp.
+
+    DATA: BEGIN OF ls_acc,
+            werks    TYPE eban-werks,
+            category TYPE string,
+            pend     TYPE i,
+            rej      TYPE i,
+            app      TYPE i,
+          END OF ls_acc.
+    DATA: lt_acc LIKE STANDARD TABLE OF ls_acc.
+
+    DATA: lt_werks_rng_sb TYPE RANGE OF eban-werks,
+          ls_werks_rng_sb LIKE LINE OF lt_werks_rng_sb.
+
+    " bsart -> kategori, diturunkan otomatis dari lt_cat_def (BUKAN
+    " hardcode terpisah), supaya kalau bsart_cs di lt_cat_def diubah
+    " nanti, pemetaan ini ikut sinkron tanpa perlu diubah dua tempat.
+    DATA: BEGIN OF ls_b2c,
+            bsart    TYPE eban-bsart,
+            category TYPE string,
+          END OF ls_b2c.
+    DATA: lt_b2c LIKE STANDARD TABLE OF ls_b2c.
+
+    " Skeleton lt_acc dari lt_cat_def (semua kombinasi werks x
+    " kategori yang valid, count default 0), dan kumpulkan plant
+    " unik untuk dipakai sebagai filter WHERE di 3 query di bawah.
+    CLEAR: lt_acc, lt_werks_rng_sb, lt_b2c.
+    LOOP AT lt_cat_def INTO ls_cat_def.
+      CLEAR ls_acc.
+      ls_acc-werks    = ls_cat_def-werks.
+      ls_acc-category = ls_cat_def-category.
+      APPEND ls_acc TO lt_acc.
+
+      READ TABLE lt_werks_rng_sb WITH KEY low = ls_cat_def-werks
+        TRANSPORTING NO FIELDS.
+      IF sy-subrc NE 0.
+        CLEAR ls_werks_rng_sb.
+        ls_werks_rng_sb-sign   = 'I'.
+        ls_werks_rng_sb-option = 'EQ'.
+        ls_werks_rng_sb-low    = ls_cat_def-werks.
+        APPEND ls_werks_rng_sb TO lt_werks_rng_sb.
+      ENDIF.
+
+      CLEAR lt_bsart_split.
+      SPLIT ls_cat_def-bsart_cs AT ',' INTO TABLE lt_bsart_split.
+      LOOP AT lt_bsart_split INTO lv_bsart_part.
+        CONDENSE lv_bsart_part.
+        TRANSLATE lv_bsart_part TO UPPER CASE.
+        IF lv_bsart_part IS NOT INITIAL.
+          READ TABLE lt_b2c WITH KEY bsart = lv_bsart_part
+            TRANSPORTING NO FIELDS.
+          IF sy-subrc NE 0.
+            CLEAR ls_b2c.
+            ls_b2c-bsart    = lv_bsart_part.
+            ls_b2c-category = ls_cat_def-category.
+            APPEND ls_b2c TO lt_b2c.
+          ENDIF.
+        ENDIF.
+      ENDLOOP.
+    ENDLOOP.
+
+    SELECT werks bsart COUNT( DISTINCT banfn ) AS cnt
+      FROM eban
+      INTO TABLE lt_pd_grp
+      WHERE werks IN lt_werks_rng_sb
+        AND frgkz = 'X'
+        AND frgzu = ' '
+        AND loekz = ' '
+      GROUP BY werks, bsart.
+
+    SELECT werks bsart COUNT(*) AS cnt
+      FROM zroto_rej_hist
+      INTO TABLE lt_rj_grp
+      WHERE werks IN lt_werks_rng_sb
+      GROUP BY werks, bsart.
+
+    SELECT werks bsart COUNT(*) AS cnt
+      FROM zroto_app_hist
+      INTO TABLE lt_ap_grp
+      WHERE werks IN lt_werks_rng_sb
+      GROUP BY werks, bsart.
+
+    " Map bsart -> kategori (global, sama untuk semua plant) lalu
+    " jumlahkan ke lt_acc. RND = RSBR + PRK9, tapi satu PR (banfn)
+    " hanya pernah punya satu bsart, jadi menjumlahkan count per
+    " bsart terpisah setara dengan COUNT(DISTINCT banfn) gabungan.
+    LOOP AT lt_pd_grp INTO ls_grp.
+      READ TABLE lt_b2c WITH KEY bsart = ls_grp-bsart INTO ls_b2c.
+      IF sy-subrc = 0.
+        READ TABLE lt_acc WITH KEY werks = ls_grp-werks
+          category = ls_b2c-category INTO ls_acc.
+        IF sy-subrc = 0.
+          ls_acc-pend = ls_acc-pend + ls_grp-cnt.
+          MODIFY lt_acc FROM ls_acc INDEX sy-tabix.
+        ENDIF.
+      ENDIF.
+    ENDLOOP.
+
+    LOOP AT lt_rj_grp INTO ls_grp.
+      READ TABLE lt_b2c WITH KEY bsart = ls_grp-bsart INTO ls_b2c.
+      IF sy-subrc = 0.
+        READ TABLE lt_acc WITH KEY werks = ls_grp-werks
+          category = ls_b2c-category INTO ls_acc.
+        IF sy-subrc = 0.
+          ls_acc-rej = ls_acc-rej + ls_grp-cnt.
+          MODIFY lt_acc FROM ls_acc INDEX sy-tabix.
+        ENDIF.
+      ENDIF.
+    ENDLOOP.
+
+    LOOP AT lt_ap_grp INTO ls_grp.
+      READ TABLE lt_b2c WITH KEY bsart = ls_grp-bsart INTO ls_b2c.
+      IF sy-subrc = 0.
+        READ TABLE lt_acc WITH KEY werks = ls_grp-werks
+          category = ls_b2c-category INTO ls_acc.
+        IF sy-subrc = 0.
+          ls_acc-app = ls_acc-app + ls_grp-cnt.
+          MODIFY lt_acc FROM ls_acc INDEX sy-tabix.
+        ENDIF.
+      ENDIF.
+    ENDLOOP.
+
     SORT lt_cat_def BY werks category.
 
     LOOP AT lt_cat_def INTO ls_cat_def.
@@ -318,21 +449,11 @@ CASE lv_action.
         lv_first_w = abap_false.
       ENDIF.
 
-      parse_bsart_range ls_cat_def-bsart_cs lt_bsart_rng.
+      READ TABLE lt_acc WITH KEY werks = ls_cat_def-werks
+        category = ls_cat_def-category INTO ls_acc.
 
       " --- PENDING ---
-      CLEAR lt_sb_uniq.
-      SELECT banfn FROM eban
-        INTO CORRESPONDING FIELDS OF TABLE lt_sb_uniq
-        WHERE bsart IN lt_bsart_rng
-          AND werks = ls_cat_def-werks
-          AND frgkz = 'X'
-          AND frgzu = ' '
-          AND loekz = ' '.
-      SORT lt_sb_uniq BY banfn.
-      DELETE ADJACENT DUPLICATES FROM lt_sb_uniq
-        COMPARING banfn.
-      lv_cnt   = lines( lt_sb_uniq ).
+      lv_cnt   = ls_acc-pend.
       lv_cnt_s = lv_cnt.
       CONDENSE lv_cnt_s NO-GAPS.
       CONCATENATE lv_sb_pend lv_sb_sep
@@ -340,12 +461,7 @@ CASE lv_action.
         INTO lv_sb_pend.
 
       " --- HISTORY REJECT ---
-      CLEAR lt_rj_uniq.
-      SELECT banfn FROM zroto_rej_hist
-        INTO CORRESPONDING FIELDS OF TABLE lt_rj_uniq
-        WHERE werks = ls_cat_def-werks
-          AND bsart IN lt_bsart_rng.
-      lv_cnt   = lines( lt_rj_uniq ).
+      lv_cnt   = ls_acc-rej.
       lv_cnt_s = lv_cnt.
       CONDENSE lv_cnt_s NO-GAPS.
       CONCATENATE lv_sb_rej lv_sb_sep
@@ -353,12 +469,7 @@ CASE lv_action.
         INTO lv_sb_rej.
 
       " --- HISTORY APPROVE ---
-      CLEAR lt_ra_uniq.
-      SELECT banfn FROM zroto_app_hist
-        INTO CORRESPONDING FIELDS OF TABLE lt_ra_uniq
-        WHERE werks = ls_cat_def-werks
-          AND bsart IN lt_bsart_rng.
-      lv_cnt   = lines( lt_ra_uniq ).
+      lv_cnt   = ls_acc-app.
       lv_cnt_s = lv_cnt.
       CONDENSE lv_cnt_s NO-GAPS.
       CONCATENATE lv_sb_app lv_sb_sep
