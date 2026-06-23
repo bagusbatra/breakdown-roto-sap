@@ -153,6 +153,9 @@ DATA: lt_bsart_rng    TYPE RANGE OF eban-bsart,
       lv_bsart_part   TYPE string,
       lv_bsart_cs     TYPE string.
 
+DATA: lt_werks_rng    TYPE RANGE OF eban-werks,
+      lv_werks_line   LIKE LINE OF lt_werks_rng.
+
 *----------------------------------------------------------------------
 * IS APPROVER — permanen false (read-only mode)
 *----------------------------------------------------------------------
@@ -277,12 +280,17 @@ CASE lv_action.
           lv_s_1300_roto TYPE string,
           lv_s_1300_PRK9 TYPE string,
           lv_s_1300_PRKS TYPE string,
+          lv_s_2000_roto TYPE string,
+          lv_s_2000_PRK9 TYPE string,
+          lv_s_2000_PRKS TYPE string,
           lv_rj_1200   TYPE i,
           lv_rj_1300   TYPE i,
+          lv_rj_2000   TYPE i,
           lv_sr_1200   TYPE string,
           lv_sr_1300   TYPE string,
           lv_ra_1200   TYPE i,
           lv_ra_1300   TYPE i,
+          lv_ra_2000   TYPE i,
           lv_sa_1200   TYPE string,
           lv_sa_1300   TYPE string.
 
@@ -295,12 +303,16 @@ CASE lv_action.
     count_pending 'ROTO' '1300' lv_s_1300_roto.
     count_pending 'RSBR,PRK9' '1300' lv_s_1300_PRK9.
     count_pending 'PRKS' '1300' lv_s_1300_PRKS.
+    " Plant 2000 digabung ke Surabaya (1200)
+    count_pending 'ROTO' '2000' lv_s_2000_roto.
+    count_pending 'RSBR,PRK9' '2000' lv_s_2000_PRK9.
+    count_pending 'PRKS' '2000' lv_s_2000_PRKS.
 
-    " History Reject Surabaya
+    " History Reject Surabaya + 2000
     CLEAR lt_rj_uniq.
     SELECT banfn FROM zroto_rej_hist
       INTO CORRESPONDING FIELDS OF TABLE lt_rj_uniq
-      WHERE werks = '1200'.
+      WHERE werks IN ('1200','2000').
     lv_rj_1200 = lines( lt_rj_uniq ).
     lv_sr_1200 = lv_rj_1200.
     CONDENSE lv_sr_1200 NO-GAPS.
@@ -314,11 +326,11 @@ CASE lv_action.
     lv_sr_1300 = lv_rj_1300.
     CONDENSE lv_sr_1300 NO-GAPS.
 
-    " History Approve Surabaya
+    " History Approve Surabaya + 2000
     CLEAR lt_ra_uniq.
     SELECT banfn FROM zroto_app_hist
       INTO CORRESPONDING FIELDS OF TABLE lt_ra_uniq
-      WHERE werks = '1200'.
+      WHERE werks IN ('1200','2000').
     lv_ra_1200 = lines( lt_ra_uniq ).
     lv_sa_1200 = lv_ra_1200.
     CONDENSE lv_sa_1200 NO-GAPS.
@@ -338,9 +350,26 @@ CASE lv_action.
       lv_is_app_s = 'false'.
     ENDIF.
 
+    " Gabung plant 2000 ke Surabaya (1200)
+    DATA: lv_tmp_i TYPE i.
+    lv_tmp_i = lv_s_1200_roto.
+    lv_tmp_i = lv_tmp_i + lv_s_2000_roto.
+    lv_s_1200_roto = lv_tmp_i.
+    CONDENSE lv_s_1200_roto NO-GAPS.
+    lv_tmp_i = lv_s_1200_PRK9.
+    lv_tmp_i = lv_tmp_i + lv_s_2000_PRK9.
+    lv_s_1200_PRK9 = lv_tmp_i.
+    CONDENSE lv_s_1200_PRK9 NO-GAPS.
+    lv_tmp_i = lv_s_1200_PRKS.
+    lv_tmp_i = lv_tmp_i + lv_s_2000_PRKS.
+    lv_s_1200_PRKS = lv_tmp_i.
+    CONDENSE lv_s_1200_PRKS NO-GAPS.
+
     " Sembunyikan data plant yang tidak diizinkan utk user ini
     " (KMI-U052 = Surabaya only, KMI-U051 = Semarang only)
-    IF lv_uname_uc = 'KMI-U052'.
+    " (KMI-U151 = Surabaya only)
+    IF lv_uname_uc = 'KMI-U052'
+    OR lv_uname_uc = 'KMI-U151'.
       lv_s_1300_roto = '0'.
       lv_s_1300_PRK9 = '0'.
       lv_s_1300_PRKS = '0'.
@@ -418,12 +447,23 @@ CASE lv_action.
 
     CLEAR: lt_head, lt_items, lt_makt.
 
+    " Saat pilih Surabaya (1200), tampilkan juga data dari plant 2000
+    CLEAR lt_werks_rng.
+    lv_werks_line-sign = 'I'.
+    lv_werks_line-option = 'EQ'.
+    lv_werks_line-low = lv_werks.
+    APPEND lv_werks_line TO lt_werks_rng.
+    IF lv_werks = '1200'.
+      lv_werks_line-low = '2000'.
+      APPEND lv_werks_line TO lt_werks_rng.
+    ENDIF.
+
     SELECT banfn badat werks bsart txz01 ernam ekgrp
            frgkz frgzu loekz estkz statu
       FROM eban
       INTO CORRESPONDING FIELDS OF TABLE lt_head
       WHERE bsart IN lt_bsart_rng
-        AND werks  = lv_werks
+        AND werks  IN lt_werks_rng
         AND frgkz  = 'X'
         AND frgzu  = ' '
         AND loekz  = ' '
@@ -755,13 +795,24 @@ CASE lv_action.
       EXIT.
     ENDIF.
 
+    " Saat pilih Surabaya (1200), tampilkan juga data dari plant 2000
+    CLEAR lt_werks_rng.
+    lv_werks_line-sign = 'I'.
+    lv_werks_line-option = 'EQ'.
+    lv_werks_line-low = lv_werks.
+    APPEND lv_werks_line TO lt_werks_rng.
+    IF lv_werks = '1200'.
+      lv_werks_line-low = '2000'.
+      APPEND lv_werks_line TO lt_werks_rng.
+    ENDIF.
+
     CLEAR lt_hist_rej.
     SELECT banfn bnfpo werks bsart txz01 ernam erdat
            menge meins preis peinh waers ekgrp
            del_by del_at del_tm reason
       FROM zroto_rej_hist
       INTO CORRESPONDING FIELDS OF TABLE lt_hist_rej
-      WHERE werks = lv_werks
+      WHERE werks IN lt_werks_rng
       ORDER BY del_at DESCENDING del_tm DESCENDING.
 
     IF lt_hist_rej IS INITIAL.
@@ -855,13 +906,24 @@ CASE lv_action.
       EXIT.
     ENDIF.
 
+    " Saat pilih Surabaya (1200), tampilkan juga data dari plant 2000
+    CLEAR lt_werks_rng.
+    lv_werks_line-sign = 'I'.
+    lv_werks_line-option = 'EQ'.
+    lv_werks_line-low = lv_werks.
+    APPEND lv_werks_line TO lt_werks_rng.
+    IF lv_werks = '1200'.
+      lv_werks_line-low = '2000'.
+      APPEND lv_werks_line TO lt_werks_rng.
+    ENDIF.
+
     CLEAR lt_hist_app.
     SELECT banfn bnfpo werks bsart txz01 ernam erdat
            menge meins preis peinh waers ekgrp
            app_by app_at app_tm
       FROM zroto_app_hist
       INTO CORRESPONDING FIELDS OF TABLE lt_hist_app
-      WHERE werks = lv_werks
+      WHERE werks IN lt_werks_rng
       ORDER BY app_at DESCENDING app_tm DESCENDING.
 
     IF lt_hist_app IS INITIAL.
