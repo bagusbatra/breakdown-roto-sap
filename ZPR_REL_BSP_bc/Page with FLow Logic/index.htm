@@ -859,53 +859,19 @@ var CATEGORY_DEF = {
      icon:'&#128300;'},
     {code:'SVC',label:'PR Service',bsart:'PRKS',
      icon:'&#128736;'}
-  ],
-  '1000':[
-    {code:'MTN',label:'PR Maintenance',bsart:'ROTO',
-     icon:'&#128203;'},
-    {code:'RND',label:'PR RND',bsart:'RSBR,PRK9',
-     icon:'&#128300;'},
-    {code:'SVC',label:'PR Service',bsart:'PRKS',
-     icon:'&#128736;'}
-  ],
-  '1001':[
-    {code:'MTN',label:'PR Maintenance',bsart:'ROTO',
-     icon:'&#128203;'},
-    {code:'RND',label:'PR RND',bsart:'RSBR,PRK9',
-     icon:'&#128300;'},
-    {code:'SVC',label:'PR Service',bsart:'PRKS',
-     icon:'&#128736;'}
-  ],
-  '1100':[
-    {code:'MTN',label:'PR Maintenance',bsart:'ROTO',
-     icon:'&#128203;'},
-    {code:'RND',label:'PR RND',bsart:'RSBR,PRK9',
-     icon:'&#128300;'},
-    {code:'SVC',label:'PR Service',bsart:'PRKS',
-     icon:'&#128736;'}
-  ],
-  '3000':[
-    {code:'MTN',label:'PR Maintenance',bsart:'ROTO',
-     icon:'&#128203;'},
-    {code:'SVC',label:'PR Service',bsart:'PRKS',
-     icon:'&#128736;'}
   ]
 };
 
 var sbCounts = {
-  pending:  { '1200':{}, '1300':{}, '2000':{}, '1000':{}, '1001':{}, '1100':{}, '3000':{} },
-  hist_app: { '1200':{}, '1300':{}, '2000':{}, '1000':{}, '1001':{}, '1100':{}, '3000':{} },
-  hist_rej: { '1200':{}, '1300':{}, '2000':{}, '1000':{}, '1001':{}, '1100':{}, '3000':{} }
+  pending:  { '1200':{}, '1300':{}, '2000':{} },
+  hist_app: { '1200':{}, '1300':{}, '2000':{} },
+  hist_rej: { '1200':{}, '1300':{}, '2000':{} }
 };
 
 var PLANT_LABELS = {
   '1200':'Surabaya',
   '1300':'Semarang',
-  '2000':'Surabaya',
-  '1000':'Surabaya',
-  '1001':'Surabaya',
-  '1100':'Surabaya',
-  '3000':'Semarang'
+  '2000':'Surabaya'
 };
 
 var ESTKZ_MAP = {
@@ -989,29 +955,18 @@ function getCategoryDef(werks,category) {
 }
 
 function getEffectiveWerks(werks) {
-  if (werks === '1200') return '1200,2000,1000,1001,1100';
-  if (werks === '1300') return '1300,3000';
+  if (werks === '1200') return '1200,2000';
   return werks;
 }
 
 function getSidebarWerks(werks) {
-  if (werks === '1200') return ['1200','2000','1000','1001','1100'];
-  if (werks === '1300') return ['1300','3000'];
+  if (werks === '1200') return ['1200','2000'];
   return [werks];
 }
 
 function getPlantLabel(werks) {
   var primary = (werks||'').split(',')[0];
   return PLANT_LABELS[primary]||primary;
-}
-
-function getCategoryLabelByBsart(werks,bsart) {
-  var list=CATEGORY_DEF[werks]||[];
-  for (var i=0;i<list.length;i++){
-    if (list[i].bsart.split(',').indexOf(bsart)>-1)
-      return list[i].label;
-  }
-  return bsart||'-';
 }
 
 function getPlantTotalPending(werks) {
@@ -1142,7 +1097,7 @@ function loadSidebarData() {
     .then(function(res){
       if (res.status==='S'){
         isApprover=(res.is_approver===true);
-        ['1200','1300','2000','1000','1001','1100','3000'].forEach(function(w){
+        ['1200','1300','2000'].forEach(function(w){
           sbCounts.pending[w] =
             normalizeCatCounts(res.pending,w);
           sbCounts.hist_app[w] =
@@ -1305,9 +1260,6 @@ function switchView(plant,category,mode) {
   searchKw       = '';
   allExpanded    = false;
   curEstkzFilter = '';
-  histCurPage    = 1;
-  histSearchKw   = '';
-  histAllExpanded= false;
 
   document.getElementById('fab').className='fab';
   renderSidebar();
@@ -1661,34 +1613,12 @@ function renderHistTable(data,type) {
 }
 
 /* ================================================================
-   BUILD HISTORY CARDS — dikelompokkan per No PR, expand/collapse
-   per card (konsep sama dengan po-card di list pending), karena
-   satu PR history bisa punya banyak item.
+   BUILD HISTORY TABLE
    ================================================================ */
-function groupHistByBanfn(rows) {
-  var map={}, order=[];
-  rows.forEach(function(h){
-    if (!map[h.banfn]){
-      map[h.banfn]={
-        banfn:h.banfn, werks:h.werks, bsart:h.bsart,
-        ernam:h.ernam, erdat:h.erdat, waers:h.waers, ekgrp:h.ekgrp,
-        app_by:h.app_by, app_at:h.app_at, app_tm:h.app_tm,
-        del_by:h.del_by, del_at:h.del_at, del_tm:h.del_tm,
-        reason:h.reason,
-        items:[], totalAmt:0
-      };
-      order.push(h.banfn);
-    }
-    map[h.banfn].items.push(h);
-    map[h.banfn].totalAmt += parseNum(h.total)||0;
-  });
-  return order.map(function(b){ return map[b]; });
-}
-
-function buildHistCards(groups,type) {
+function buildHistTable(data,type) {
   var isApp=(type==='approve');
 
-  if (groups.length===0){
+  if (data.length===0){
     return '<div class="empty"'+
            ' style="padding:40px 20px;">'+
            '<div class="empty-ico">'+
@@ -1699,154 +1629,121 @@ function buildHistCards(groups,type) {
            '</div></div>';
   }
 
-  var byColor=isApp
-    ?'color:var(--success);'
-    :'color:var(--danger);';
+  var html=
+    '<div class="hist-table-wrap">'+
+    '<table class="hist-table">'+
+    '<thead><tr>'+
+    '<th>No PR</th>'+
+    '<th>Item</th>'+
+    '<th>Deskripsi</th>'+
+    '<th>Dibuat Oleh</th>'+
+    '<th>Tgl PR</th>'+
+    '<th class="num">Qty</th>'+
+    '<th>UoM</th>'+
+    '<th class="num">Harga</th>'+
+    '<th class="num">Total</th>'+
+    '<th>Curr</th>'+
+    '<th>PGrp</th>'+
+    (isApp
+      ?'<th>Diapprove Oleh</th>'+
+       '<th>Tgl Approve</th>'+
+       '<th>Jam</th>'
+      :'<th>Direject Oleh</th>'+
+       '<th>Tgl Reject</th>'+
+       '<th>Jam</th>'+
+       '<th>Alasan</th>')+
+    '</tr></thead><tbody>';
 
-  var html='';
-  groups.forEach(function(g){
-    var waers =g.waers||'IDR';
-    var amt   =fmtAmt(g.totalAmt,waers);
-    var itCnt =g.items.length;
+  data.forEach(function(h){
+    var w=h.waers||'IDR';
+    var cs=w==='IDR'
+      ?'background:#f1f5f9;color:#475569;'
+      :w==='USD'
+        ?'background:#dbeafe;color:#1d4ed8;'
+        :'background:#fef9c3;color:#854d0e;';
 
-    html+='<div class="po-card'+
-          (histAllExpanded?' expanded':'')+
-          '" id="histCard_'+g.banfn+'"'+
-          ' onclick="toggleHistExpand(\''+
-          g.banfn+'\')">';
+    var byColor=isApp
+      ?'color:var(--success);'
+      :'color:var(--danger);';
 
-    html+='<div class="card-top">';
-    html+='<span class="card-num">'+
-          escHtml(g.banfn)+'</span>';
-    html+='<span class="badge"'+
-          ' style="background:'+
-          (isApp?'#d1fae5;color:var(--success)'
-                :'#fee2e2;color:var(--danger)')+
-          ';">'+
-          (isApp?'&#10003; Approved':'&#10007; Rejected')+
-          '</span>';
-    html+='<span class="badge b-plant">'+
-          escHtml(g.werks)+' '+
-          escHtml(PLANT_LABELS[g.werks]||'')+
-          '</span>';
-    html+='<span class="badge b-mrp">'+
-          escHtml(getCategoryLabelByBsart(g.werks,g.bsart))+
-          '</span>';
-    if (itCnt>0)
-      html+='<span class="badge b-items">'+
-            itCnt+' item</span>';
+    html+='<tr>';
+    html+='<td style="font-family:\'DM Mono\','+
+          'monospace;font-weight:600;'+
+          'color:var(--primary);">'+
+          escHtml(h.banfn)+'</td>';
+    html+='<td style="font-family:\'DM Mono\','+
+          'monospace;font-size:12px;">'+
+          escHtml(h.bnfpo)+'</td>';
+    html+='<td style="font-weight:500;'+
+          'max-width:180px;">'+
+          escHtml(h.txz01||'-')+'</td>';
+    html+='<td>'+escHtml(h.ernam||'-')+'</td>';
+    html+='<td style="color:var(--muted);'+
+          'white-space:nowrap;">'+
+          escHtml(h.erdat||'-')+'</td>';
+    html+='<td class="num">'+
+          fmtQty(h.menge)+'</td>';
+    html+='<td><span style="background:#f1f5f9;'+
+          'padding:2px 6px;border-radius:4px;'+
+          'font-size:11px;">'+
+          escHtml(h.meins||'-')+'</span></td>';
+    html+='<td class="num">'+
+          fmtAmt(h.preis,w)+'</td>';
+    html+='<td class="num"'+
+          ' style="font-weight:700;">'+
+          fmtAmt(h.total,w)+'</td>';
+    html+='<td><span style="padding:2px 6px;'+
+          'border-radius:4px;font-size:11px;'+
+          'font-weight:600;'+cs+'">'+
+          escHtml(w)+'</span></td>';
+    html+='<td><span style="background:#f1f5f9;'+
+          'padding:2px 6px;border-radius:4px;'+
+          'font-size:11px;">'+
+          escHtml(h.ekgrp||'-')+'</span></td>';
 
-    html+='<div class="card-amount">'+amt;
-    html+='<span class="card-amount-lbl">'+
-          waers+' Total</span></div>';
-    html+='</div>'; /* card-top */
-
-    html+='<div class="card-meta">';
-    html+='<div><div class="meta-lbl">'+
-          'Dibuat Oleh</div>'+
-          '<div class="meta-val">'+
-          escHtml(g.ernam||'-')+'</div></div>';
-    html+='<div><div class="meta-lbl">'+
-          'Tgl PR</div>'+
-          '<div class="meta-val">'+
-          escHtml(g.erdat||'-')+'</div></div>';
     if (isApp){
-      html+='<div><div class="meta-lbl">'+
-            'Diapprove Oleh</div>'+
-            '<div class="meta-val" style="'+byColor+'">'+
-            escHtml(g.app_by||'-')+'</div></div>';
-      html+='<div><div class="meta-lbl">'+
-            'Tgl Approve</div>'+
-            '<div class="meta-val">'+
-            escHtml(g.app_at||'-')+
-            (g.app_tm?' '+escHtml(g.app_tm):'')+
-            '</div></div>';
+      html+='<td style="font-weight:600;'+
+            byColor+'">'+
+            escHtml(h.app_by||'-')+'</td>';
+      html+='<td style="color:var(--muted);'+
+            'white-space:nowrap;">'+
+            escHtml(h.app_at||'-')+'</td>';
+      html+='<td style="color:var(--muted);'+
+            'font-size:12px;">'+
+            escHtml(h.app_tm||'-')+'</td>';
     } else {
-      html+='<div><div class="meta-lbl">'+
-            'Direject Oleh</div>'+
-            '<div class="meta-val" style="'+byColor+'">'+
-            escHtml(g.del_by||'-')+'</div></div>';
-      html+='<div><div class="meta-lbl">'+
-            'Tgl Reject</div>'+
-            '<div class="meta-val">'+
-            escHtml(g.del_at||'-')+
-            (g.del_tm?' '+escHtml(g.del_tm):'')+
-            '</div></div>';
+      html+='<td style="font-weight:600;'+
+            byColor+'">'+
+            escHtml(h.del_by||'-')+'</td>';
+      html+='<td style="color:var(--muted);'+
+            'white-space:nowrap;">'+
+            escHtml(h.del_at||'-')+'</td>';
+      html+='<td style="color:var(--muted);'+
+            'font-size:12px;">'+
+            escHtml(h.del_tm||'-')+'</td>';
+      html+='<td style="font-size:12px;'+
+            'max-width:180px;">'+
+            escHtml(h.reason||'-')+'</td>';
     }
-    html+='</div>'; /* card-meta */
-
-    if (!isApp&&g.reason)
-      html+='<div style="padding:0 18px 14px 46px;'+
-            'font-size:12px;color:var(--muted);">'+
-            '<b>Alasan:</b> '+escHtml(g.reason)+
-            '</div>';
-
-    html+='<div class="card-detail"'+
-          ' onclick="event.stopPropagation()">';
-    html+='<div style="overflow-x:auto;">'+
-          '<table><thead><tr>'+
-          '<th>Item</th><th>Deskripsi</th>'+
-          '<th class="num">Qty</th><th>UoM</th>'+
-          '<th class="num">Harga</th>'+
-          '<th class="num">Total</th>'+
-          '<th>Curr</th><th>PGrp</th>'+
-          '</tr></thead><tbody>';
-    g.items.forEach(function(h){
-      var w=h.waers||waers;
-      html+='<tr>';
-      html+='<td style="font-family:\'DM Mono\','+
-            'monospace;font-size:12px;">'+
-            escHtml(h.bnfpo)+'</td>';
-      html+='<td>'+escHtml(h.txz01||'-')+'</td>';
-      html+='<td class="num">'+
-            fmtQty(h.menge)+'</td>';
-      html+='<td>'+escHtml(h.meins||'-')+'</td>';
-      html+='<td class="num">'+
-            fmtAmt(h.preis,w)+'</td>';
-      html+='<td class="num">'+
-            fmtAmt(h.total,w)+'</td>';
-      html+='<td>'+escHtml(w)+'</td>';
-      html+='<td>'+escHtml(h.ekgrp||'-')+'</td>';
-      html+='</tr>';
-    });
-    html+='</tbody></table></div>';
-    html+='</div>'; /* card-detail */
-
-    html+='</div>'; /* po-card */
+    html+='</tr>';
   });
 
+  html+='</tbody></table></div>';
   return html;
 }
 
-/* search, pagination & expand di history */
+/* search & pagination di history */
+var histSearchTimer=null;
 var histPageSize=10;
 var histCurPage=1;
 var histSearchKw='';
-var histAllExpanded=false;
 
-function onHistSearchTrigger(val) {
-  histSearchKw=val.trim(); histCurPage=1;
-  renderHistContent();
-}
-
-/* Sama konsepnya dengan getFiltered() di list pending: cari di
-   semua field yang relevan/terlihat di tabel, termasuk Plant dan
-   Kategori yang sekarang ditampilkan sebagai kolom. */
-function getFilteredHist() {
-  if (!histSearchKw) return histData;
-  var kw=histSearchKw.toLowerCase();
-  return histData.filter(function(h){
-    return h.banfn.toLowerCase().indexOf(kw)>-1||
-      (h.txz01&&h.txz01.toLowerCase().indexOf(kw)>-1)||
-      (h.ernam&&h.ernam.toLowerCase().indexOf(kw)>-1)||
-      (h.ekgrp&&h.ekgrp.toLowerCase().indexOf(kw)>-1)||
-      ((h.app_by||h.del_by)&&
-       (h.app_by||h.del_by).toLowerCase().indexOf(kw)>-1)||
-      ((PLANT_LABELS[h.werks]||'')
-        .toLowerCase().indexOf(kw)>-1)||
-      (getCategoryLabelByBsart(h.werks,h.bsart)
-        .toLowerCase().indexOf(kw)>-1);
-  });
+function onHistSearch(val) {
+  clearTimeout(histSearchTimer);
+  histSearchTimer=setTimeout(function(){
+    histSearchKw=val; histCurPage=1;
+    renderHistContent();
+  },300);
 }
 
 function renderHistContent() {
@@ -1860,10 +1757,18 @@ function renderHistContent() {
   var catDef=getCategoryDef(primaryPlant,curCategory);
   var catLbl=catDef?catDef.label:(curCategory==='ALL'?'All PR':'PR');
 
-  var filtered=getFilteredHist();
-  var groups  =groupHistByBanfn(filtered);
+  var kw=histSearchKw.trim().toLowerCase();
+  var filtered=kw
+    ?histData.filter(function(h){
+        return h.banfn.toLowerCase().indexOf(kw)>-1||
+          (h.txz01&&h.txz01.toLowerCase().indexOf(kw)>-1)||
+          (h.ernam&&h.ernam.toLowerCase().indexOf(kw)>-1)||
+          ((h.app_by||h.del_by)&&
+           (h.app_by||h.del_by).toLowerCase().indexOf(kw)>-1);
+      })
+    :histData;
 
-  var total=groups.length;
+  var total=filtered.length;
   var totalPages=histPageSize===0
     ?1:Math.ceil(total/histPageSize)||1;
   if (histCurPage>totalPages) histCurPage=1;
@@ -1871,7 +1776,7 @@ function renderHistContent() {
     ?0:(histCurPage-1)*histPageSize;
   var end=histPageSize===0
     ?total:Math.min(start+histPageSize,total);
-  var pageGroups=groups.slice(start,end);
+  var pageData=filtered.slice(start,end);
 
   var html='';
   html+='<div class="sticky-top">'+
@@ -1881,23 +1786,21 @@ function renderHistContent() {
         title+getPlantLabel(curPlant)+
         ' &middot; '+catLbl+'</div>'+
         '<div class="pg-sub">'+
-        total+' PR '+
+        total+' record '+
         (isApp?'approved':'rejected')+
         '</div></div></div>';
 
   html+='<div style="margin-bottom:14px;'+
         ' display:flex;align-items:center;'+
-        ' gap:10px;flex-wrap:wrap;">'+
+        ' gap:10px;">'+
         '<div class="search-wrap"'+
         ' style="max-width:340px;">'+
         '<span>&#128269;</span>'+
         '<input type="text"'+
         ' id="histSearchInp"'+
-        ' placeholder="Cari No PR, Pembuat, Plant..."'+
+        ' placeholder="Cari No PR, Item..."'+
         ' value="'+escHtml(histSearchKw)+'"'+
-        ' onkeydown="if(event.key===\'Enter\')'+
-        'onHistSearchTrigger(this.value)"'+
-        ' onblur="onHistSearchTrigger(this.value)">'+
+        ' oninput="onHistSearch(this.value)">'+
         '</div>'+
         '<select class="page-size-select"'+
         ' onchange="histChangePageSize('+
@@ -1908,18 +1811,10 @@ function renderHistContent() {
           (s===0?'All':s+' per page')+
           '</option>';
   });
-  html+='</select>';
-
-  html+='<div class="expand-bar">'+
-        '<button class="btn-exp"'+
-        ' id="histBtnToggleExpand"'+
-        ' onclick="toggleHistExpandAll()">'+
-        (histAllExpanded?'&#9650; Collapse':'&#9660; Expand')+
-        '</button></div>';
-  html+='</div>';
+  html+='</select></div>';
 
   html+='<div id="histTableWrap">';
-  html+=buildHistCards(pageGroups,histType);
+  html+=buildHistTable(pageData,histType);
   html+='</div>';
 
   if (histPageSize!==0&&totalPages>1){
@@ -1983,7 +1878,7 @@ function renderHistPagination(total,totalPages,start,end,curPg) {
 }
 
 function histGoPage(pg) {
-  var total=groupHistByBanfn(getFilteredHist()).length;
+  var total=histData.length;
   var tp=histPageSize===0
     ?1:Math.ceil(total/histPageSize)||1;
   if (pg<1) pg=1;
@@ -1995,36 +1890,6 @@ function histGoPage(pg) {
 function histChangePageSize(val) {
   histPageSize=val; histCurPage=1;
   renderHistContent();
-}
-
-/* ================================================================
-   HISTORY EXPAND / COLLAPSE — per card & toggle semua (konsep
-   sama dengan expandAll/collapseAll di list pending)
-   ================================================================ */
-function toggleHistExpand(banfn) {
-  var card=document.getElementById('histCard_'+banfn);
-  if (!card) return;
-  card.classList.toggle('expanded');
-}
-
-function histExpandAll() {
-  histAllExpanded=true;
-  document.querySelectorAll('#histTableWrap .po-card')
-    .forEach(function(c){ c.classList.add('expanded'); });
-}
-
-function histCollapseAll() {
-  histAllExpanded=false;
-  document.querySelectorAll('#histTableWrap .po-card')
-    .forEach(function(c){ c.classList.remove('expanded'); });
-}
-
-function toggleHistExpandAll() {
-  if (histAllExpanded) { histCollapseAll(); }
-  else { histExpandAll(); }
-  var btn=document.getElementById('histBtnToggleExpand');
-  if (btn) btn.innerHTML=
-    histAllExpanded?'&#9650; Collapse':'&#9660; Expand';
 }
 
 /* ================================================================

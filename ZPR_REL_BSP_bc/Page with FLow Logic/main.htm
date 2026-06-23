@@ -231,9 +231,12 @@ CASE lv_action.
 * Sidebar sekarang menghitung jumlah PR per PLANT x KATEGORI.
 * Daftar kategori per plant di-define inline di bawah (bsart list-nya
 * harus selalu sinkron dengan CATEGORY_MAP di index.htm).
-*   Surabaya (1200,2000,1000,1001,1100) : MTN=ROTO | RND=RSBR,PRK9 | SVC=PRKS
-*   Semarang (1300,3000)                : MTN=ROTO | SVC=PRKS
+*   1200 (Surabaya) : MTN=ROTO | RND=RSBR,PRK9 | SVC=PRKS
+*   1300 (Semarang)  : MTN=ROTO | SVC=PRKS
     DATA: lv_is_app_s   TYPE string.
+    DATA: lt_sb_uniq    TYPE STANDARD TABLE OF eban,
+          lt_rj_uniq    TYPE STANDARD TABLE OF zroto_rej_hist,
+          lt_ra_uniq    TYPE STANDARD TABLE OF zroto_app_hist.
     DATA: lv_cnt        TYPE i,
           lv_cnt_s      TYPE string.
 
@@ -261,28 +264,6 @@ CASE lv_action.
     ls_cat_def-bsart_cs = 'RSBR,PRK9'. APPEND ls_cat_def TO lt_cat_def.
     ls_cat_def-werks = '2000'. ls_cat_def-category = 'SVC'.
     ls_cat_def-bsart_cs = 'PRKS'. APPEND ls_cat_def TO lt_cat_def.
-    ls_cat_def-werks = '1000'. ls_cat_def-category = 'MTN'.
-    ls_cat_def-bsart_cs = 'ROTO'. APPEND ls_cat_def TO lt_cat_def.
-    ls_cat_def-werks = '1000'. ls_cat_def-category = 'RND'.
-    ls_cat_def-bsart_cs = 'RSBR,PRK9'. APPEND ls_cat_def TO lt_cat_def.
-    ls_cat_def-werks = '1000'. ls_cat_def-category = 'SVC'.
-    ls_cat_def-bsart_cs = 'PRKS'. APPEND ls_cat_def TO lt_cat_def.
-    ls_cat_def-werks = '1001'. ls_cat_def-category = 'MTN'.
-    ls_cat_def-bsart_cs = 'ROTO'. APPEND ls_cat_def TO lt_cat_def.
-    ls_cat_def-werks = '1001'. ls_cat_def-category = 'RND'.
-    ls_cat_def-bsart_cs = 'RSBR,PRK9'. APPEND ls_cat_def TO lt_cat_def.
-    ls_cat_def-werks = '1001'. ls_cat_def-category = 'SVC'.
-    ls_cat_def-bsart_cs = 'PRKS'. APPEND ls_cat_def TO lt_cat_def.
-    ls_cat_def-werks = '1100'. ls_cat_def-category = 'MTN'.
-    ls_cat_def-bsart_cs = 'ROTO'. APPEND ls_cat_def TO lt_cat_def.
-    ls_cat_def-werks = '1100'. ls_cat_def-category = 'RND'.
-    ls_cat_def-bsart_cs = 'RSBR,PRK9'. APPEND ls_cat_def TO lt_cat_def.
-    ls_cat_def-werks = '1100'. ls_cat_def-category = 'SVC'.
-    ls_cat_def-bsart_cs = 'PRKS'. APPEND ls_cat_def TO lt_cat_def.
-    ls_cat_def-werks = '3000'. ls_cat_def-category = 'MTN'.
-    ls_cat_def-bsart_cs = 'ROTO'. APPEND ls_cat_def TO lt_cat_def.
-    ls_cat_def-werks = '3000'. ls_cat_def-category = 'SVC'.
-    ls_cat_def-bsart_cs = 'PRKS'. APPEND ls_cat_def TO lt_cat_def.
 
     DATA: lv_sb_pend TYPE string,
           lv_sb_app  TYPE string,
@@ -292,140 +273,6 @@ CASE lv_action.
           lv_first_w TYPE abap_bool VALUE abap_true.
 
     CLEAR: lv_sb_pend, lv_sb_app, lv_sb_rej.
-
-*----------------------------------------------------------------------
-* Hitung semua count lewat 3 query GROUP BY (bukan 1 query per
-* kombinasi plant x kategori x pending/app/rej). Supaya jumlah query
-* tidak ikut membengkak setiap kali ada plant baru ditambahkan.
-*----------------------------------------------------------------------
-    DATA: BEGIN OF ls_grp,
-            werks TYPE eban-werks,
-            bsart TYPE eban-bsart,
-            cnt   TYPE i,
-          END OF ls_grp.
-    DATA: lt_pd_grp LIKE STANDARD TABLE OF ls_grp,
-          lt_rj_grp LIKE STANDARD TABLE OF ls_grp,
-          lt_ap_grp LIKE STANDARD TABLE OF ls_grp.
-
-    DATA: BEGIN OF ls_acc,
-            werks    TYPE eban-werks,
-            category TYPE string,
-            pend     TYPE i,
-            rej      TYPE i,
-            app      TYPE i,
-          END OF ls_acc.
-    DATA: lt_acc LIKE STANDARD TABLE OF ls_acc.
-
-    DATA: lt_werks_rng_sb TYPE RANGE OF eban-werks,
-          ls_werks_rng_sb LIKE LINE OF lt_werks_rng_sb.
-
-    " bsart -> kategori, diturunkan otomatis dari lt_cat_def (BUKAN
-    " hardcode terpisah), supaya kalau bsart_cs di lt_cat_def diubah
-    " nanti, pemetaan ini ikut sinkron tanpa perlu diubah dua tempat.
-    DATA: BEGIN OF ls_b2c,
-            bsart    TYPE eban-bsart,
-            category TYPE string,
-          END OF ls_b2c.
-    DATA: lt_b2c LIKE STANDARD TABLE OF ls_b2c.
-
-    " Skeleton lt_acc dari lt_cat_def (semua kombinasi werks x
-    " kategori yang valid, count default 0), dan kumpulkan plant
-    " unik untuk dipakai sebagai filter WHERE di 3 query di bawah.
-    CLEAR: lt_acc, lt_werks_rng_sb, lt_b2c.
-    LOOP AT lt_cat_def INTO ls_cat_def.
-      CLEAR ls_acc.
-      ls_acc-werks    = ls_cat_def-werks.
-      ls_acc-category = ls_cat_def-category.
-      APPEND ls_acc TO lt_acc.
-
-      READ TABLE lt_werks_rng_sb WITH KEY low = ls_cat_def-werks
-        TRANSPORTING NO FIELDS.
-      IF sy-subrc NE 0.
-        CLEAR ls_werks_rng_sb.
-        ls_werks_rng_sb-sign   = 'I'.
-        ls_werks_rng_sb-option = 'EQ'.
-        ls_werks_rng_sb-low    = ls_cat_def-werks.
-        APPEND ls_werks_rng_sb TO lt_werks_rng_sb.
-      ENDIF.
-
-      CLEAR lt_bsart_split.
-      SPLIT ls_cat_def-bsart_cs AT ',' INTO TABLE lt_bsart_split.
-      LOOP AT lt_bsart_split INTO lv_bsart_part.
-        CONDENSE lv_bsart_part.
-        TRANSLATE lv_bsart_part TO UPPER CASE.
-        IF lv_bsart_part IS NOT INITIAL.
-          READ TABLE lt_b2c WITH KEY bsart = lv_bsart_part
-            TRANSPORTING NO FIELDS.
-          IF sy-subrc NE 0.
-            CLEAR ls_b2c.
-            ls_b2c-bsart    = lv_bsart_part.
-            ls_b2c-category = ls_cat_def-category.
-            APPEND ls_b2c TO lt_b2c.
-          ENDIF.
-        ENDIF.
-      ENDLOOP.
-    ENDLOOP.
-
-    SELECT werks bsart COUNT( DISTINCT banfn ) AS cnt
-      FROM eban
-      INTO TABLE lt_pd_grp
-      WHERE werks IN lt_werks_rng_sb
-        AND frgkz = 'X'
-        AND frgzu = ' '
-        AND loekz = ' '
-      GROUP BY werks bsart.
-
-    SELECT werks bsart COUNT(*) AS cnt
-      FROM zroto_rej_hist
-      INTO TABLE lt_rj_grp
-      WHERE werks IN lt_werks_rng_sb
-      GROUP BY werks bsart.
-
-    SELECT werks bsart COUNT(*) AS cnt
-      FROM zroto_app_hist
-      INTO TABLE lt_ap_grp
-      WHERE werks IN lt_werks_rng_sb
-      GROUP BY werks bsart.
-
-    " Map bsart -> kategori (global, sama untuk semua plant) lalu
-    " jumlahkan ke lt_acc. RND = RSBR + PRK9, tapi satu PR (banfn)
-    " hanya pernah punya satu bsart, jadi menjumlahkan count per
-    " bsart terpisah setara dengan COUNT(DISTINCT banfn) gabungan.
-    LOOP AT lt_pd_grp INTO ls_grp.
-      READ TABLE lt_b2c WITH KEY bsart = ls_grp-bsart INTO ls_b2c.
-      IF sy-subrc = 0.
-        READ TABLE lt_acc WITH KEY werks = ls_grp-werks
-          category = ls_b2c-category INTO ls_acc.
-        IF sy-subrc = 0.
-          ls_acc-pend = ls_acc-pend + ls_grp-cnt.
-          MODIFY lt_acc FROM ls_acc INDEX sy-tabix.
-        ENDIF.
-      ENDIF.
-    ENDLOOP.
-
-    LOOP AT lt_rj_grp INTO ls_grp.
-      READ TABLE lt_b2c WITH KEY bsart = ls_grp-bsart INTO ls_b2c.
-      IF sy-subrc = 0.
-        READ TABLE lt_acc WITH KEY werks = ls_grp-werks
-          category = ls_b2c-category INTO ls_acc.
-        IF sy-subrc = 0.
-          ls_acc-rej = ls_acc-rej + ls_grp-cnt.
-          MODIFY lt_acc FROM ls_acc INDEX sy-tabix.
-        ENDIF.
-      ENDIF.
-    ENDLOOP.
-
-    LOOP AT lt_ap_grp INTO ls_grp.
-      READ TABLE lt_b2c WITH KEY bsart = ls_grp-bsart INTO ls_b2c.
-      IF sy-subrc = 0.
-        READ TABLE lt_acc WITH KEY werks = ls_grp-werks
-          category = ls_b2c-category INTO ls_acc.
-        IF sy-subrc = 0.
-          ls_acc-app = ls_acc-app + ls_grp-cnt.
-          MODIFY lt_acc FROM ls_acc INDEX sy-tabix.
-        ENDIF.
-      ENDIF.
-    ENDLOOP.
 
     SORT lt_cat_def BY werks category.
 
@@ -449,11 +296,21 @@ CASE lv_action.
         lv_first_w = abap_false.
       ENDIF.
 
-      READ TABLE lt_acc WITH KEY werks = ls_cat_def-werks
-        category = ls_cat_def-category INTO ls_acc.
+      parse_bsart_range ls_cat_def-bsart_cs lt_bsart_rng.
 
       " --- PENDING ---
-      lv_cnt   = ls_acc-pend.
+      CLEAR lt_sb_uniq.
+      SELECT banfn FROM eban
+        INTO CORRESPONDING FIELDS OF TABLE lt_sb_uniq
+        WHERE bsart IN lt_bsart_rng
+          AND werks = ls_cat_def-werks
+          AND frgkz = 'X'
+          AND frgzu = ' '
+          AND loekz = ' '.
+      SORT lt_sb_uniq BY banfn.
+      DELETE ADJACENT DUPLICATES FROM lt_sb_uniq
+        COMPARING banfn.
+      lv_cnt   = lines( lt_sb_uniq ).
       lv_cnt_s = lv_cnt.
       CONDENSE lv_cnt_s NO-GAPS.
       CONCATENATE lv_sb_pend lv_sb_sep
@@ -461,7 +318,12 @@ CASE lv_action.
         INTO lv_sb_pend.
 
       " --- HISTORY REJECT ---
-      lv_cnt   = ls_acc-rej.
+      CLEAR lt_rj_uniq.
+      SELECT banfn FROM zroto_rej_hist
+        INTO CORRESPONDING FIELDS OF TABLE lt_rj_uniq
+        WHERE werks = ls_cat_def-werks
+          AND bsart IN lt_bsart_rng.
+      lv_cnt   = lines( lt_rj_uniq ).
       lv_cnt_s = lv_cnt.
       CONDENSE lv_cnt_s NO-GAPS.
       CONCATENATE lv_sb_rej lv_sb_sep
@@ -469,7 +331,12 @@ CASE lv_action.
         INTO lv_sb_rej.
 
       " --- HISTORY APPROVE ---
-      lv_cnt   = ls_acc-app.
+      CLEAR lt_ra_uniq.
+      SELECT banfn FROM zroto_app_hist
+        INTO CORRESPONDING FIELDS OF TABLE lt_ra_uniq
+        WHERE werks = ls_cat_def-werks
+          AND bsart IN lt_bsart_rng.
+      lv_cnt   = lines( lt_ra_uniq ).
       lv_cnt_s = lv_cnt.
       CONDENSE lv_cnt_s NO-GAPS.
       CONCATENATE lv_sb_app lv_sb_sep
@@ -1100,14 +967,11 @@ CASE lv_action.
 *--- APPROVE -----------------------------------------------------------
     IF lv_pr_action = 'approve'.
 
-      DATA: lv_ap_ok     TYPE i,
-            lv_ap_ok_s   TYPE string,
-            lv_ap_err    TYPE string,
-            lv_ap_err1   TYPE string,
-            lv_ap_bnfpo  TYPE string.
-      DATA: lt_items_ok TYPE STANDARD TABLE OF ty_eban_item.
+      DATA: lv_ap_ok   TYPE i,
+            lv_ap_ok_s TYPE string,
+            lv_ap_err  TYPE string.
 
-      CLEAR: lv_ap_ok, lv_ap_err, lt_items_ok.
+      CLEAR: lv_ap_ok, lv_ap_err.
 
       LOOP AT lt_items INTO ls_item.
         CLEAR: lt_return, lv_rel_status, lv_rel_ind.
@@ -1135,61 +999,43 @@ CASE lv_action.
 
         IF sy-subrc = 0.
           lv_ap_ok = lv_ap_ok + 1.
-          " Hanya item yang BENAR-BENAR sukses di-release yang
-          " akan disimpan ke ZROTO_APP_HIST (lihat blok di bawah).
-          APPEND ls_item TO lt_items_ok.
         ELSE.
           READ TABLE lt_return INTO ls_return
             WITH KEY type = 'E'.
           IF sy-subrc = 0.
-            lv_ap_err1 = ls_return-message.
+            lv_ap_err = ls_return-message.
           ELSE.
             CASE sy-subrc.
-              WHEN 1. lv_ap_err1 =
+              WHEN 1. lv_ap_err =
                 'Authority check failed'.
-              WHEN 2. lv_ap_err1 =
+              WHEN 2. lv_ap_err =
                 'PR not found'.
-              WHEN 3. lv_ap_err1 =
+              WHEN 3. lv_ap_err =
                 'Enqueue failed'.
-              WHEN 4. lv_ap_err1 =
+              WHEN 4. lv_ap_err =
                 'Prerequisite failed'.
-              WHEN 5. lv_ap_err1 =
+              WHEN 5. lv_ap_err =
                 'Already released'.
-              WHEN 6. lv_ap_err1 =
+              WHEN 6. lv_ap_err =
                 'Responsibility failed'.
-              WHEN OTHERS. lv_ap_err1 =
+              WHEN OTHERS. lv_ap_err =
                 'Unknown error'.
             ENDCASE.
-          ENDIF.
-          " Kumpulkan SEMUA pesan error per item (bukan cuma
-          " yang terakhir), supaya tidak ada kegagalan yang
-          " tertutup oleh kegagalan item lain.
-          lv_ap_bnfpo = ls_item-bnfpo.
-          CONDENSE lv_ap_bnfpo NO-GAPS.
-          IF lv_ap_err IS INITIAL.
-            CONCATENATE 'Item' lv_ap_bnfpo ':' lv_ap_err1
-              INTO lv_ap_err SEPARATED BY space.
-          ELSE.
-            CONCATENATE lv_ap_err '| Item' lv_ap_bnfpo ':'
-              lv_ap_err1 INTO lv_ap_err SEPARATED BY space.
           ENDIF.
         ENDIF.
       ENDLOOP.
 
       IF lv_ap_ok > 0.
-        " Simpan ke ZROTO_APP_HIST HANYA item yang sukses
-        " (lt_items_ok), supaya item yang gagal release TIDAK
-        " ikut tercatat sebagai approved dan tetap pending agar
-        " bisa di-approve ulang.
+        " COMMIT release
+        CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+          EXPORTING wait = 'X'.
+
+        " Simpan ke ZROTO_APP_HIST
         " bsart diambil dari ls_item-bsart (data asli PR),
         " BUKAN hardcode 'ROTO', supaya history PR RND/Service
         " tersimpan dengan doc type yang benar.
-        " MODIFY ditulis DULU (belum commit), baru BAPI_TRANSACTION_
-        " COMMIT di akhir, supaya release BAPI dan history Z-table
-        " ter-commit dalam SATU LUW yang atomik (kalau commit gagal,
-        " keduanya sama-sama tidak tersimpan, bukan setengah-setengah).
         DATA: ls_zapp TYPE zroto_app_hist.
-        LOOP AT lt_items_ok INTO ls_item.
+        LOOP AT lt_items INTO ls_item.
           CLEAR ls_zapp.
           ls_zapp-banfn  = ls_item-banfn.
           ls_zapp-bnfpo  = ls_item-bnfpo.
@@ -1209,26 +1055,15 @@ CASE lv_action.
           ls_zapp-app_tm = sy-uzeit.
           MODIFY zroto_app_hist FROM ls_zapp.
         ENDLOOP.
-
-        CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
-          EXPORTING wait = 'X'.
+        COMMIT WORK AND WAIT.
 
         lv_ap_ok_s = lv_ap_ok.
         CONDENSE lv_ap_ok_s NO-GAPS.
-        IF lv_ap_err IS INITIAL.
-          CONCATENATE
-            '{"status":"S","message":"PR '
-            lv_banfn ' berhasil di-approve ('
-            lv_ap_ok_s ' item)"}'
-            INTO lv_output.
-        ELSE.
-          escape_json lv_ap_err.
-          CONCATENATE
-            '{"status":"S","message":"PR '
-            lv_banfn ' sebagian berhasil di-approve ('
-            lv_ap_ok_s ' item). Gagal: ' lv_ap_err '"}'
-            INTO lv_output.
-        ENDIF.
+        CONCATENATE
+          '{"status":"S","message":"PR '
+          lv_banfn ' berhasil di-approve ('
+          lv_ap_ok_s ' item)"}'
+          INTO lv_output.
       ELSE.
         CALL FUNCTION 'BAPI_TRANSACTION_ROLLBACK'.
         escape_json lv_ap_err.
@@ -1241,10 +1076,31 @@ CASE lv_action.
 *--- DELETE / REJECT ---------------------------------------------------
     ELSEIF lv_pr_action = 'delete'.
 
-      " Urutan: panggil BAPI_REQUISITION_DELETE DULU. History
-      " (ZROTO_REJ_HIST) hanya ditulis & di-commit kalau delete
-      " benar-benar sukses, supaya tidak ada history "reject"
-      " yang tercatat padahal PR-nya masih ada di SAP.
+      DATA: ls_zroto TYPE zroto_rej_hist.
+
+      LOOP AT lt_items INTO ls_item.
+        CLEAR ls_zroto.
+        ls_zroto-banfn  = ls_item-banfn.
+        ls_zroto-bnfpo  = ls_item-bnfpo.
+        ls_zroto-werks  = ls_item-werks.
+        ls_zroto-bsart  = ls_item-bsart.
+        ls_zroto-txz01  = ls_item-txz01.
+        ls_zroto-ernam  = ls_item-ernam.
+        ls_zroto-erdat  = ls_item-badat.
+        ls_zroto-menge  = ls_item-menge.
+        ls_zroto-meins  = ls_item-meins.
+        ls_zroto-preis  = ls_item-preis.
+        ls_zroto-peinh  = ls_item-peinh.
+        ls_zroto-waers  = ls_item-waers.
+        ls_zroto-ekgrp  = ls_item-ekgrp.
+        ls_zroto-del_by = sy-uname.
+        ls_zroto-del_at = sy-datum.
+        ls_zroto-del_tm = sy-uzeit.
+        ls_zroto-reason = lv_notes.
+        MODIFY zroto_rej_hist FROM ls_zroto.
+      ENDLOOP.
+      COMMIT WORK AND WAIT.
+
       CLEAR lt_delitem.
       LOOP AT lt_items INTO ls_item.
         CLEAR ls_delitem.
@@ -1264,44 +1120,17 @@ CASE lv_action.
       READ TABLE lt_return INTO ls_return
         WITH KEY type = 'E'.
       IF sy-subrc NE 0.
-        " Delete sukses -> simpan history DULU (belum commit), baru
-        " BAPI_TRANSACTION_COMMIT SEKALI di akhir, supaya delete dan
-        " history ter-commit dalam SATU LUW yang atomik.
-        DATA: ls_zroto TYPE zroto_rej_hist.
-        LOOP AT lt_items INTO ls_item.
-          CLEAR ls_zroto.
-          ls_zroto-banfn  = ls_item-banfn.
-          ls_zroto-bnfpo  = ls_item-bnfpo.
-          ls_zroto-werks  = ls_item-werks.
-          ls_zroto-bsart  = ls_item-bsart.
-          ls_zroto-txz01  = ls_item-txz01.
-          ls_zroto-ernam  = ls_item-ernam.
-          ls_zroto-erdat  = ls_item-badat.
-          ls_zroto-menge  = ls_item-menge.
-          ls_zroto-meins  = ls_item-meins.
-          ls_zroto-preis  = ls_item-preis.
-          ls_zroto-peinh  = ls_item-peinh.
-          ls_zroto-waers  = ls_item-waers.
-          ls_zroto-ekgrp  = ls_item-ekgrp.
-          ls_zroto-del_by = sy-uname.
-          ls_zroto-del_at = sy-datum.
-          ls_zroto-del_tm = sy-uzeit.
-          ls_zroto-reason = lv_notes.
-          MODIFY zroto_rej_hist FROM ls_zroto.
-        ENDLOOP.
-
-        CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
-          EXPORTING wait = 'X'.
-
         CONCATENATE
           '{"status":"S","message":"PR '
           lv_banfn ' berhasil di-reject\/delete"}'
           INTO lv_output.
       ELSE.
-        CALL FUNCTION 'BAPI_TRANSACTION_ROLLBACK'.
         DATA: lv_del_err TYPE string.
         lv_del_err = ls_return-message.
         escape_json lv_del_err.
+        DELETE FROM zroto_rej_hist
+          WHERE banfn = lv_banfn_e.
+        COMMIT WORK AND WAIT.
         CONCATENATE
           '{"status":"E","message":"'
           lv_del_err '"}'
