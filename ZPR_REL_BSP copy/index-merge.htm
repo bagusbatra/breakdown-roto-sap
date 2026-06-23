@@ -1,0 +1,2811 @@
+<%@page language="abap"%>
+<%
+DATA: lv_uname2    TYPE syuname,
+      lv_username2 TYPE bapibname-bapibname,
+      lv_address2  TYPE bapiaddr3,
+      lv_fullname2 TYPE bapiaddr3-fullname,
+      lt_ret2      TYPE STANDARD TABLE OF bapiret2.
+
+lv_uname2    = sy-uname.
+lv_username2 = sy-uname.
+
+CALL FUNCTION 'BAPI_USER_GET_DETAIL'
+  EXPORTING username = lv_username2
+  IMPORTING address  = lv_address2
+  TABLES    return   = lt_ret2.
+
+lv_fullname2 = lv_address2-fullname.
+IF lv_fullname2 IS INITIAL.
+  lv_fullname2 = lv_uname2.
+ENDIF.
+%>
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport"
+        content="width=device-width, initial-scale=1.0">
+  <title>Release Purchasing Requisition - PT. Kayu Mebel Indonesia</title>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=DM+Mono:wght@400;500&display=swap"
+        rel="stylesheet">
+  <style>
+/* ════════════════════════════════════════════════════════════════
+   ZPR_REL_BSP — RELEASE PURCHASE REQUISITION
+   PT. KAYU MEBEL INDONESIA — Procurement / Purchasing Dept.
+   ────────────────────────────────────────────────────────────────
+   STYLE SHEET INDEX (cari pakai Ctrl+F di SE80)
+     §1  DESIGN TOKENS         — warna, spasi, radius, shadow
+     §2  RESET & BASE          — reset dasar, typography
+     §3  LAYOUT SHELL          — header, sidebar, main wrapper
+     §4  HEADER & USER MENU
+     §5  SIDEBAR & NAV
+     §6  PAGE HEADER & TOOLBAR — judul halaman, search, filter
+     §7  PR CARD               — kartu daftar PR pending
+     §8  CARD DETAIL TABLE     — tabel item saat card di-expand
+     §9  HISTORY TABLE         — tabel approve/reject
+     §10 BADGES & CHIPS        — label status, currency, kategori
+     §11 PAGINATION
+     §12 FAB (floating action) — tombol approve/reject mengambang
+     §13 MODAL                 — dialog konfirmasi
+     §14 TOAST & LOADING OVERLAY
+     §15 SKELETON LOADING
+     §16 EMPTY STATE
+     §17 SCROLLBAR
+     §18 ANIMATIONS            — keyframes & transition utilities
+     §19 RESPONSIVE            — breakpoint tablet & mobile
+   Catatan: file ini SATU <style> block (BSP/SE80 friendly), tapi
+   dikelompokkan per-section agar mudah dicari & dirawat.
+   ════════════════════════════════════════════════════════════════ */
+
+/* ──────────────────────────────────────────────────────────────
+   §1  DESIGN TOKENS
+   Palet "Procurement Navy" — biru-navy tegas utk kepercayaan &
+   formalitas approval, aksen amber utk pending, hijau/merah utk
+   keputusan approve/reject. Lebih korporat dibanding flat-blue.
+   ────────────────────────────────────────────────────────────── */
+:root {
+  /* Brand & Primary */
+  --navy-900:   #0b1d3a;
+  --navy-700:   #14305c;
+  --primary:    #1d4ed8;
+  --primary-d:  #1739a8;
+  --primary-lt: #eaf0fe;
+  --primary-lt2:#dbe6fd;
+
+  /* Semantic */
+  --success:    #0a7d52;
+  --success-lt: #e3f7ee;
+  --success-d:  #066040;
+  --danger:     #c8281e;
+  --danger-lt:  #fdeceb;
+  --danger-d:   #a3201a;
+  --warning:    #b4640a;
+  --warning-lt: #fdf1e0;
+  --info:       #0e7490;
+  --info-lt:    #e3f6fa;
+
+  /* Neutrals */
+  --surface:     #ffffff;
+  --bg:          #f4f6fb;
+  --bg-soft:     #eef1f8;
+  --border:      #e3e7f0;
+  --border-soft: #edeff5;
+  --text:        #16213d;
+  --text-soft:   #3d4a6b;
+  --muted:       #6b7690;
+  --muted-lt:    #97a0b8;
+
+  /* Layout */
+  --sidebar-w:    272px;
+  --header-h:     64px;
+  --radius-sm:    8px;
+  --radius-md:    12px;
+  --radius-lg:    16px;
+  --radius-pill:  999px;
+
+  /* Shadow — depth halus, bukan flat */
+  --shadow-xs:  0 1px 2px rgba(15,23,55,.05);
+  --shadow-sm:  0 2px 6px rgba(15,23,55,.06);
+  --shadow-md:  0 6px 18px rgba(15,23,55,.08);
+  --shadow-lg:  0 16px 40px rgba(15,23,55,.14);
+  --shadow-focus: 0 0 0 3px rgba(29,78,216,.16);
+
+  /* Motion */
+  --ease:       cubic-bezier(.4,0,.2,1);
+  --ease-out:   cubic-bezier(.16,1,.3,1);
+  --dur-fast:   140ms;
+  --dur-base:   220ms;
+  --dur-slow:   360ms;
+
+  /* Dynamic offset diisi oleh JS ResizeObserver */
+  --toolbar-offset: 74px;
+}
+
+/* ──────────────────────────────────────────────────────────────
+   §2  RESET & BASE
+   ────────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
+
+html { -webkit-text-size-adjust:100%; }
+
+body {
+  font-family:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;
+  background:var(--bg);
+  color:var(--text);
+  min-height:100vh;
+  -webkit-font-smoothing:antialiased;
+  font-size:14px;
+  line-height:1.45;
+}
+
+::selection { background:var(--primary-lt2); }
+
+button, input, select, textarea { font-family:inherit; color:inherit; }
+
+/* ──────────────────────────────────────────────────────────────
+   §3  LAYOUT SHELL
+   ────────────────────────────────────────────────────────────── */
+.main {
+  margin-left:var(--sidebar-w);
+  margin-top:var(--header-h);
+  padding:26px 28px 130px;
+  transition:margin-left var(--dur-base) var(--ease);
+  min-height:calc(100vh - var(--header-h));
+}
+
+body.sb-collapsed .sidebar  { transform:translateX(-100%); }
+body.sb-collapsed .main     { margin-left:0; }
+
+/* ──────────────────────────────────────────────────────────────
+   §4  HEADER & USER MENU
+   ────────────────────────────────────────────────────────────── */
+.hdr {
+  position:fixed; top:0; left:0; right:0;
+  height:var(--header-h);
+  background:var(--navy-900);
+  background-image:linear-gradient(135deg,var(--navy-900) 0%,#102849 60%,var(--navy-700) 100%);
+  border-bottom:1px solid rgba(255,255,255,.06);
+  display:flex; align-items:center;
+  padding:0 22px; gap:13px; z-index:300;
+  box-shadow:0 2px 14px rgba(0,0,0,.18);
+}
+
+.btn-toggle-sb {
+  width:34px; height:34px; border:none;
+  background:rgba(255,255,255,.08);
+  border-radius:var(--radius-sm);
+  cursor:pointer;
+  display:flex; align-items:center; justify-content:center;
+  color:#dbe4ff; font-size:18px;
+  flex-shrink:0;
+  transition:background var(--dur-fast) var(--ease),
+             transform var(--dur-fast) var(--ease);
+}
+.btn-toggle-sb:hover  { background:rgba(255,255,255,.16); }
+.btn-toggle-sb:active { transform:scale(.92); }
+
+.hdr-logo {
+  width:36px; height:36px; border-radius:9px;
+  background:rgba(255,255,255,.92);
+  display:flex; align-items:center; justify-content:center;
+  flex-shrink:0; overflow:hidden;
+  box-shadow:var(--shadow-xs);
+}
+
+.hdr-brand { font-size:14.5px; font-weight:700; color:#fff; letter-spacing:.1px; }
+.hdr-corp  { font-size:11px; color:#9fb1da; margin-top:1px; }
+
+.hdr-user  {
+  margin-left:auto; display:flex;
+  align-items:center; gap:9px;
+  font-size:13px; font-weight:600;
+  color:#e7ecfb; position:relative;
+  max-width:240px;
+  padding:6px 12px 6px 6px;
+  border-radius:var(--radius-pill);
+  cursor:pointer; user-select:none;
+  transition:background var(--dur-fast) var(--ease);
+}
+.hdr-user:hover { background:rgba(255,255,255,.09); }
+.hdr-user > span {
+  display:inline-flex; align-items:center; gap:5px;
+  white-space:nowrap; overflow:hidden;
+  text-overflow:ellipsis; max-width:170px;
+}
+.hdr-user-chevron {
+  flex-shrink:0; opacity:.7;
+  transition:transform var(--dur-fast) var(--ease);
+}
+.hdr-user.menu-open .hdr-user-chevron { transform:rotate(180deg); opacity:1; }
+
+.hdr-avatar {
+  width:30px; height:30px; border-radius:50%;
+  background:linear-gradient(135deg,var(--primary),#3b6df0);
+  color:#fff;
+  display:flex; align-items:center; justify-content:center;
+  font-size:12.5px; font-weight:700;
+  flex-shrink:0; letter-spacing:0;
+  box-shadow:0 0 0 2px rgba(255,255,255,.18);
+}
+
+.user-menu {
+  display:none; position:absolute;
+  top:calc(100% + 12px); right:0;
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:var(--radius-md);
+  box-shadow:var(--shadow-lg);
+  width:200px;
+  z-index:9999;
+  overflow:hidden;
+  animation:menuPop var(--dur-base) var(--ease-out);
+}
+.user-menu.open { display:block; }
+
+.user-menu-hd {
+  padding:12px 16px;
+  background:var(--bg-soft);
+  border-bottom:1px solid var(--border-soft);
+}
+.user-menu-lbl {
+  font-size:10.5px; color:var(--muted); font-weight:600;
+  text-transform:uppercase; letter-spacing:.04em;
+}
+.user-menu-name {
+  font-size:13.5px; font-weight:700; color:var(--text);
+  margin-top:3px;
+}
+.user-menu-logout {
+  display:flex; align-items:center; gap:9px;
+  padding:11px 16px; font-size:13px; font-weight:600;
+  color:var(--danger); cursor:pointer;
+  transition:background var(--dur-fast) var(--ease);
+}
+.user-menu-logout svg { flex-shrink:0; opacity:.9; }
+.user-menu-logout:hover { background:var(--danger-lt); }
+.user-menu-logout:active { background:#fbdad7; }
+
+/* ──────────────────────────────────────────────────────────────
+   §5  SIDEBAR & NAV
+   ────────────────────────────────────────────────────────────── */
+.sidebar {
+  position:fixed; top:var(--header-h);
+  left:0; bottom:0;
+  width:var(--sidebar-w);
+  background:var(--surface);
+  border-right:1px solid var(--border);
+  overflow-y:auto; z-index:200;
+  padding:16px 0 24px;
+  transition:transform var(--dur-base) var(--ease);
+}
+
+.sb-section { margin-bottom:3px; }
+
+.sb-plant {
+  margin:0 10px;
+  padding:11px 12px;
+  border-radius:var(--radius-sm);
+  font-size:11.5px; font-weight:700;
+  letter-spacing:.05em; text-transform:uppercase;
+  color:var(--text-soft);
+  display:flex; align-items:center; justify-content:space-between;
+  cursor:pointer; user-select:none;
+  transition:background var(--dur-fast) var(--ease);
+}
+.sb-plant:hover { background:var(--bg-soft); }
+.sb-section.open .sb-plant {
+  background:var(--bg-soft); color:var(--navy-900);
+}
+
+.sb-plant-left { display:flex; align-items:center; gap:9px; }
+.sb-plant-left img {
+  width:19px; height:19px; object-fit:cover; border-radius:4px;
+  box-shadow:0 0 0 1px var(--border);
+}
+
+.sb-plant-chevron {
+  font-size:10px; color:var(--muted-lt);
+  transition:transform var(--dur-base) var(--ease);
+}
+.sb-section.open .sb-plant-chevron { transform:rotate(180deg); color:var(--primary); }
+
+.sb-submenu {
+  max-height:0; overflow:hidden;
+  transition:max-height var(--dur-slow) var(--ease);
+}
+.sb-section.open .sb-submenu { max-height:520px; }
+
+.sb-link {
+  display:flex; align-items:center; justify-content:space-between;
+  margin:1px 10px 0; padding:9px 12px 9px 30px;
+  border-radius:var(--radius-sm);
+  font-size:13px; font-weight:500;
+  color:var(--text-soft); cursor:pointer;
+  transition:background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+  position:relative;
+}
+.sb-link:hover { background:var(--bg-soft); }
+.sb-link::before {
+  content:''; position:absolute; left:14px; top:50%;
+  width:5px; height:5px; border-radius:50%;
+  background:var(--muted-lt);
+  transform:translateY(-50%);
+  transition:background var(--dur-fast) var(--ease);
+}
+
+.sb-link.active {
+  background:var(--primary-lt); color:var(--primary-d); font-weight:700;
+}
+.sb-link.active::before { background:var(--primary); }
+
+.sb-link.active-app {
+  background:var(--success-lt); color:var(--success-d); font-weight:700;
+}
+.sb-link.active-app::before { background:var(--success); }
+
+.sb-link.active-rej {
+  background:var(--danger-lt); color:var(--danger-d); font-weight:700;
+}
+.sb-link.active-rej::before { background:var(--danger); }
+
+.sb-badge {
+  font-size:11px; font-weight:700;
+  padding:2px 8px; border-radius:var(--radius-pill);
+  min-width:22px; text-align:center;
+  transition:transform var(--dur-fast) var(--ease);
+}
+.sb-badge-pending { background:var(--success-lt); color:var(--success-d); }
+.sb-badge-total   { background:var(--navy-900);   color:#fff; }
+.sb-badge-app     { background:var(--success-lt); color:var(--success-d); }
+.sb-badge-rej     { background:var(--danger-lt);  color:var(--danger-d); }
+
+.sb-link.active     .sb-badge-pending { background:var(--primary);  color:#fff; }
+.sb-link.active-app .sb-badge-app     { background:var(--success); color:#fff; }
+.sb-link.active-rej .sb-badge-rej     { background:var(--danger);  color:#fff; }
+
+.sb-divider { height:1px; background:var(--border-soft); margin:10px 14px; }
+
+/* ──────────────────────────────────────────────────────────────
+   §6  PAGE HEADER & TOOLBAR
+   ────────────────────────────────────────────────────────────── */
+.sticky-top {
+  position:sticky; top:var(--header-h);
+  z-index:150; background:var(--bg);
+  padding-top:2px;
+}
+
+.pg-hdr { margin-bottom:20px; padding-top:4px; }
+.pg-title {
+  font-size:21px; font-weight:800; color:var(--navy-900);
+  letter-spacing:-.2px;
+  display:flex; align-items:center; gap:9px;
+}
+.pg-sub { font-size:13px; color:var(--muted); margin-top:4px; }
+
+.sticky-toolbar {
+  position:sticky;
+  top:calc(var(--header-h) + var(--toolbar-offset, 74px));
+  z-index:149; background:var(--bg);
+  padding-bottom:12px;
+}
+
+.toolbar {
+  display:flex; align-items:center; gap:10px;
+  margin-bottom:16px; flex-wrap:wrap;
+}
+
+.search-wrap {
+  display:flex; align-items:center;
+  background:var(--surface); border:1.5px solid var(--border);
+  border-radius:var(--radius-sm); padding:0 13px;
+  gap:8px; height:38px;
+  transition:border-color var(--dur-fast) var(--ease), box-shadow var(--dur-fast) var(--ease);
+}
+.search-wrap:focus-within {
+  border-color:var(--primary); box-shadow:var(--shadow-focus);
+}
+.search-wrap span { font-size:13px; color:var(--muted-lt); }
+.search-wrap input {
+  border:none; outline:none;
+  font-size:13px; width:210px; color:var(--text);
+  background:transparent;
+}
+.search-wrap input::placeholder { color:var(--muted-lt); }
+
+.pg-count { margin-left:auto; font-size:13px; color:var(--muted); white-space:nowrap; font-weight:500; }
+
+.page-size-select, .estkz-select {
+  height:36px; padding:0 30px 0 12px;
+  border:1.5px solid var(--border); background:var(--surface);
+  border-radius:var(--radius-sm);
+  font-size:13px; font-weight:600; color:var(--text-soft);
+  cursor:pointer; appearance:none;
+  background-repeat:no-repeat; background-position:right 10px center;
+  outline:none;
+  transition:border-color var(--dur-fast) var(--ease);
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236b7690' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+}
+.page-size-select:hover, .estkz-select:hover { border-color:var(--muted-lt); }
+
+.estkz-select {
+  border-color:var(--primary-lt2); color:var(--primary-d);
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%231d4ed8' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+}
+
+.sort-select {
+  height:36px; padding:0 30px 0 12px;
+  border:1.5px solid var(--border); background:var(--surface);
+  border-radius:var(--radius-sm);
+  font-size:13px; font-weight:600; color:var(--text-soft);
+  cursor:pointer; appearance:none;
+  background-repeat:no-repeat; background-position:right 10px center;
+  outline:none;
+  transition:border-color var(--dur-fast) var(--ease);
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236b7690' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+}
+.sort-select:hover { border-color:var(--muted-lt); }
+
+.expand-bar { display:flex; align-items:center; gap:8px; }
+.btn-exp {
+  height:36px; padding:0 14px;
+  border:1.5px solid var(--border); background:var(--surface);
+  border-radius:var(--radius-sm);
+  font-size:12.5px; font-weight:600; color:var(--text-soft);
+  cursor:pointer; display:flex; align-items:center; gap:5px;
+  transition:background var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
+}
+.btn-exp:hover { background:var(--bg-soft); border-color:var(--muted-lt); }
+
+/* ──────────────────────────────────────────────────────────────
+   §7  PR CARD
+   ────────────────────────────────────────────────────────────── */
+#cardContainer { display:flex; flex-direction:column; gap:11px; }
+
+.po-card {
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-left:3px solid var(--warning);
+  border-radius:var(--radius-md);
+  overflow:hidden;
+  box-shadow:var(--shadow-xs);
+  cursor:pointer;
+  transition:box-shadow var(--dur-base) var(--ease),
+             border-color var(--dur-base) var(--ease),
+             background var(--dur-base) var(--ease),
+             opacity var(--dur-slow) var(--ease),
+             max-height var(--dur-slow) var(--ease),
+             margin-bottom var(--dur-slow) var(--ease),
+             transform var(--dur-base) var(--ease-out);
+  animation:cardIn var(--dur-slow) var(--ease-out) backwards;
+}
+.po-card:hover {
+  box-shadow:var(--shadow-md);
+  transform:translateY(-1px);
+  border-color:var(--primary-lt2);
+}
+.po-card.expanded {
+  border-left-color:var(--primary);
+  background:var(--primary-lt);
+  box-shadow:var(--shadow-sm);
+}
+.po-card.expanded:hover { background:var(--primary-lt); }
+
+.card-top {
+  display:flex; align-items:center;
+  padding:15px 18px; gap:12px; flex-wrap:wrap;
+}
+
+.card-num {
+  font-family:'DM Mono',monospace;
+  font-size:14.5px; font-weight:600;
+  color:var(--primary-d); white-space:nowrap;
+  letter-spacing:.2px;
+}
+
+.card-amount { margin-left:auto; text-align:right; }
+.card-amount-val {
+  font-size:16.5px; font-weight:800; color:var(--success-d);
+  letter-spacing:-.2px;
+}
+.card-amount-lbl {
+  font-size:10px; color:var(--muted); font-weight:600;
+  letter-spacing:.04em; text-transform:uppercase;
+}
+
+.card-meta {
+  display:grid; grid-template-columns:repeat(4,1fr);
+  gap:14px; padding:2px 18px 16px 47px;
+}
+.meta-lbl {
+  font-size:10px; text-transform:uppercase; letter-spacing:.06em;
+  color:var(--muted-lt); font-weight:700; margin-bottom:3px;
+}
+.meta-val { font-size:13px; font-weight:600; color:var(--text); }
+
+.card-detail {
+  max-height:0; overflow:hidden;
+  border-top:1px solid var(--border-soft);
+  margin-top:0;
+  cursor:default;
+  transition:max-height var(--dur-slow) var(--ease);
+}
+.po-card.expanded .card-detail {
+  max-height:600px;
+  overflow-y:auto;
+  background:var(--surface);
+}
+.card-detail-inner { padding:14px 18px 18px 47px; }
+.card-detail-scroll { overflow-x:auto; }
+
+/* ──────────────────────────────────────────────────────────────
+   §8  CARD DETAIL TABLE  (item-level)
+   ────────────────────────────────────────────────────────────── */
+.detail-tbl {
+  width:100%; border-collapse:collapse;
+  font-size:12.5px; min-width:640px;
+}
+.detail-tbl th {
+  text-align:left; padding:8px 10px;
+  font-size:10.5px; text-transform:uppercase; letter-spacing:.05em;
+  color:var(--muted); font-weight:700;
+  border-bottom:1.5px solid var(--border);
+  white-space:nowrap;
+}
+.detail-tbl td {
+  padding:9px 10px; border-bottom:1px solid var(--border-soft);
+  color:var(--text-soft); font-size:12.5px;
+}
+.detail-tbl tr:last-child td { border-bottom:none; }
+.detail-tbl tr:hover td { background:var(--bg-soft); }
+.detail-tbl td.num, .detail-tbl th.num { text-align:right; }
+
+/* ──────────────────────────────────────────────────────────────
+   §9  HISTORY TABLE  (approve / reject)
+   ────────────────────────────────────────────────────────────── */
+.hist-table-wrap {
+  overflow-x:auto; margin-top:4px;
+  border-radius:var(--radius-md);
+  border:1px solid var(--border);
+  box-shadow:var(--shadow-xs);
+  background:var(--surface);
+}
+.hist-table { width:100%; border-collapse:collapse; font-size:13px; }
+.hist-table th {
+  text-align:left; padding:11px 14px;
+  font-size:10.5px; text-transform:uppercase; letter-spacing:.05em;
+  color:var(--muted); font-weight:700;
+  background:var(--bg-soft);
+  border-bottom:1.5px solid var(--border);
+  white-space:nowrap;
+}
+.hist-table th:first-child, .hist-table td:first-child {
+  position:sticky; left:0; z-index:2;
+  background:var(--surface);
+  box-shadow:2px 0 6px -2px rgba(15,23,55,.07);
+}
+.hist-table th:first-child { background:var(--bg-soft); z-index:3; }
+.hist-table td {
+  padding:10px 14px; border-bottom:1px solid var(--border-soft);
+  color:var(--text-soft); vertical-align:top;
+}
+.hist-table tr:last-child td { border-bottom:none; }
+.hist-table tbody tr { transition:background var(--dur-fast) var(--ease); }
+.hist-table tbody tr:nth-child(even) td { background:#fafbfd; }
+.hist-table tbody tr:nth-child(even) td:first-child { background:#fafbfd; }
+.hist-table tbody tr:hover td { background:var(--primary-lt) !important; }
+.hist-table td.num, .hist-table th.num { text-align:right; }
+
+/* ──────────────────────────────────────────────────────────────
+   §10 BADGES & CHIPS
+   ────────────────────────────────────────────────────────────── */
+.badge {
+  display:inline-flex; align-items:center; gap:4px;
+  padding:3.5px 10px; border-radius:var(--radius-pill);
+  font-size:11px; font-weight:700; white-space:nowrap;
+  letter-spacing:.01em;
+}
+.b-pending { background:var(--warning-lt); color:var(--warning); }
+.b-pending::before {
+  content:''; width:5px; height:5px; border-radius:50%;
+  background:var(--warning); display:inline-block;
+  animation:pulseDot 1.8s var(--ease) infinite;
+}
+.b-plant   { background:var(--bg-soft); color:var(--text-soft); }
+.b-mrp     { background:var(--info-lt);    color:var(--info); }
+.b-nonmrp  { background:var(--warning-lt); color:var(--warning); }
+.b-items   { background:var(--success-lt); color:var(--success-d); }
+
+.chip {
+  display:inline-flex; align-items:center;
+  padding:3px 8px; border-radius:6px;
+  font-size:11px; font-weight:600;
+  background:var(--bg-soft); color:var(--text-soft);
+}
+.cur-idr   { background:#eef1f8; color:#475569; }
+.cur-usd   { background:var(--info-lt);    color:var(--info); }
+.cur-other { background:var(--warning-lt); color:var(--warning); }
+.cat-roto  { background:var(--primary-lt); color:var(--primary-d); }
+.cat-prk9  { background:var(--info-lt);    color:var(--info); }
+
+/* Badge untuk currency di tabel history */
+.badge-currency {
+  padding:2px 6px; border-radius:4px;
+  font-size:11px; font-weight:600;
+}
+/* Badge untuk UoM di tabel history */
+.uom-badge {
+  background:var(--bg-soft); padding:2px 6px;
+  border-radius:4px; font-size:11px;
+}
+
+/* ──────────────────────────────────────────────────────────────
+   §11 PAGINATION
+   ────────────────────────────────────────────────────────────── */
+.pagination-bar {
+  display:flex; align-items:center; justify-content:center;
+  gap:6px; padding:20px 0 6px; flex-wrap:wrap;
+}
+.pg-btn {
+  height:34px; min-width:34px; padding:0 10px;
+  border:1.5px solid var(--border); background:var(--surface);
+  border-radius:var(--radius-sm);
+  font-size:13px; font-weight:600; color:var(--text-soft);
+  cursor:pointer; transition:all var(--dur-fast) var(--ease);
+  display:flex; align-items:center; justify-content:center;
+}
+.pg-btn:hover:not(:disabled) { background:var(--bg-soft); border-color:var(--muted-lt); }
+.pg-btn.active {
+  background:var(--primary); color:#fff; border-color:var(--primary);
+  box-shadow:0 3px 10px rgba(29,78,216,.28);
+}
+.pg-btn:disabled { opacity:.4; cursor:default; }
+.pg-info { font-size:12px; color:var(--muted); font-weight:500; padding:0 8px; }
+
+/* ──────────────────────────────────────────────────────────────
+   §12 FAB (floating action)
+   ────────────────────────────────────────────────────────────── */
+.fab {
+  position:fixed; bottom:24px; right:24px;
+  display:none; align-items:center; gap:10px;
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:14px; padding:12px 16px;
+  box-shadow:0 8px 28px rgba(15,23,55,.16);
+  z-index:400;
+}
+.fab.show { display:flex; }
+.fab-info {
+  font-size:13px; font-weight:600;
+  color:var(--text); white-space:nowrap; padding:0 4px;
+}
+.fab-btn {
+  height:38px; padding:0 18px; border:none;
+  border-radius:var(--radius-sm);
+  font-family:inherit; font-size:13px; font-weight:700; color:#fff;
+  cursor:pointer;
+  display:flex; align-items:center; gap:6px;
+  transition:filter var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease);
+}
+.fab-btn:hover  { filter:brightness(1.07); }
+.fab-btn:active { transform:scale(.97); }
+.fab-app { background:var(--success); }
+.fab-rej { background:var(--danger); }
+
+/* ──────────────────────────────────────────────────────────────
+   §13 MODAL
+   ────────────────────────────────────────────────────────────── */
+.modal {
+  display:none; position:fixed; inset:0;
+  background:rgba(11,29,58,.5);
+  backdrop-filter:blur(2px);
+  z-index:999;
+  align-items:center; justify-content:center;
+}
+.modal.show { display:flex; animation:modalBgIn var(--dur-base) var(--ease); }
+.modal-box {
+  background:var(--surface); border-radius:var(--radius-lg);
+  padding:28px; width:90%; max-width:480px;
+  max-height:88vh; overflow-y:auto;
+  box-shadow:var(--shadow-lg);
+  animation:modalBoxIn var(--dur-base) var(--ease-out);
+}
+.modal-title {
+  font-size:17px; font-weight:800; color:var(--navy-900);
+  margin-bottom:8px; display:flex; align-items:center; gap:8px;
+}
+.modal-desc { font-size:13.5px; color:var(--muted); margin-bottom:18px; }
+.modal-info {
+  background:var(--success-lt); border:1px solid #a7e3c5;
+  border-radius:var(--radius-sm); padding:12px 14px;
+  font-size:13px; color:var(--text); margin-bottom:18px; line-height:1.8;
+}
+.modal-info-danger {
+  background:var(--danger-lt); border:1px solid #f5b7b2;
+  border-radius:var(--radius-sm); padding:12px 14px;
+  font-size:13px; color:var(--text); margin-bottom:18px; line-height:1.8;
+}
+.modal-label {
+  font-size:12px; font-weight:700; color:var(--text); margin-bottom:6px;
+}
+.modal-opt {
+  font-size:10.5px; color:var(--muted); font-weight:400; margin-left:4px;
+}
+.modal-ta {
+  width:100%; border:1.5px solid var(--border);
+  border-radius:var(--radius-sm); padding:10px 12px;
+  font-family:inherit; font-size:13px;
+  resize:vertical; min-height:80px;
+  outline:none; margin-bottom:18px;
+  transition:border-color var(--dur-fast) var(--ease);
+}
+.modal-ta:focus { border-color:var(--danger); }
+.modal-footer {
+  display:flex; gap:10px; justify-content:flex-end;
+}
+
+.btn {
+  height:39px; padding:0 20px; border:none;
+  border-radius:var(--radius-sm);
+  font-size:13px; font-weight:700; color:#fff;
+  cursor:pointer; transition:filter var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease);
+  display:inline-flex; align-items:center; gap:6px;
+}
+.btn:hover  { filter:brightness(1.07); }
+.btn:active { transform:scale(.97); }
+.btn-outline {
+  background:var(--surface); color:var(--text-soft); border:1.5px solid var(--border);
+}
+.btn-outline:hover { background:var(--bg-soft); filter:none; }
+.btn-success { background:var(--success); }
+.btn-danger  { background:var(--danger); }
+
+/* ──────────────────────────────────────────────────────────────
+   §14 TOAST & LOADING OVERLAY
+   ────────────────────────────────────────────────────────────── */
+.toast {
+  position:fixed; top:78px; right:22px;
+  background:var(--surface); border-radius:var(--radius-md);
+  padding:14px 18px;
+  box-shadow:var(--shadow-lg);
+  font-size:13.5px; font-weight:600;
+  display:flex; align-items:center; gap:10px;
+  z-index:9999; max-width:400px;
+  animation:toastIn var(--dur-base) var(--ease-out);
+}
+.toast-s { border-left:4px solid var(--success); color:var(--success-d); }
+.toast-e { border-left:4px solid var(--danger);  color:var(--danger-d); }
+
+#lo {
+  position:fixed; inset:0;
+  background:rgba(11,29,58,.45);
+  backdrop-filter:blur(1px);
+  display:none; align-items:center; justify-content:center;
+  z-index:10000;
+}
+#lo.show { display:flex; animation:modalBgIn var(--dur-fast) var(--ease); }
+.lo-box {
+  background:var(--surface); padding:28px 36px;
+  border-radius:var(--radius-lg); text-align:center;
+  font-weight:700; font-size:14px; color:var(--text);
+  box-shadow:var(--shadow-lg); min-width:230px;
+  animation:modalBoxIn var(--dur-base) var(--ease-out);
+}
+.lo-spin {
+  width:32px; height:32px; margin:14px auto 0;
+  border:3.5px solid var(--border);
+  border-top-color:var(--primary);
+  border-radius:50%;
+  animation:spin .7s linear infinite;
+}
+
+/* ──────────────────────────────────────────────────────────────
+   §15 SKELETON LOADING
+   ────────────────────────────────────────────────────────────── */
+.sb-skel { padding:16px 20px; }
+.sb-skel-line {
+  height:13px; border-radius:6px;
+  background:linear-gradient(90deg,#eef0f6 25%,#f7f8fb 50%,#eef0f6 75%);
+  background-size:200% 100%;
+  animation:shimmer 1.4s ease infinite;
+  margin-bottom:11px;
+}
+.sb-skel-line:nth-child(1) { width:62%; }
+.sb-skel-line:nth-child(2) { width:46%; margin-left:12px; }
+.sb-skel-line:nth-child(3) { width:54%; margin-left:12px; }
+.sb-skel-line:nth-child(4) { width:40%; margin-top:8px; }
+
+/* ──────────────────────────────────────────────────────────────
+   §16 EMPTY STATE
+   ────────────────────────────────────────────────────────────── */
+.empty {
+  text-align:center; padding:90px 20px;
+  color:var(--muted);
+  animation:fadeUp var(--dur-slow) var(--ease-out);
+}
+.empty-ico {
+  font-size:44px; margin-bottom:14px; opacity:.55;
+  display:inline-block;
+}
+.empty-txt { font-size:15px; font-weight:700; color:var(--text-soft); }
+.empty-hint { font-size:13px; color:var(--muted); margin-top:6px; }
+
+/* ──────────────────────────────────────────────────────────────
+   §17 SCROLLBAR — tipis & rapi (Chromium-based, default SAPGUI/Edge)
+   ────────────────────────────────────────────────────────────── */
+.sidebar::-webkit-scrollbar,
+.hist-table-wrap::-webkit-scrollbar,
+.card-detail::-webkit-scrollbar,
+.card-detail-scroll::-webkit-scrollbar { width:8px; height:8px; }
+.sidebar::-webkit-scrollbar-thumb,
+.hist-table-wrap::-webkit-scrollbar-thumb,
+.card-detail::-webkit-scrollbar-thumb,
+.card-detail-scroll::-webkit-scrollbar-thumb {
+  background:#d4d9e6; border-radius:8px;
+}
+.sidebar::-webkit-scrollbar-thumb:hover,
+.hist-table-wrap::-webkit-scrollbar-thumb:hover { background:#b9c1d6; }
+
+/* ──────────────────────────────────────────────────────────────
+   §18 ANIMATIONS
+   ────────────────────────────────────────────────────────────── */
+@keyframes cardIn {
+  from { opacity:0; transform:translateY(8px); }
+  to   { opacity:1; transform:translateY(0); }
+}
+@keyframes fadeUp {
+  from { opacity:0; transform:translateY(10px); }
+  to   { opacity:1; transform:translateY(0); }
+}
+@keyframes menuPop {
+  from { opacity:0; transform:translateY(-6px) scale(.97); }
+  to   { opacity:1; transform:translateY(0) scale(1); }
+}
+@keyframes modalBgIn  { from { opacity:0; } to { opacity:1; } }
+@keyframes modalBoxIn {
+  from { opacity:0; transform:translateY(10px) scale(.97); }
+  to   { opacity:1; transform:translateY(0) scale(1); }
+}
+@keyframes toastIn {
+  from { opacity:0; transform:translateX(18px); }
+  to   { opacity:1; transform:translateX(0); }
+}
+@keyframes spin    { to { transform:rotate(360deg); } }
+@keyframes shimmer {
+  0%   { background-position:200% 0; }
+  100% { background-position:-200% 0; }
+}
+@keyframes pulseDot {
+  0%, 100% { opacity:1; }
+  50%      { opacity:.35; }
+}
+/* Hormati preferensi pengguna yang menonaktifkan animasi
+   (aksesibilitas, juga membantu perangkat low-end) */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration:.001ms !important;
+    transition-duration:.001ms !important;
+  }
+}
+
+/* ──────────────────────────────────────────────────────────────
+   §19 RESPONSIVE
+   ────────────────────────────────────────────────────────────── */
+@media (max-width:1280px) {
+  .card-meta { grid-template-columns:repeat(3,1fr); }
+}
+@media (max-width:1024px) {
+  .sidebar {
+    transform:translateX(-100%);
+    box-shadow:4px 0 24px rgba(15,23,55,.16);
+  }
+  .sidebar.open { transform:translateX(0); }
+  .main { margin-left:0; }
+}
+@media (min-width:768px) and (max-width:1024px) {
+  .card-meta { grid-template-columns:repeat(3,1fr); }
+}
+@media (max-width:767px) {
+  .main { padding:18px 16px 130px; }
+  .card-meta { grid-template-columns:1fr 1fr; padding-left:18px; }
+  .card-detail-inner { padding-left:18px; }
+  .hdr-user { max-width:150px; }
+  .hdr-user > span { max-width:75px; }
+  .pg-title { font-size:18px; }
+}
+
+/* Modal welcome — popup sambutan sekali per hari, desain minimalis */
+.modal-box-welcome { max-width:380px; text-align:center; padding:38px 32px 32px; }
+.welcome-eyebrow {
+  font-size:11px; font-weight:600; letter-spacing:.08em;
+  text-transform:uppercase; color:var(--muted-lt);
+  margin-bottom:6px;
+}
+.welcome-title {
+  justify-content:center; font-size:18px; font-weight:600;
+  color:var(--navy-800); margin-bottom:2px;
+}
+.welcome-date {
+  margin-bottom:24px; font-size:13px; font-weight:500;
+  color:var(--muted); text-transform:capitalize;
+}
+.welcome-summary {
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:var(--radius-md);
+  padding:18px; margin-bottom:24px;
+  display:flex; align-items:center; justify-content:center;
+  gap:18px; min-height:64px;
+}
+.welcome-summary-loading { width:100%; }
+.welcome-stat { text-align:center; }
+.welcome-stat-num {
+  font-size:24px; font-weight:700; color:var(--navy-900);
+  line-height:1.1; letter-spacing:-.3px;
+}
+.welcome-stat-num.is-zero { color:var(--success-d); }
+.welcome-stat-lbl {
+  font-size:11px; color:var(--muted); font-weight:500;
+  margin-top:4px;
+}
+.welcome-stat-divider { width:1px; height:30px; background:var(--border); opacity:.5; }
+.welcome-summary-empty {
+  font-size:13px; color:var(--success-d); font-weight:600;
+  display:flex; align-items:center; gap:7px; justify-content:center;
+}
+.btn-welcome-close {
+  height:40px; padding:0 22px;
+  border:1.5px solid var(--border); background:var(--surface);
+  border-radius:var(--radius-sm);
+  font-size:13px; font-weight:600; color:var(--text-soft);
+  cursor:pointer; display:inline-flex; align-items:center; gap:6px;
+  transition:background var(--dur-fast) var(--ease),
+             border-color var(--dur-fast) var(--ease);
+}
+.btn-welcome-close:hover {
+  background:var(--bg-soft); border-color:var(--muted);
+}
+</style>
+</head>
+<body>
+
+<!-- ════════════════ HEADER ════════════════ -->
+<header class="hdr">
+  <button class="btn-toggle-sb" onclick="toggleSidebar()"
+          title="Toggle sidebar" aria-label="Toggle sidebar">&#9776;</button>
+  <div class="hdr-logo">
+    <img src="logo.png" alt="KMI" style="width:28px;height:28px;object-fit:contain;">
+  </div>
+  <div>
+    <div class="hdr-brand">Release Purchasing Requisition</div>
+    <div class="hdr-corp">PT. Kayu Mebel Indonesia</div>
+  </div>
+  <div class="hdr-user" onclick="toggleUserMenu(event)">
+    <div class="hdr-avatar"><%=lv_uname2(1)%></div>
+    <span title="<%=lv_fullname2%>"><%=lv_fullname2%> <svg class="hdr-user-chevron" width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2.5 4.5L6 8l3.5-3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+    <div id="userMenu" class="user-menu">
+      <div class="user-menu-hd">
+        <div class="user-menu-lbl">Logged in as</div>
+        <div class="user-menu-name"><%=lv_fullname2%></div>
+      </div>
+      <div class="user-menu-logout" onclick="doLogout()">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M6 2H3.5A1.5 1.5 0 002 3.5v9A1.5 1.5 0 003.5 14H6M10.5 11l3-3-3-3M13.2 8H6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Logout
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- SIDEBAR -->
+<aside class="sidebar" id="sidebar"></aside>
+
+<!-- MAIN -->
+<main class="main" id="mainContent">
+  <div class="empty">
+    <div class="empty-ico">&#128203;</div>
+    <div class="empty-txt">Pilih plant dari sidebar</div>
+    <div class="empty-hint">Daftar PR pending akan muncul setelah memilih kategori di sidebar kiri</div>
+  </div>
+</main>
+
+<!-- FAB -->
+<div class="fab" id="fab">
+  <span class="fab-info" id="fabInfo">
+    0 dipilih
+  </span>
+  <button class="fab-btn fab-app"
+          onclick="showModalApprove()">
+    &#10003; Approve
+  </button>
+  <button class="fab-btn fab-rej"
+          onclick="showModalReject()">
+    &#128465; Reject
+  </button>
+</div>
+
+<!-- MODAL APPROVE -->
+<div class="modal" id="modalApprove"
+     onclick="if(event.target===this)
+              closeModal('modalApprove')">
+  <div class="modal-box">
+    <div class="modal-title">
+      &#10003; Approve PR
+    </div>
+    <div class="modal-desc" id="modalApproveDesc">
+      Approve PR yang dipilih?
+    </div>
+    <div class="modal-info">
+      &#8226; PR akan di-release via
+      BAPI_REQUISITION_RELEASE<br>
+      &#8226; Release Code:
+      <b>P2 (PR BOD Approval)</b><br>
+      &#8226; History approve tersimpan otomatis<br>
+      &#8226; Proses tidak dapat dibatalkan
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline"
+              onclick="closeModal('modalApprove')">
+        Batal
+      </button>
+      <button class="btn btn-success"
+              onclick="confirmApprove()">
+        &#10003; Ya, Approve
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL REJECT -->
+<div class="modal" id="modalReject"
+     onclick="if(event.target===this)
+              closeModal('modalReject')">
+  <div class="modal-box">
+    <div class="modal-title">
+      &#128465; Reject PR
+    </div>
+    <div class="modal-desc" id="modalRejectDesc">
+      Reject PR yang dipilih?
+    </div>
+    <div class="modal-info-danger">
+      &#8226; <b>PR akan dihapus (delete) dari SAP</b><br>
+      &#8226; History reject disimpan otomatis<br>
+      &#8226; Tindakan ini tidak dapat dibatalkan
+    </div>
+    <div class="modal-label">
+      Alasan Reject
+      <span class="modal-opt">(opsional)</span>
+    </div>
+    <textarea class="modal-ta" id="rejectNotes"
+              placeholder="Tuliskan alasan reject...">
+    </textarea>
+    <div class="modal-footer">
+      <button class="btn btn-outline"
+              onclick="closeModal('modalReject')">
+        Batal
+      </button>
+      <button class="btn btn-danger"
+              onclick="confirmReject()">
+        &#128465; Ya, Reject &amp; Delete
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════ MODAL: WELCOME (setiap refresh) ════════════════ -->
+<div class="modal" id="modalWelcome"
+     onclick="if(event.target===this) closeWelcomeModal()">
+  <div class="modal-box modal-box-welcome">
+    <div class="welcome-eyebrow" id="welcomeEyebrow">Selamat pagi</div>
+    <div class="modal-title welcome-title" id="welcomeGreeting">Selamat datang</div>
+    <div class="welcome-date" id="welcomeDate"></div>
+    <div class="welcome-summary" id="welcomeSummary">
+      <div class="welcome-summary-loading">
+        <div class="lo-spin" style="width:20px;height:20px;border-width:2.5px;margin:0 auto;"></div>
+      </div>
+    </div>
+    <div class="modal-footer" style="justify-content:center;">
+      <button class="btn-welcome-close" onclick="closeWelcomeModal()" style="width:100%;">
+        Mulai
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════ LOADING OVERLAY ════════════════ -->
+<div id="lo">
+  <div class="lo-box">
+    Processing... Please wait
+    <div class="lo-spin"></div>
+  </div>
+</div>
+<script>
+/* ================================================================
+   STATE & CONSTANTS
+   ================================================================ */
+var API_URL        = 'main.htm';
+var curPlant       = '';
+var curMode        = '';
+var curCategory    = '';
+var curBsart       = '';
+var isApprover     = false;
+var openSections   = {};
+var openCategories = {};
+var curEstkzFilter = '';
+var curSort      = 'newest';
+
+var allData      = [];
+var selBanfns    = {};
+var pageSize     = 10;
+var curPage      = 1;
+var searchKw     = '';
+var allExpanded  = false;
+var filteredData = [];
+var histData  = null;
+var histType  = '';
+var histPageSize = 10;
+var histCurPage  = 1;
+var histSearchKw = '';
+
+/* Daftar kategori PR per plant. bsart bisa berisi lebih dari satu
+   doc type dipisah koma (contoh 'RSBR,PRK9') — backend akan
+   menjumlahkan/menggabungkan filter-nya jadi satu kategori. Daftar
+   ini HARUS selalu sinkron dengan lt_cat_def di main.htm. */
+var CATEGORY_DEF = {
+  '1200':[
+    {code:'MTN',label:'PR Maintenance',bsart:'ROTO',
+     icon:'&#128203;'},
+    {code:'RND',label:'PR RND',bsart:'RSBR,PRK9',
+     icon:'&#128300;'},
+    {code:'SVC',label:'PR Service',bsart:'PRKS',
+     icon:'&#128736;'}
+  ],
+  '1300':[
+    {code:'MTN',label:'PR Maintenance',bsart:'ROTO',
+     icon:'&#128203;'},
+    {code:'SVC',label:'PR Service',bsart:'PRKS',
+     icon:'&#128736;'}
+  ],
+  '2000':[
+    {code:'MTN',label:'PR Maintenance',bsart:'ROTO',
+     icon:'&#128203;'},
+    {code:'RND',label:'PR RND',bsart:'RSBR,PRK9',
+     icon:'&#128300;'},
+    {code:'SVC',label:'PR Service',bsart:'PRKS',
+     icon:'&#128736;'}
+  ]
+};
+
+var sbCounts = {
+  pending:  { '1200':{}, '1300':{}, '2000':{} },
+  hist_app: { '1200':{}, '1300':{}, '2000':{} },
+  hist_rej: { '1200':{}, '1300':{}, '2000':{} }
+};
+
+var PLANT_LABELS = {
+  '1200':'Surabaya',
+  '1300':'Semarang',
+  '2000':'Surabaya'
+};
+
+var ESTKZ_MAP = {
+  'B':'MRP',        'D':'Direct',
+  'F':'Prod.Order', 'G':'Store Order',
+  'R':'Manual',     'U':'Planned Order',
+  'V':'SD Doc',     'M':'Monthly',
+  'Y':'Annual',     'A':'SAP APO',
+  'I':'SAP IBP',    'T':'S4CRM',
+  'S':'Self-Svc',   'E':'External'
+};
+
+/* ================================================================
+   UTILITY
+   ================================================================ */
+function escHtml(s) {
+  if (!s) return '';
+  return String(s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function parseNum(s) {
+  if (!s || s==='') return NaN;
+  var str = s.toString().trim();
+  var dc  = (str.match(/\./g)||[]).length;
+  if (dc > 1)
+    return parseFloat(
+      str.replace(/\./g,'').replace(',','.'));
+  return parseFloat(str);
+}
+
+function fmtAmt(raw, waers) {
+  var n = parseNum(raw);
+  if (isNaN(n)) return '0';
+  var w  = (waers||'').toUpperCase();
+  var zd = ['IDR','JPY','KRW','VND'].indexOf(w)>-1;
+  if (zd)
+    return Math.round(n*100).toLocaleString('id-ID',
+      {minimumFractionDigits:0,
+       maximumFractionDigits:0});
+  return n.toLocaleString('id-ID',
+    {minimumFractionDigits:2,
+     maximumFractionDigits:2});
+}
+
+function fmtQty(raw) {
+  var n = parseNum(raw);
+  if (isNaN(n)) return '0';
+  if (n%1===0)
+    return n.toLocaleString('id-ID',
+      {minimumFractionDigits:0,
+       maximumFractionDigits:0});
+  return n.toLocaleString('id-ID',
+    {minimumFractionDigits:3,
+     maximumFractionDigits:3});
+}
+
+function postOpts(body) {
+  return {
+    method:'POST',
+    headers:{
+      'Content-Type':
+        'application/x-www-form-urlencoded'
+    },
+    body:body
+  };
+}
+
+function getEstkzLabel(e) {
+  if (!e) return '-';
+  return ESTKZ_MAP[e] || e;
+}
+
+function getCategoryDef(werks,category) {
+  var list=CATEGORY_DEF[werks]||[];
+  for (var i=0;i<list.length;i++){
+    if (list[i].code===category) return list[i];
+  }
+  return null;
+}
+
+function getEffectiveWerks(werks) {
+  if (werks === '1200') return '1200,2000';
+  return werks;
+}
+
+function getSidebarWerks(werks) {
+  if (werks === '1200') return ['1200','2000'];
+  return [werks];
+}
+
+function getPlantLabel(werks) {
+  var primary = (werks||'').split(',')[0];
+  return PLANT_LABELS[primary]||primary;
+}
+
+function getPlantTotalPending(werks) {
+  var codes = getSidebarWerks(werks);
+  var total=0;
+  codes.forEach(function(w){
+    var cats = CATEGORY_DEF[w]||[];
+    cats.forEach(function(c){
+      total+=parseInt(
+        (sbCounts.pending[w]||{})[c.code])||0;
+    });
+  });
+  return total;
+}
+
+function showEmpty(msg) {
+  document.getElementById('mainContent').innerHTML =
+    '<div class="empty">' +
+    '<div class="empty-ico">&#128203;</div>' +
+    '<div class="empty-txt">' +
+    escHtml(msg)+'</div></div>';
+  document.getElementById('fab').className='fab';
+}
+
+function showLoading() {
+  var el=document.getElementById('mainContent');
+  if (el) el.innerHTML =
+    '<div style="text-align:center;padding:70px;' +
+    'color:var(--muted);">' +
+    '<div class="lo-spin"' +
+    ' style="margin:0 auto 14px;"></div>' +
+    'Memuat data...</div>';
+}
+
+/* Currency CSS helper */
+function curClass(w) {
+  w = (w||'').toUpperCase();
+  if (w === 'IDR') return 'cur-idr';
+  if (w === 'USD') return 'cur-usd';
+  return 'cur-other';
+}
+
+/* ──────────────────────────────────────────────────────────────
+   STICKY TOOLBAR OFFSET — ResizeObserver (dinamis, anti-numpuk)
+   ────────────────────────────────────────────────────────────── */
+function updateToolbarOffset() {
+  var hdr=document.querySelector('.pg-hdr');
+  if (hdr){
+    var h=hdr.offsetHeight;
+    document.documentElement.style.setProperty('--toolbar-offset', h+'px');
+  }
+}
+
+var toolbarObs=null;
+function observeToolbarOffset() {
+  updateToolbarOffset();
+  var hdr=document.querySelector('.pg-hdr');
+  if (hdr){
+    if (toolbarObs) toolbarObs.disconnect();
+    if (typeof ResizeObserver !== 'undefined'){
+      toolbarObs=new ResizeObserver(function(){ updateToolbarOffset(); });
+      toolbarObs.observe(hdr);
+    }
+  }
+}
+window.addEventListener('resize', updateToolbarOffset);
+
+/* ──────────────────────────────────────────────────────────────
+   SIDEBAR — skeleton loading sebelum data tiba
+   ────────────────────────────────────────────────────────────── */
+function showSidebarSkeleton() {
+  var sb=document.getElementById('sidebar');
+  if (!sb) return;
+  sb.innerHTML=
+    '<div class="sb-skel">'+
+    '<div class="sb-skel-line"></div>'+
+    '<div class="sb-skel-line"></div>'+
+    '<div class="sb-skel-line"></div>'+
+    '<div class="sb-skel-line"></div>'+
+    '</div>';
+}
+
+/* ════════════════════════════════════════════════════════════════
+   WELCOME POPUP — tampil setiap kali halaman di-refresh
+   ════════════════════════════════════════════════════════════════ */
+function maybeShowWelcome() {
+  var nav;
+  try { nav = performance.getEntriesByType('navigation'); } catch(e){}
+  var isReload = nav && nav[0] && nav[0].type === 'reload';
+  if (!isReload) return;
+
+  setGreetingText();
+  document.getElementById('modalWelcome').classList.add('show');
+  loadWelcomeSummary();
+}
+
+function setGreetingText() {
+  var h=new Date().getHours();
+  var greet = h<11 ? 'Selamat pagi' : h<15 ? 'Selamat siang' : h<18 ? 'Selamat sore' : 'Selamat malam';
+  var eb=document.getElementById('welcomeEyebrow');
+  if (eb) eb.textContent = greet;
+
+  var el=document.getElementById('welcomeGreeting');
+  if (el) el.textContent = 'Purchasing';
+
+  var dEl=document.getElementById('welcomeDate');
+  if (dEl){
+    var days=['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'];
+    var months=['Januari','Februari','Maret','April','Mei','Juni','Juli',
+                'Agustus','September','Oktober','November','Desember'];
+    var now=new Date();
+    dEl.textContent = days[now.getDay()]+', '+now.getDate()+' '+months[now.getMonth()]+' '+now.getFullYear();
+  }
+}
+
+function loadWelcomeSummary() {
+  fetch(API_URL+'?action=GET_SIDEBAR')
+    .then(function(r){return r.json();})
+    .then(function(res){
+      var total=0;
+      if (res.status==='S'){
+        var pd=res.pending||{};
+        ['1200','1300','2000'].forEach(function(w){
+          var o=pd[w]||{};
+          /* sum across all bsart codes from CATEGORY_DEF */
+          (CATEGORY_DEF[w]||[]).forEach(function(c){
+            total += parseInt(o[c.code])||0;
+          });
+        });
+      }
+      renderWelcomeSummary(total);
+    })
+    .catch(function(){ renderWelcomeSummary(null); });
+}
+
+function renderWelcomeSummary(total) {
+  var el=document.getElementById('welcomeSummary');
+  if (!el) return;
+
+  if (total===null){
+    el.innerHTML='<div class="welcome-summary-empty">Gagal memuat ringkasan PR</div>';
+    return;
+  }
+  if (total===0){
+    el.innerHTML='<div class="welcome-summary-empty">&#10003; Semua PR sudah diproses</div>';
+    return;
+  }
+  el.innerHTML=
+    '<div class="welcome-stat">'+
+      '<div class="welcome-stat-num">'+total+'</div>'+
+      '<div class="welcome-stat-lbl">PR PENDING</div>'+
+    '</div>'+
+    '<div class="welcome-stat-divider"></div>'+
+    '<div class="welcome-stat">'+
+      '<div class="welcome-stat-num">3</div>'+
+      '<div class="welcome-stat-lbl">PLANT</div>'+
+    '</div>';
+}
+
+function closeWelcomeModal() {
+  document.getElementById('modalWelcome').classList.remove('show');
+}
+
+/* ================================================================
+   HEADER / SIDEBAR TOGGLE
+   ================================================================ */
+function toggleSidebar() {
+  document.body.classList.toggle('sb-collapsed');
+  document.getElementById('sidebar')
+    .classList.toggle('open');
+}
+
+function toggleUserMenu(e) {
+  if (e) e.stopPropagation();
+  var m=document.getElementById('userMenu');
+  m.style.display=
+    m.style.display==='none'||
+    m.style.display===''?'block':'none';
+}
+
+document.addEventListener('click',function(e){
+  var m=document.getElementById('userMenu');
+  var u=document.querySelector('.hdr-user');
+  if (m&&u&&!u.contains(e.target))
+    m.style.display='none';
+});
+
+/* ================================================================
+   LOGOUT
+   ================================================================ */
+function doLogout() {
+  if (!confirm('Yakin ingin logout?')) return;
+  sessionStorage.setItem('logged_out','1');
+  fetch('/sap/public/bc/icf/logoff',
+        {credentials:'include'})
+    .finally(function(){
+      var xhr=new XMLHttpRequest();
+      xhr.open('GET',
+        '/sap/bc/bsp/sap/zpr_rel_bsp/index.htm',
+        true,'logout','logout');
+      xhr.onreadystatechange=function(){
+        if (xhr.readyState===4)
+          window.location.replace(
+            '/sap/bc/bsp/sap/zpr_rel_bsp/index.htm');
+      };
+      xhr.send();
+    });
+}
+
+window.addEventListener('pageshow',function(e){
+  if (e.persisted &&
+      sessionStorage.getItem('logged_out')==='1'){
+    sessionStorage.removeItem('logged_out');
+    window.location.replace(
+      '/sap/public/bc/icf/logoff');
+  }
+});
+
+/* ================================================================
+   TOAST
+   ================================================================ */
+function showToast(type,msg) {
+  var old=document.getElementById('toastMsg');
+  if (old) old.remove();
+  var el=document.createElement('div');
+  el.id='toastMsg';
+  el.className='toast toast-'+
+    (type==='S'?'s':'e');
+  el.innerHTML=
+    (type==='S'?'&#10003; ':'&#10007; ')+
+    escHtml(msg);
+  document.body.appendChild(el);
+  setTimeout(function(){
+    if (el.parentNode){
+      el.style.transition=
+        'opacity .25s ease, transform .25s ease';
+      el.style.opacity='0';
+      el.style.transform='translateX(18px)';
+      setTimeout(function(){
+        if (el.parentNode) el.remove();
+      },260);
+    }
+  },4200);
+}
+
+/* ================================================================
+   MODAL
+   ================================================================ */
+function closeModal(id) {
+  document.getElementById(id)
+    .classList.remove('show');
+}
+
+document.addEventListener('keydown',function(e){
+  if (e.key==='Escape') closeWelcomeModal();
+});
+
+/* ================================================================
+   INIT
+   ================================================================ */
+function init() {
+  showSidebarSkeleton();
+  loadSidebarData();
+  maybeShowWelcome();
+}
+
+/* ================================================================
+   LOAD SIDEBAR
+   ================================================================ */
+function loadSidebarData() {
+  fetch(API_URL+'?action=GET_SIDEBAR')
+    .then(function(r){return r.json();})
+    .then(function(res){
+      if (res.status==='S'){
+        isApprover=(res.is_approver===true);
+        ['1200','1300','2000'].forEach(function(w){
+          sbCounts.pending[w] =
+            normalizeCatCounts(res.pending,w);
+          sbCounts.hist_app[w] =
+            normalizeCatCounts(res.hist_app,w);
+          sbCounts.hist_rej[w] =
+            normalizeCatCounts(res.hist_rej,w);
+        });
+      }
+      renderSidebar();
+    })
+    .catch(function(){renderSidebar();});
+}
+
+/* Ambil object {MTN:1,RND:2,...} dari response GET_SIDEBAR untuk
+   satu plant, dengan fallback aman jika werks/kategori tidak ada. */
+function normalizeCatCounts(group,werks) {
+  var src=(group&&group[werks])||{};
+  var out={};
+  var cats=CATEGORY_DEF[werks]||[];
+  cats.forEach(function(c){
+    out[c.code]=parseInt(src[c.code])||0;
+  });
+  return out;
+}
+
+/* ================================================================
+   RENDER SIDEBAR (Flat Doc Types & Global History per Plant)
+   ================================================================ */
+function renderSidebar() {
+  var plants=[
+    {code:'1200',name:'Surabaya',
+     img:'surabaya.png'},
+    {code:'1300',name:'Semarang',
+     img:'semarang.png'}
+  ];
+  var html='';
+
+  plants.forEach(function(p,pi){
+    if (pi>0)
+      html+='<div class="sb-divider"></div>';
+
+    var cats    =CATEGORY_DEF[p.code]||[];
+    var primary = curPlant.split(',')[0];
+    var isOpen  =(primary===p.code)||
+                 (openSections[p.code]===true);
+    var pendTot =getPlantTotalPending(p.code);
+    var effWerks = getEffectiveWerks(p.code);
+
+    html+='<div class="sb-section'+
+          (isOpen?' open':'')+
+          '" id="sbSec_'+p.code+'">';
+
+    /* Plant header */
+    html+='<div class="sb-plant"'+
+          ' onclick="toggleSection(\''+
+          p.code+'\')">';
+    html+='<span class="sb-plant-left">';
+    html+='<img src="'+p.img+'"'+
+          ' alt="'+p.name+'"'+
+          ' style="width:18px;height:18px;'+
+          'object-fit:cover;border-radius:3px;">';
+    html+=p.name+'</span>';
+    html+='<span style="display:flex;'+
+          'align-items:center;gap:6px;">';
+    if (pendTot>0)
+      html+='<span class="sb-badge sb-badge-total">'+
+            pendTot+'</span>';
+    html+='<span class="sb-plant-chevron">'+
+          '&#9660;</span>';
+    html+='</span></div>';
+
+    /* Submenu internal Plant */
+    html+='<div class="sb-submenu">';
+
+    /* A. TOMBOL PENDING SESUAI DOC TYPE */
+    cats.forEach(function(cat){
+      var codes = getSidebarWerks(p.code);
+      var pend = 0;
+      codes.forEach(function(w){
+        pend += parseInt((sbCounts.pending[w]||{})[cat.code])||0;
+      });
+      var isPendActive=(primary===p.code && curCategory===cat.code && curMode==='pending');
+
+      html+='<a class="sb-link'+(isPendActive?' active':'')+'" style="padding-left:20px;" '+
+            'onclick="switchView(\''+effWerks+'\',\''+cat.code+'\',\'pending\')">';
+      html+='<span style="display:flex;align-items:center;gap:7px;">'+cat.icon+' '+cat.label+'</span>';
+      if (pend>0) html+='<span class="sb-badge sb-badge-pending">'+pend+'</span>';
+      html+='</a>';
+    });
+
+    /* B. TOMBOL HISTORY APPROVE */
+    var codes = getSidebarWerks(p.code);
+    var happTot=0;
+    cats.forEach(function(c){
+      codes.forEach(function(w){
+        happTot+=parseInt((sbCounts.hist_app[w]||{})[c.code])||0;
+      });
+    });
+    var isAppActive=(primary===p.code && curMode==='hist_app');
+
+    html+='<a class="sb-link'+(isAppActive?' active-app':'')+'" style="padding-left:20px; border-top:1px dashed #e5e7eb;" '+
+          'onclick="switchView(\''+effWerks+'\',\'ALL\',\'hist_app\')">';
+    html+='<span style="display:flex;align-items:center;gap:7px;">&#10003; History Approve</span>';
+    if (happTot>0) html+='<span class="sb-badge sb-badge-app">'+happTot+'</span>';
+    html+='</a>';
+
+    /* C. TOMBOL HISTORY REJECT */
+    var hrejTot=0;
+    cats.forEach(function(c){
+      codes.forEach(function(w){
+        hrejTot+=parseInt((sbCounts.hist_rej[w]||{})[c.code])||0;
+      });
+    });
+    var isRejActive=(primary===p.code && curMode==='hist_rej');
+
+    html+='<a class="sb-link'+(isRejActive?' active-rej':'')+'" style="padding-left:20px;" '+
+          'onclick="switchView(\''+effWerks+'\',\'ALL\',\'hist_rej\')">';
+    html+='<span style="display:flex;align-items:center;gap:7px;">&#128465; History Reject</span>';
+    if (hrejTot>0) html+='<span class="sb-badge sb-badge-rej">'+hrejTot+'</span>';
+    html+='</a>';
+
+    html+='</div>'; /* sb-submenu */
+    html+='</div>'; /* sb-section */
+  });
+
+  document.getElementById('sidebar').innerHTML=html;
+}
+
+function toggleSection(plantCode) {
+  var sec=document.getElementById(
+    'sbSec_'+plantCode);
+  if (!sec) return;
+  sec.classList.toggle('open');
+  openSections[plantCode]=
+    sec.classList.contains('open');
+}
+
+function toggleCategory(catKey) {
+  var sec=document.getElementById(
+    'sbCat_'+catKey);
+  if (!sec) return;
+  sec.classList.toggle('open');
+  openCategories[catKey]=
+    sec.classList.contains('open');
+}
+
+/* ================================================================
+   SWITCH VIEW
+   ================================================================ */
+function switchView(plant,category,mode) {
+  var primaryPlant = plant.split(',')[0];
+  var catDef = getCategoryDef(primaryPlant,category);
+
+  curPlant       = plant;
+  curCategory    = category;
+  curBsart       = (category==='ALL')?'':(catDef?catDef.bsart:'');
+  curMode        = mode;
+  curPage        = 1;
+  selBanfns      = {};
+  searchKw       = '';
+  allExpanded    = false;
+  curEstkzFilter = '';
+
+  document.getElementById('fab').className='fab';
+  renderSidebar();
+  showLoading();
+
+  if      (mode==='pending')  fetchList('');
+  else if (mode==='hist_app') fetchHistApp();
+  else if (mode==='hist_rej') fetchHistRej();
+}
+
+/* ================================================================
+   FETCH LIST — PR Pending
+   ================================================================ */
+function fetchList(estkz) {
+  fetch(API_URL+'?action=GET_LIST'+
+        '&werks='+encodeURIComponent(curPlant)+
+        '&bsart='+encodeURIComponent(curBsart)+
+        '&estkz='+encodeURIComponent(estkz||''))
+    .then(function(r){return r.json();})
+    .then(function(res){
+      if (res.status!=='S'){
+        showEmpty(res.message||'Gagal memuat');
+        return;
+      }
+      allData=res.data||[];
+      curPage=1;
+      renderList();
+    })
+    .catch(function(e){
+      showEmpty('Error: '+e.message);
+    });
+}
+
+/* ================================================================
+   FETCH HISTORY APPROVE
+   ================================================================ */
+function fetchHistApp() {
+  fetch(API_URL+'?action=GET_HIST_APP'+
+        '&werks='+encodeURIComponent(curPlant)+
+        '&bsart='+encodeURIComponent(curBsart))
+    .then(function(r){return r.json();})
+    .then(function(res){
+      renderHistTable(
+        res.data||[],
+        'approve'
+      );
+    })
+    .catch(function(e){
+      showEmpty('Error: '+e.message);
+    });
+}
+
+/* ================================================================
+   FETCH HISTORY REJECT
+   ================================================================ */
+function fetchHistRej() {
+  fetch(API_URL+'?action=GET_HIST_REJ'+
+        '&werks='+encodeURIComponent(curPlant)+
+        '&bsart='+encodeURIComponent(curBsart))
+    .then(function(r){return r.json();})
+    .then(function(res){
+      renderHistTable(
+        res.data||[],
+        'reject'
+      );
+    })
+    .catch(function(e){
+      showEmpty('Error: '+e.message);
+    });
+}
+
+/* ================================================================
+   ESTKZ FILTER
+   ================================================================ */
+function onEstkzFilter(val) {
+  curEstkzFilter=val;
+  searchKw='';
+  var inp=document.getElementById('searchInp');
+  if (inp) inp.value='';
+  selBanfns={};
+  showLoading();
+  fetchList(val);
+}
+
+/* ================================================================
+   GET FILTERED (client-side search)
+   ================================================================ */
+function getFiltered() {
+  var arr=searchKw
+    ?allData.filter(function(d){
+        var kw=searchKw.toLowerCase();
+        return d.banfn.toLowerCase().indexOf(kw)>-1||
+          (d.ernam_full&&
+           d.ernam_full.toLowerCase().indexOf(kw)>-1)||
+          (d.ernam&&
+           d.ernam.toLowerCase().indexOf(kw)>-1)||
+          (d.txz01&&
+           d.txz01.toLowerCase().indexOf(kw)>-1)||
+          (d.ekgrp&&
+           d.ekgrp.toLowerCase().indexOf(kw)>-1)||
+          (d.estkz&&
+           getEstkzLabel(d.estkz)
+             .toLowerCase().indexOf(kw)>-1);
+      })
+    :allData.slice();
+  if (curSort==='oldest')
+    arr.sort(function(a,b){
+      return (a.badat||'').localeCompare(b.badat||'');
+    });
+  else
+    arr.sort(function(a,b){
+      return (b.badat||'').localeCompare(a.badat||'');
+    });
+  return arr;
+}
+
+/* ================================================================
+   RENDER LIST — PR Pending
+   ================================================================ */
+function renderList() {
+  filteredData  =getFiltered();
+  var total     =filteredData.length;
+  var totalPages=pageSize===0
+    ?1:Math.ceil(total/pageSize)||1;
+  if (curPage>totalPages) curPage=1;
+
+  var start =pageSize===0?0:(curPage-1)*pageSize;
+  var end   =pageSize===0?total
+    :Math.min(start+pageSize,total);
+  var pageData=filteredData.slice(start,end);
+
+  var catDef =getCategoryDef(curPlant,curCategory);
+  var catIcon=catDef?catDef.icon:'&#128203;';
+  var catLbl =catDef?catDef.label:'PR';
+
+  var html='';
+
+  /* Sticky header */
+  html+='<div class="sticky-top">'+
+        '<div class="pg-hdr">'+
+        '<div class="pg-title">'+
+        catIcon+' '+catLbl+' &mdash; '+
+        getPlantLabel(curPlant)+'</div>'+
+        '<div class="pg-sub">'+
+        total+' PR menunggu approval';
+  if (curEstkzFilter==='MRP')
+    html+=' &mdash; <span style="color:var(--info);'+
+          'font-weight:700;">MRP only</span>';
+  else if (curEstkzFilter==='NONMRP')
+    html+=' &mdash; <span style="color:var(--warning);'+
+          'font-weight:700;">Non-MRP only</span>';
+  html+='</div></div></div>';
+
+
+  /* Sticky toolbar */
+  html+='<div class="sticky-toolbar">'+
+        '<div class="toolbar">';
+
+  if (isApprover)
+    html+='<button class="btn-selall"'+
+          ' id="btnSelAll"'+
+          ' onclick="toggleSelectAll()">'+
+          '&#9744; Select All</button>';
+
+  html+='<div class="search-wrap">'+
+        '<span>&#128269;</span>'+
+        '<input type="text" id="searchInp"'+
+        ' placeholder="Cari No PR, Pembuat..."'+
+        ' value="'+escHtml(searchKw)+'"'+
+        ' onkeydown="if(event.key===\'Enter\')'+
+        'onSearchTrigger(this.value)"'+
+        ' onblur="onSearchTrigger(this.value)">'+
+        '</div>';
+
+  html+='<select class="page-size-select"'+
+        ' onchange="changePageSize('+
+        'parseInt(this.value))">';
+  [10,20,50,0].forEach(function(s){
+    html+='<option value="'+s+'"'+
+          (pageSize===s?' selected':'')+'>'+
+          (s===0?'All':s+' per page')+
+          '</option>';
+  });
+  html+='</select>';
+
+  html+='<select class="sort-select"'+
+        ' onchange="onSortChange(this.value)">';
+  html+='<option value="newest"'+
+        (curSort==='newest'?' selected':'')+
+        '>&#8595; Terbaru</option>';
+  html+='<option value="oldest"'+
+        (curSort==='oldest'?' selected':'')+
+        '>&#8593; Terlama</option>';
+  html+='</select>';
+
+  html+='<select class="estkz-select"'+
+        ' onchange="onEstkzFilter(this.value)">';
+  html+='<option value=""'+
+        (curEstkzFilter===''?' selected':'')+
+        '>Semua PR</option>';
+  html+='<option value="MRP"'+
+        (curEstkzFilter==='MRP'?' selected':'')+
+        '>MRP saja (B)</option>';
+  html+='<option value="NONMRP"'+
+        (curEstkzFilter==='NONMRP'
+          ?' selected':'')+
+        '>Non-MRP saja</option>';
+  html+='</select>';
+
+  html+='<div class="expand-bar">'+
+        '<button class="btn-exp"'+
+        ' id="btnToggleExpand"'+
+        ' onclick="toggleExpandAll()">'+
+        (allExpanded?'&#9650; Collapse':'&#9660; Expand')+
+        '</button></div>';
+
+  html+='<div class="pg-count">'+
+        (total!==allData.length
+          ?total+' of '+allData.length:total)+
+        ' PR</div>';
+
+  html+='</div></div>';
+
+  /* Cards */
+  html+='<div id="cardContainer">';
+
+  if (total===0) {
+    html+='<div class="empty"'+
+          ' style="padding:50px 20px;">'+
+          '<div class="empty-ico">&#128270;</div>'+
+          '<div class="empty-txt">'+
+          (curEstkzFilter
+            ?'Tidak ada PR '+
+              (curEstkzFilter==='MRP'
+                ?'MRP':'Non-MRP')+' pending'
+            :'Tidak ada '+catLbl+' pending')+
+          '</div></div>';
+  } else {
+    pageData.forEach(function(pr, idx){
+      var waers  =pr.waers||'IDR';
+      var amt    =fmtAmt(pr.total_value,waers);
+      var isMRP  =(pr.estkz==='B');
+      var ecls   =isMRP?'b-mrp':'b-nonmrp';
+      var elbl   =getEstkzLabel(pr.estkz);
+      var itCnt  =parseInt(pr.item_count)||0;
+      var delay  =Math.min(idx,8)*28;
+
+      html+='<div class="po-card'+
+            (allExpanded?' expanded':'')+
+            '" id="card_'+pr.banfn+
+            '" style="animation-delay:'+delay+'ms"'+
+            ' onclick="toggleExpand(\''+
+            pr.banfn+'\')">';
+
+      html+='<div class="card-top">';
+      if (isApprover)
+        html+='<input type="checkbox"'+
+              ' class="card-cb"'+
+              ' data-banfn="'+pr.banfn+'"'+
+              (selBanfns[pr.banfn]?' checked':'')+
+              ' onclick="event.stopPropagation();'+
+              'toggleSelect(\''+pr.banfn+'\')">';
+
+      html+='<span class="card-num">'+
+            pr.banfn+'</span>';
+      html+='<span class="badge b-pending">'+
+            'In Release</span>';
+      html+='<span class="badge b-plant">'+
+            escHtml(pr.werks)+' '+
+            escHtml(PLANT_LABELS[pr.werks]||'')+
+            '</span>';
+      html+='<span class="badge '+ecls+'">'+
+            escHtml(elbl)+'</span>';
+      if (itCnt>0)
+        html+='<span class="badge b-items">'+
+              itCnt+' item</span>';
+
+      html+='<div class="card-amount">'+
+            '<div class="card-amount-val">'+
+            amt+'</div>'+
+            '<span class="card-amount-lbl">'+
+            waers+' Total</span></div>';
+
+      html+='</div>'; /* card-top */
+
+      html+='<div class="card-meta">';
+      html+='<div><div class="meta-lbl">'+
+            'Dibuat Oleh</div>'+
+            '<div class="meta-val">'+
+            escHtml(pr.ernam_full||pr.ernam)+
+            '</div></div>';
+      html+='<div><div class="meta-lbl">'+
+            'Deskripsi</div>'+
+            '<div class="meta-val"'+
+            ' style="font-size:12px;">'+
+            escHtml(pr.txz01||'-')+
+            '</div></div>';
+      html+='<div><div class="meta-lbl">'+
+            'Purch. Group</div>'+
+            '<div class="meta-val">'+
+            escHtml(pr.ekgrp||'-')+
+            '</div></div>';
+      html+='<div><div class="meta-lbl">'+
+            'Tgl PR</div>'+
+            '<div class="meta-val">'+
+            escHtml(pr.badat||'-')+
+            '</div></div>';
+      html+='</div>'; /* card-meta */
+
+      html+='<div class="card-detail"'+
+            ' id="det_'+pr.banfn+'"'+
+            ' onclick="event.stopPropagation()">'+
+            '<div class="card-detail-inner">';
+      html+='<div id="detContent_'+pr.banfn+'">';
+      html+='<div style="padding:16px;'+
+            'text-align:center;'+
+            'color:var(--muted);font-size:13px;">'+
+            '<div class="lo-spin"'+
+            ' style="width:16px;height:16px;'+
+            'border-width:2px;'+
+            'margin:0 auto 8px;"></div>'+
+            'Expand untuk memuat detail...</div>';
+      html+='</div></div></div>';
+      html+='</div>'; /* po-card */
+    });
+  }
+
+  html+='</div>'; /* cardContainer */
+  html+=renderPagination(
+    total,totalPages,start,end);
+
+  document.getElementById('mainContent')
+    .innerHTML=html;
+
+  observeToolbarOffset();
+
+  if (isApprover&&total>0){
+    document.getElementById('fab').className=
+      'fab show';
+    updateFabInfo();
+  } else {
+    document.getElementById('fab').className='fab';
+  }
+
+  if (allExpanded){
+    pageData.forEach(function(pr){
+      loadDetail(pr.banfn);
+    });
+  }
+}
+
+/* ================================================================
+   RENDER HISTORY TABLE (approve & reject)
+   ================================================================ */
+function renderHistTable(data,type) {
+  histData=data;
+  histType=type;
+  histCurPage=1;
+  histSearchKw='';
+  renderHistContent();
+}
+
+/* ================================================================
+   BUILD HISTORY TABLE
+   ================================================================ */
+function buildHistTable(data,type) {
+  var isApp=(type==='approve');
+  var byColor=isApp?'color:var(--success);':'color:var(--danger);';
+
+  if (data.length===0){
+    return '<div class="empty"'+
+           ' style="padding:50px 20px;">'+
+           '<div class="empty-ico">'+
+           '&#128270;</div>'+
+           '<div class="empty-txt">'+
+           'Tidak ada history '+
+           (isApp?'approve':'reject')+
+           '</div></div>';
+  }
+
+  var html=
+    '<div class="hist-table-wrap">'+
+    '<table class="hist-table">'+
+    '<thead><tr>'+
+    '<th>No PR</th>'+
+    '<th>Item</th>'+
+    '<th>Deskripsi</th>'+
+    '<th>Dibuat Oleh</th>'+
+    '<th>Tgl PR</th>'+
+    '<th class="num">Qty</th>'+
+    '<th>UoM</th>'+
+    '<th class="num">Harga</th>'+
+    '<th class="num">Total</th>'+
+    '<th>Curr</th>'+
+    '<th>PGrp</th>'+
+    (isApp
+      ?'<th>Diapprove Oleh</th>'+
+       '<th>Tgl Approve</th>'+
+       '<th>Jam</th>'
+      :'<th>Direject Oleh</th>'+
+       '<th>Tgl Reject</th>'+
+       '<th>Jam</th>'+
+       '<th>Alasan</th>')+
+    '</tr></thead><tbody>';
+
+  data.forEach(function(h){
+    var w=h.waers||'IDR';
+
+    html+='<tr>';
+    html+='<td style="font-family:\'DM Mono\','+
+          'monospace;font-weight:600;'+
+          'color:var(--primary);">'+
+          escHtml(h.banfn)+'</td>';
+    html+='<td style="font-family:\'DM Mono\','+
+          'monospace;font-size:12px;">'+
+          escHtml(h.bnfpo)+'</td>';
+    html+='<td style="font-weight:500;'+
+          'max-width:180px;">'+
+          escHtml(h.txz01||'-')+'</td>';
+    html+='<td>'+escHtml(h.ernam||'-')+'</td>';
+    html+='<td style="color:var(--muted);'+
+          'white-space:nowrap;">'+
+          escHtml(h.erdat||'-')+'</td>';
+    html+='<td class="num">'+
+          fmtQty(h.menge)+'</td>';
+    html+='<td><span class="chip">'+
+          escHtml(h.meins||'-')+'</span></td>';
+    html+='<td class="num">'+
+          fmtAmt(h.preis,w)+'</td>';
+    html+='<td class="num" style="font-weight:700;">'+
+          fmtAmt(h.total,w)+'</td>';
+    html+='<td><span class="chip '+
+          curClass(w)+'">'+
+          escHtml(w)+'</span></td>';
+    html+='<td><span class="chip">'+
+          escHtml(h.ekgrp||'-')+'</span></td>';
+
+    if (isApp){
+      html+='<td style="font-weight:600;'+
+            byColor+'">'+
+            escHtml(h.app_by||'-')+'</td>';
+      html+='<td style="color:var(--muted);'+
+            'white-space:nowrap;">'+
+            escHtml(h.app_at||'-')+'</td>';
+      html+='<td style="color:var(--muted);'+
+            'font-size:12px;">'+
+            escHtml(h.app_tm||'-')+'</td>';
+    } else {
+      html+='<td style="font-weight:600;'+
+            byColor+'">'+
+            escHtml(h.del_by||'-')+'</td>';
+      html+='<td style="color:var(--muted);'+
+            'white-space:nowrap;">'+
+            escHtml(h.del_at||'-')+'</td>';
+      html+='<td style="color:var(--muted);'+
+            'font-size:12px;">'+
+            escHtml(h.del_tm||'-')+'</td>';
+      html+='<td style="font-size:12px;'+
+            'max-width:180px;">'+
+            escHtml(h.reason||'-')+'</td>';
+    }
+    html+='</tr>';
+  });
+
+  html+='</tbody></table></div>';
+  return html;
+}
+
+/* search & pagination di history */
+var histSearchTimer=null;
+
+function onHistSearch(val) {
+  clearTimeout(histSearchTimer);
+  histSearchTimer=setTimeout(function(){
+    histSearchKw=val; histCurPage=1;
+    renderHistContent();
+  },300);
+}
+
+function renderHistContent() {
+  var isApp=(histType==='approve');
+  var title=isApp
+    ?'&#10003; History Approve &mdash; '
+    :'&#128465; History Reject &mdash; ';
+  var color=isApp
+    ?'var(--success-d)':'var(--danger-d)';
+
+  var kw=histSearchKw.trim().toLowerCase();
+  var filtered=kw
+    ?histData.filter(function(h){
+        return h.banfn.toLowerCase().indexOf(kw)>-1||
+          (h.txz01&&h.txz01.toLowerCase().indexOf(kw)>-1)||
+          (h.ernam&&h.ernam.toLowerCase().indexOf(kw)>-1)||
+          ((h.app_by||h.del_by)&&
+           (h.app_by||h.del_by).toLowerCase().indexOf(kw)>-1);
+      })
+    :histData;
+
+  var total=filtered.length;
+  var totalPages=histPageSize===0
+    ?1:Math.ceil(total/histPageSize)||1;
+  if (histCurPage>totalPages) histCurPage=1;
+  var start=histPageSize===0
+    ?0:(histCurPage-1)*histPageSize;
+  var end=histPageSize===0
+    ?total:Math.min(start+histPageSize,total);
+  var pageData=filtered.slice(start,end);
+
+  var html='';
+  html+='<div class="sticky-top">'+
+        '<div class="pg-hdr">'+
+        '<div class="pg-title"'+
+        ' style="color:'+color+';">'+
+        title+getPlantLabel(curPlant)+
+        '</div>'+
+        '<div class="pg-sub">'+
+        total+' record '+
+        (isApp?'approved':'rejected')+
+        '</div></div></div>';
+
+  html+='<div style="margin-bottom:16px;'+
+        ' display:flex;align-items:center;'+
+        ' gap:10px;">'+
+        '<div class="search-wrap"'+
+        ' style="max-width:340px;">'+
+        '<span>&#128269;</span>'+
+        '<input type="text"'+
+        ' id="histSearchInp"'+
+        ' placeholder="Cari No PR, Item..."'+
+        ' value="'+escHtml(histSearchKw)+'"'+
+        ' oninput="onHistSearch(this.value)">'+
+        '</div>'+
+        '<select class="page-size-select"'+
+        ' onchange="histChangePageSize('+
+        'parseInt(this.value))">';
+  [10,25,50,0].forEach(function(s){
+    html+='<option value="'+s+'"'+
+          (histPageSize===s?' selected':'')+'>'+
+          (s===0?'All':s+' per page')+
+          '</option>';
+  });
+  html+='</select></div>';
+
+  html+='<div id="histTableWrap">';
+  html+=buildHistTable(pageData,histType);
+  html+='</div>';
+
+  if (histPageSize!==0&&totalPages>1){
+    html+=renderHistPagination(total,totalPages,start,end,histCurPage);
+  } else {
+    html+='<div class="pagination-bar">'+
+          '<span class="pg-info">'+
+          'Showing all '+total+' records</span></div>';
+  }
+
+  document.getElementById('mainContent').innerHTML=html;
+  document.getElementById('fab').className='fab';
+}
+
+function renderHistPagination(total,totalPages,start,end,curPg) {
+  var html='<div class="pagination-bar">';
+  html+='<button class="pg-btn"'+
+        ' onclick="histGoPage(1)"'+
+        (curPg<=1?' disabled':'')+
+        '>&#171;</button>';
+  html+='<button class="pg-btn"'+
+        ' onclick="histGoPage('+(curPg-1)+')"'+
+        (curPg<=1?' disabled':'')+
+        '>&#8249;</button>';
+
+  var sp=Math.max(1,curPg-2);
+  var ep=Math.min(totalPages,curPg+2);
+
+  if (sp>1){
+    html+='<button class="pg-btn"'+
+          ' onclick="histGoPage(1)">1</button>';
+    if (sp>2)
+      html+='<span class="pg-info">...</span>';
+  }
+  for (var i=sp;i<=ep;i++){
+    html+='<button class="pg-btn'+
+          (i===curPg?' active':'')+'"'+
+          ' onclick="histGoPage('+i+')">'+
+          i+'</button>';
+  }
+  if (ep<totalPages){
+    if (ep<totalPages-1)
+      html+='<span class="pg-info">...</span>';
+    html+='<button class="pg-btn"'+
+          ' onclick="histGoPage('+totalPages+')">'+
+          totalPages+'</button>';
+  }
+  html+='<button class="pg-btn"'+
+        ' onclick="histGoPage('+(curPg+1)+')"'+
+        (curPg>=totalPages?' disabled':'')+
+        '>&#8250;</button>';
+  html+='<button class="pg-btn"'+
+        ' onclick="histGoPage('+totalPages+')"'+
+        (curPg>=totalPages?' disabled':'')+
+        '>&#187;</button>';
+  html+='<span class="pg-info">'+
+        (start+1)+'&ndash;'+end+
+        ' of '+total+'</span>';
+  html+='</div>';
+  return html;
+}
+
+function histGoPage(pg) {
+  var total=histData.length;
+  var tp=histPageSize===0
+    ?1:Math.ceil(total/histPageSize)||1;
+  if (pg<1) pg=1;
+  if (pg>tp) pg=tp;
+  histCurPage=pg;
+  renderHistContent();
+}
+
+function histChangePageSize(val) {
+  histPageSize=val; histCurPage=1;
+  renderHistContent();
+}
+
+/* ================================================================
+   PAGINATION
+   ================================================================ */
+function renderPagination(total,totalPages,
+                          start,end) {
+  if (pageSize===0||totalPages<=1){
+    return '<div class="pagination-bar">'+
+           '<span class="pg-info">'+
+           'Showing all '+total+' PR</span></div>';
+  }
+
+  var html='<div class="pagination-bar">';
+  html+='<button class="pg-btn"'+
+        ' onclick="goPage(1)"'+
+        (curPage<=1?' disabled':'')+
+        '>&#171;</button>';
+  html+='<button class="pg-btn"'+
+        ' onclick="goPage('+(curPage-1)+')"'+
+        (curPage<=1?' disabled':'')+
+        '>&#8249;</button>';
+
+  var sp=Math.max(1,curPage-2);
+  var ep=Math.min(totalPages,curPage+2);
+
+  if (sp>1){
+    html+='<button class="pg-btn"'+
+          ' onclick="goPage(1)">1</button>';
+    if (sp>2)
+      html+='<span class="pg-info">...</span>';
+  }
+  for (var i=sp;i<=ep;i++){
+    html+='<button class="pg-btn'+
+          (i===curPage?' active':'')+'"'+
+          ' onclick="goPage('+i+')">'+
+          i+'</button>';
+  }
+  if (ep<totalPages){
+    if (ep<totalPages-1)
+      html+='<span class="pg-info">...</span>';
+    html+='<button class="pg-btn"'+
+          ' onclick="goPage('+totalPages+')">'+
+          totalPages+'</button>';
+  }
+  html+='<button class="pg-btn"'+
+        ' onclick="goPage('+(curPage+1)+')"'+
+        (curPage>=totalPages?' disabled':'')+
+        '>&#8250;</button>';
+  html+='<button class="pg-btn"'+
+        ' onclick="goPage('+totalPages+')"'+
+        (curPage>=totalPages?' disabled':'')+
+        '>&#187;</button>';
+  html+='<span class="pg-info">'+
+        (start+1)+'&ndash;'+end+
+        ' of '+total+'</span>';
+  html+='</div>';
+  return html;
+}
+
+function goPage(pg) {
+  var tp=pageSize===0?1
+    :Math.ceil(filteredData.length/pageSize)||1;
+  if (pg<1) pg=1;
+  if (pg>tp) pg=tp;
+  curPage=pg; selBanfns={};
+  renderList();
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+function changePageSize(val) {
+  pageSize=val; curPage=1;
+  selBanfns={}; renderList();
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+function onSearchTrigger(val) {
+  searchKw=val.trim(); curPage=1;
+  selBanfns={}; renderList();
+}
+
+function onSortChange(val) {
+  curSort=val; curPage=1;
+  renderList();
+}
+
+/* ================================================================
+   EXPAND / COLLAPSE
+   ================================================================ */
+function toggleExpand(banfn) {
+  var card=document.getElementById(
+    'card_'+banfn);
+  if (!card) return;
+  var wasExp=card.classList.contains('expanded');
+  card.classList.toggle('expanded');
+  if (!wasExp) loadDetail(banfn);
+}
+
+function expandAll() {
+  allExpanded=true;
+  var s=pageSize===0?0:(curPage-1)*pageSize;
+  var e=pageSize===0?filteredData.length
+    :Math.min(s+pageSize,filteredData.length);
+  for (var i=s;i<e;i++){
+    var card=document.getElementById(
+      'card_'+filteredData[i].banfn);
+    if (card){
+      card.classList.add('expanded');
+      loadDetail(filteredData[i].banfn);
+    }
+  }
+}
+
+function collapseAll() {
+  allExpanded=false;
+  document.querySelectorAll('.po-card')
+    .forEach(function(c){
+      c.classList.remove('expanded');
+    });
+}
+
+function toggleExpandAll() {
+  if (allExpanded) { collapseAll(); }
+  else { expandAll(); }
+  var btn=document.getElementById('btnToggleExpand');
+  if (btn) btn.innerHTML=
+    allExpanded?'&#9650; Collapse':'&#9660; Expand';
+}
+
+/* ================================================================
+   LOAD DETAIL
+   ================================================================ */
+function loadDetail(banfn) {
+  var el=document.getElementById(
+    'detContent_'+banfn);
+  if (!el||el.dataset.loaded==='1') return;
+  el.dataset.loaded='1';
+
+  fetch(API_URL+'?action=GET_DETAIL'+
+        '&banfn='+encodeURIComponent(banfn))
+    .then(function(r){return r.json();})
+    .then(function(res){
+      var items=res.data||[];
+      if (items.length===0){
+        el.innerHTML=
+          '<div style="padding:12px;'+
+          'font-size:13px;color:var(--muted);'+
+          'text-align:center;">'+
+          'Tidak ada item.</div>';
+ return;
+  }
+  var waers=items[0].waers||'IDR';
+  var html=
+    '<div class="card-detail-scroll">'+
+    '<table class="detail-tbl"><thead><tr>'+
+    '<th>Item</th><th>Material</th>'+
+    '<th>Deskripsi</th>'+
+    '<th class="num">Qty</th>'+
+    '<th>UoM</th>'+
+    '<th class="num">Harga/Unit</th>'+
+    '<th class="num">Total</th>'+
+    '<th>Curr</th>'+
+    '<th>Tgl Butuh</th>'+
+    '</tr></thead><tbody>';
+
+  items.forEach(function(it){
+    var w=it.waers||waers;
+    var cc=curClass(w);
+    html+='<tr>';
+    html+='<td style="font-family:\'DM Mono\','+
+          'monospace;font-weight:600;'+
+          'color:var(--primary-d);">'+
+          escHtml(it.bnfpo)+'</td>';
+    html+='<td style="font-family:\'DM Mono\','+
+          'monospace;font-size:12px;">'+
+          escHtml(it.matnr||'-')+'</td>';
+    html+='<td style="font-weight:500;">'+
+          escHtml(it.maktx||it.txz01||'-')+
+          '</td>';
+    html+='<td class="num">'+
+          fmtQty(it.menge)+'</td>';
+    html+='<td><span class="chip">'+
+          escHtml(it.meins)+'</span></td>';
+    html+='<td class="num">'+
+          fmtAmt(it.preis,w)+'</td>';
+    html+='<td class="num"'+
+          ' style="font-weight:700;">'+
+          fmtAmt(it.total,w)+'</td>';
+    html+='<td><span class="chip '+cc+'">'+
+          escHtml(w)+'</span></td>';
+    html+='<td style="color:var(--muted);">'+
+          escHtml(it.lfdat||'-')+'</td>';
+    html+='</tr>';
+  });
+  html+='</tbody></table></div>';
+  el.innerHTML=html;
+})
+.catch(function(){
+  el.innerHTML=
+    '<div style="padding:12px;'+
+    'font-size:13px;color:var(--danger);'+
+    'text-align:center;">'+
+    'Gagal memuat detail.</div>';
+});
+}
+/* ================================================================
+
+SELECT / DESELECT
+
+================================================================ */
+
+function toggleSelect(banfn) {
+
+if (!isApprover) return;
+
+if (selBanfns[banfn]) delete selBanfns[banfn];
+
+else selBanfns[banfn]=true;
+
+updateFabInfo(); syncCheckboxes();
+
+}
+function toggleSelectAll() {
+
+if (!isApprover) return;
+
+var s=pageSize===0?0:(curPage-1)*pageSize;
+
+var e=pageSize===0?filteredData.length
+
+:Math.min(s+pageSize,filteredData.length);
+var allSel=true;
+
+for (var i=s;i<e;i++){
+
+if (!selBanfns[filteredData[i].banfn]){
+
+allSel=false; break;
+
+}
+
+}
+
+for (var i=s;i<e;i++){
+
+var bn=filteredData[i].banfn;
+
+if (allSel) delete selBanfns[bn];
+
+else selBanfns[bn]=true;
+
+}
+var btn=document.getElementById('btnSelAll');
+
+if (btn) btn.innerHTML=allSel
+
+?'☐ Select All'
+
+:'☑ Deselect All';
+updateFabInfo(); syncCheckboxes();
+
+}
+function syncCheckboxes() {
+
+document.querySelectorAll('.card-cb')
+
+.forEach(function(cb){
+
+cb.checked=!!selBanfns[cb.dataset.banfn];
+
+});
+
+}
+function updateFabInfo() {
+
+var cnt=Object.keys(selBanfns).length;
+
+var el=document.getElementById('fabInfo');
+
+if (el) el.textContent=cnt+' PR dipilih';
+
+}
+
+</script>
+<script>
+/* ================================================================
+   SHOW MODAL APPROVE
+   ================================================================ */
+function showModalApprove() {
+  if (!isApprover) return;
+  var cnt=Object.keys(selBanfns).length;
+  if (cnt===0){
+    showToast('E',
+      'Pilih minimal 1 PR terlebih dahulu');
+    return;
+  }
+  var desc=document.getElementById(
+    'modalApproveDesc');
+  if (desc) desc.textContent=
+    'Approve '+cnt+' PR yang dipilih?';
+  document.getElementById('modalApprove')
+    .classList.add('show');
+}
+
+/* ================================================================
+   SHOW MODAL REJECT
+   ================================================================ */
+function showModalReject() {
+  if (!isApprover) return;
+  var cnt=Object.keys(selBanfns).length;
+  if (cnt===0){
+    showToast('E',
+      'Pilih minimal 1 PR terlebih dahulu');
+    return;
+  }
+  var desc=document.getElementById(
+    'modalRejectDesc');
+  if (desc) desc.textContent=
+    'Reject & Delete '+cnt+' PR yang dipilih?';
+  document.getElementById('rejectNotes').value='';
+  document.getElementById('modalReject')
+    .classList.add('show');
+}
+
+/* ================================================================
+   CONFIRM APPROVE
+   ================================================================ */
+function confirmApprove() {
+  closeModal('modalApprove');
+  var banfns=Object.keys(selBanfns);
+  if (banfns.length===0) return;
+  processAction(banfns,'approve','');
+}
+
+/* ================================================================
+   CONFIRM REJECT
+   ================================================================ */
+function confirmReject() {
+  closeModal('modalReject');
+  var banfns=Object.keys(selBanfns);
+  if (banfns.length===0) return;
+  var notes=document.getElementById(
+    'rejectNotes').value||'';
+  processAction(banfns,'delete',notes);
+}
+
+/* ================================================================
+   PROCESS ACTION — sequential one by one
+   ================================================================ */
+function processAction(banfns,action,notes) {
+  if (!isApprover) return;
+
+  var total =banfns.length;
+  var ok    =0;
+  var errs  =[];
+  var proc  =0;
+  var lo    =document.getElementById('lo');
+  var loBox =lo?lo.querySelector('.lo-box'):null;
+
+  if (lo) lo.classList.add('show');
+  if (loBox) loBox.innerHTML=
+    'Processing 0 / '+total+'...'+
+    '<div class="lo-spin"></div>';
+
+  /* Simpan state untuk reload setelah selesai */
+  var savedPlant    =curPlant;
+  var savedCategory =curCategory;
+  var savedBsart    =curBsart;
+  var savedMode     =curMode;
+  var savedEstkz    =curEstkzFilter;
+
+  function doNext(idx) {
+    if (idx>=banfns.length){
+
+      /* Semua selesai */
+      if (lo) lo.classList.remove('show');
+
+      /* Toast result */
+      if (ok>0){
+        var lbl=action==='approve'
+          ?'approve':'reject & delete';
+        showToast('S',
+          ok+' PR berhasil di-'+lbl);
+      }
+      if (errs.length>0){
+        showToast('E',
+          errs.slice(0,3).join(' | ')+
+          (errs.length>3
+            ?' (+'+(errs.length-3)+' lagi)':''));
+      }
+
+      /* Reset selection */
+      selBanfns={};
+
+      /* Reload sidebar counts */
+      loadSidebarData();
+
+      /* Reload view setelah delay */
+      setTimeout(function(){
+        curPlant       =savedPlant;
+        curCategory    =savedCategory;
+        curBsart       =savedBsart;
+        curMode        =savedMode;
+        curEstkzFilter =savedEstkz;
+        curPage        =1;
+        allExpanded    =false;
+        showLoading();
+
+        if (savedMode==='pending'){
+          fetchList(savedEstkz);
+        } else if (savedMode==='hist_app'){
+          fetchHistApp();
+        } else {
+          fetchHistRej();
+        }
+      },700);
+
+      return;
+    }
+
+    proc++;
+    if (loBox) loBox.innerHTML=
+      'Processing '+proc+' / '+total+'...'+
+      '<div class="lo-spin"></div>';
+
+    var banfn=banfns[idx];
+    var body =
+      'action=PROCESS'+
+      '&banfn='+encodeURIComponent(banfn)+
+      '&pr_action='+encodeURIComponent(action)+
+      '&notes='+encodeURIComponent(notes);
+
+    fetch(API_URL,postOpts(body))
+      .then(function(r){return r.json();})
+      .then(function(res){
+        if (res.status==='S'){
+          ok++;
+
+          /* Animate card fade out */
+          var card=document.getElementById(
+            'card_'+banfn);
+          if (card){
+            card.style.transition=
+              'opacity .3s ease,'+
+              'max-height .4s ease,'+
+              'margin-bottom .4s ease';
+            card.style.opacity     ='0';
+            card.style.maxHeight   ='0';
+            card.style.overflow    ='hidden';
+            card.style.marginBottom='0';
+          }
+        } else {
+          errs.push(
+            banfn+': '+
+            (res.message||'Unknown error'));
+        }
+        doNext(idx+1);
+      })
+      .catch(function(){
+        errs.push(banfn+': Connection error');
+        doNext(idx+1);
+      });
+  }
+
+  doNext(0);
+}
+
+/* ================================================================
+   INIT
+   ================================================================ */
+init();
+</script>
+</body>
+</html>
