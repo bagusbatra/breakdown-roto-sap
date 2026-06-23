@@ -283,6 +283,17 @@ CASE lv_action.
           lv_s_2000_roto TYPE string,
           lv_s_2000_PRK9 TYPE string,
           lv_s_2000_PRKS TYPE string,
+          lv_s_1000_roto TYPE string,
+          lv_s_1000_PRK9 TYPE string,
+          lv_s_1000_PRKS TYPE string,
+          lv_s_1001_roto TYPE string,
+          lv_s_1001_PRK9 TYPE string,
+          lv_s_1001_PRKS TYPE string,
+          lv_s_1100_roto TYPE string,
+          lv_s_1100_PRK9 TYPE string,
+          lv_s_1100_PRKS TYPE string,
+          lv_s_3000_roto TYPE string,
+          lv_s_3000_PRKS TYPE string,
           lv_rj_1200   TYPE i,
           lv_rj_1300   TYPE i,
           lv_rj_2000   TYPE i,
@@ -303,43 +314,55 @@ CASE lv_action.
     count_pending 'ROTO' '1300' lv_s_1300_roto.
     count_pending 'RSBR,PRK9' '1300' lv_s_1300_PRK9.
     count_pending 'PRKS' '1300' lv_s_1300_PRKS.
-    " Plant 2000 digabung ke Surabaya (1200)
+    " Plant 2000, 1000, 1001, 1100 digabung ke Surabaya (1200)
     count_pending 'ROTO' '2000' lv_s_2000_roto.
     count_pending 'RSBR,PRK9' '2000' lv_s_2000_PRK9.
     count_pending 'PRKS' '2000' lv_s_2000_PRKS.
+    count_pending 'ROTO' '1000' lv_s_1000_roto.
+    count_pending 'RSBR,PRK9' '1000' lv_s_1000_PRK9.
+    count_pending 'PRKS' '1000' lv_s_1000_PRKS.
+    count_pending 'ROTO' '1001' lv_s_1001_roto.
+    count_pending 'RSBR,PRK9' '1001' lv_s_1001_PRK9.
+    count_pending 'PRKS' '1001' lv_s_1001_PRKS.
+    count_pending 'ROTO' '1100' lv_s_1100_roto.
+    count_pending 'RSBR,PRK9' '1100' lv_s_1100_PRK9.
+    count_pending 'PRKS' '1100' lv_s_1100_PRKS.
+    " Plant 3000 digabung ke Semarang (1300)
+    count_pending 'ROTO' '3000' lv_s_3000_roto.
+    count_pending 'PRKS' '3000' lv_s_3000_PRKS.
 
-    " History Reject Surabaya + 2000
+    " History Reject Surabaya + 2000 + 1000 + 1001 + 1100
     CLEAR lt_rj_uniq.
     SELECT banfn FROM zroto_rej_hist
       INTO CORRESPONDING FIELDS OF TABLE lt_rj_uniq
-      WHERE werks IN ('1200','2000').
+      WHERE werks IN ('1200','2000','1000','1001','1100').
     lv_rj_1200 = lines( lt_rj_uniq ).
     lv_sr_1200 = lv_rj_1200.
     CONDENSE lv_sr_1200 NO-GAPS.
 
-    " History Reject Semarang
+    " History Reject Semarang + 3000
     CLEAR lt_rj_uniq.
     SELECT banfn FROM zroto_rej_hist
       INTO CORRESPONDING FIELDS OF TABLE lt_rj_uniq
-      WHERE werks = '1300'.
+      WHERE werks IN ('1300','3000').
     lv_rj_1300 = lines( lt_rj_uniq ).
     lv_sr_1300 = lv_rj_1300.
     CONDENSE lv_sr_1300 NO-GAPS.
 
-    " History Approve Surabaya + 2000
+    " History Approve Surabaya + 2000 + 1000 + 1001 + 1100
     CLEAR lt_ra_uniq.
     SELECT banfn FROM zroto_app_hist
       INTO CORRESPONDING FIELDS OF TABLE lt_ra_uniq
-      WHERE werks IN ('1200','2000').
+      WHERE werks IN ('1200','2000','1000','1001','1100').
     lv_ra_1200 = lines( lt_ra_uniq ).
     lv_sa_1200 = lv_ra_1200.
     CONDENSE lv_sa_1200 NO-GAPS.
 
-    " History Approve Semarang
+    " History Approve Semarang + 3000
     CLEAR lt_ra_uniq.
     SELECT banfn FROM zroto_app_hist
       INTO CORRESPONDING FIELDS OF TABLE lt_ra_uniq
-      WHERE werks = '1300'.
+      WHERE werks IN ('1300','3000').
     lv_ra_1300 = lines( lt_ra_uniq ).
     lv_sa_1300 = lv_ra_1300.
     CONDENSE lv_sa_1300 NO-GAPS.
@@ -350,20 +373,33 @@ CASE lv_action.
       lv_is_app_s = 'false'.
     ENDIF.
 
-    " Gabung plant 2000 ke Surabaya (1200)
+    " Gabung plant 2000, 1000, 1001, 1100 ke Surabaya (1200)
     DATA: lv_tmp_i TYPE i.
     lv_tmp_i = lv_s_1200_roto.
-    lv_tmp_i = lv_tmp_i + lv_s_2000_roto.
+    lv_tmp_i = lv_tmp_i + lv_s_2000_roto + lv_s_1000_roto
+             + lv_s_1001_roto + lv_s_1100_roto.
     lv_s_1200_roto = lv_tmp_i.
     CONDENSE lv_s_1200_roto NO-GAPS.
     lv_tmp_i = lv_s_1200_PRK9.
-    lv_tmp_i = lv_tmp_i + lv_s_2000_PRK9.
+    lv_tmp_i = lv_tmp_i + lv_s_2000_PRK9 + lv_s_1000_PRK9
+             + lv_s_1001_PRK9 + lv_s_1100_PRK9.
     lv_s_1200_PRK9 = lv_tmp_i.
     CONDENSE lv_s_1200_PRK9 NO-GAPS.
     lv_tmp_i = lv_s_1200_PRKS.
-    lv_tmp_i = lv_tmp_i + lv_s_2000_PRKS.
+    lv_tmp_i = lv_tmp_i + lv_s_2000_PRKS + lv_s_1000_PRKS
+             + lv_s_1001_PRKS + lv_s_1100_PRKS.
     lv_s_1200_PRKS = lv_tmp_i.
     CONDENSE lv_s_1200_PRKS NO-GAPS.
+
+    " Gabung plant 3000 ke Semarang (1300)
+    lv_tmp_i = lv_s_1300_roto.
+    lv_tmp_i = lv_tmp_i + lv_s_3000_roto.
+    lv_s_1300_roto = lv_tmp_i.
+    CONDENSE lv_s_1300_roto NO-GAPS.
+    lv_tmp_i = lv_s_1300_PRKS.
+    lv_tmp_i = lv_tmp_i + lv_s_3000_PRKS.
+    lv_s_1300_PRKS = lv_tmp_i.
+    CONDENSE lv_s_1300_PRKS NO-GAPS.
 
     " Sembunyikan data plant yang tidak diizinkan utk user ini
     " (KMI-U052 = Surabaya only, KMI-U051 = Semarang only)
@@ -447,7 +483,9 @@ CASE lv_action.
 
     CLEAR: lt_head, lt_items, lt_makt.
 
-    " Saat pilih Surabaya (1200), tampilkan juga data dari plant 2000
+    " Saat pilih Surabaya (1200), tampilkan juga data dari plant
+    " 2000, 1000, 1001, 1100. Saat pilih Semarang (1300), tampilkan
+    " juga data dari plant 3000.
     CLEAR lt_werks_rng.
     lv_werks_line-sign = 'I'.
     lv_werks_line-option = 'EQ'.
@@ -455,6 +493,15 @@ CASE lv_action.
     APPEND lv_werks_line TO lt_werks_rng.
     IF lv_werks = '1200'.
       lv_werks_line-low = '2000'.
+      APPEND lv_werks_line TO lt_werks_rng.
+      lv_werks_line-low = '1000'.
+      APPEND lv_werks_line TO lt_werks_rng.
+      lv_werks_line-low = '1001'.
+      APPEND lv_werks_line TO lt_werks_rng.
+      lv_werks_line-low = '1100'.
+      APPEND lv_werks_line TO lt_werks_rng.
+    ELSEIF lv_werks = '1300'.
+      lv_werks_line-low = '3000'.
       APPEND lv_werks_line TO lt_werks_rng.
     ENDIF.
 
@@ -795,7 +842,9 @@ CASE lv_action.
       EXIT.
     ENDIF.
 
-    " Saat pilih Surabaya (1200), tampilkan juga data dari plant 2000
+    " Saat pilih Surabaya (1200), tampilkan juga data dari plant
+    " 2000, 1000, 1001, 1100. Saat pilih Semarang (1300), tampilkan
+    " juga data dari plant 3000.
     CLEAR lt_werks_rng.
     lv_werks_line-sign = 'I'.
     lv_werks_line-option = 'EQ'.
@@ -803,6 +852,15 @@ CASE lv_action.
     APPEND lv_werks_line TO lt_werks_rng.
     IF lv_werks = '1200'.
       lv_werks_line-low = '2000'.
+      APPEND lv_werks_line TO lt_werks_rng.
+      lv_werks_line-low = '1000'.
+      APPEND lv_werks_line TO lt_werks_rng.
+      lv_werks_line-low = '1001'.
+      APPEND lv_werks_line TO lt_werks_rng.
+      lv_werks_line-low = '1100'.
+      APPEND lv_werks_line TO lt_werks_rng.
+    ELSEIF lv_werks = '1300'.
+      lv_werks_line-low = '3000'.
       APPEND lv_werks_line TO lt_werks_rng.
     ENDIF.
 
@@ -906,7 +964,9 @@ CASE lv_action.
       EXIT.
     ENDIF.
 
-    " Saat pilih Surabaya (1200), tampilkan juga data dari plant 2000
+    " Saat pilih Surabaya (1200), tampilkan juga data dari plant
+    " 2000, 1000, 1001, 1100. Saat pilih Semarang (1300), tampilkan
+    " juga data dari plant 3000.
     CLEAR lt_werks_rng.
     lv_werks_line-sign = 'I'.
     lv_werks_line-option = 'EQ'.
@@ -914,6 +974,15 @@ CASE lv_action.
     APPEND lv_werks_line TO lt_werks_rng.
     IF lv_werks = '1200'.
       lv_werks_line-low = '2000'.
+      APPEND lv_werks_line TO lt_werks_rng.
+      lv_werks_line-low = '1000'.
+      APPEND lv_werks_line TO lt_werks_rng.
+      lv_werks_line-low = '1001'.
+      APPEND lv_werks_line TO lt_werks_rng.
+      lv_werks_line-low = '1100'.
+      APPEND lv_werks_line TO lt_werks_rng.
+    ELSEIF lv_werks = '1300'.
+      lv_werks_line-low = '3000'.
       APPEND lv_werks_line TO lt_werks_rng.
     ENDIF.
 

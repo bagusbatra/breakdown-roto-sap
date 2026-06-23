@@ -983,12 +983,13 @@ body.sb-collapsed .main     { margin-left:0; }
      §U13 ESTKZ FILTER          — onEstkzFilter
      §U14 GET FILTERED          — getFiltered (client-side search)
      §U15 RENDER LIST           — renderList
-     §U16 RENDER HISTORY TABLE  — renderHistTable, applyHistFilter, renderHistView
-     §U17 BUILD HISTORY TABLE   — buildHistTable
+     §U16 RENDER HISTORY TABLE  — renderHistTable, applyHistFilter, renderHistView, groupHistByBanfn
+     §U17 BUILD HISTORY CARDS   — buildHistCards (per No PR, expand/collapse)
      §U18 HISTORY SEARCH        — applyHistSearchCommit, onHistSearchKey, ...
      §U19 PAGINATION            — buildPagination, goPage, changePageSize
      §U20 HISTORY PAGINATION    — renderHistPagination, histGoPage, ...
      §U21 EXPAND / COLLAPSE     — toggleExpand, toggleAll, expandAll, ...
+     §U21b HISTORY EXPAND/COLLAPSE — toggleHistExpand, toggleHistAll, ...
      §U22 LOAD DETAIL           — loadDetail
    ════════════════════════════════════════════════════════════════ */
 
@@ -1001,11 +1002,19 @@ var CUR_USER = '<%=lv_uname2%>';
 
 /* ── Plant Definition ──
    Setiap plant punya: label (nama), categories (bsart yg available).
-   Plant 2000 dikelompokkan ke Surabaya di backend (main.htm). */
+   Plant 2000, 1000, 1001, 1100 dikelompokkan ke Surabaya (1200) di
+   backend (main.htm); plant 3000 dikelompokkan ke Semarang (1300).
+   Plant-plant gabungan ini tidak punya entry sendiri di sidebar
+   (categories kosong) — hanya dipakai utk lookup label (PLANT_LABELS)
+   saat menampilkan baris data per plant di list/history. */
 var PLANT_DEF = {
   '1200': { label:'Surabaya', categories:['ROTO','PRK9','PRKS'] },
   '2000': { label:'Surabaya', categories:[] },
-  '1300': { label:'Semarang', categories:['ROTO','PRKS'] }
+  '1000': { label:'Surabaya', categories:[] },
+  '1001': { label:'Surabaya', categories:[] },
+  '1100': { label:'Surabaya', categories:[] },
+  '1300': { label:'Semarang', categories:['ROTO','PRKS'] },
+  '3000': { label:'Semarang', categories:[] }
 };
 
 /* ── Category Definition ──
@@ -1060,6 +1069,7 @@ var histCurPage       = 1;
 var histFilteredData  = [];
 var histBsartFilter   = '';
 var histSortOrder     = '';
+var histAllExpanded   = false;
 
 /* ════════════════════════════════════════════════════════════════
    §C5  STATE — Sidebar Counts
@@ -1526,6 +1536,10 @@ function switchView(plant,mode,bsart) {
   searchKw       = '';
   allExpanded    = false;
   curEstkzFilter = '';
+  histCurPage    = 1;
+  histBsartFilter= '';
+  histSortOrder  = '';
+  histAllExpanded= false;
 
   var t='Release PR';
   if (mode==='pending' && CATEGORY_DEF[curBsart]) t+=' '+CATEGORY_DEF[curBsart].short;
@@ -1761,6 +1775,7 @@ function renderHistTable(data,type) {
   histData=data;
   histType=type;
   histCurPage=1;
+  histAllExpanded=false;
   applyHistFilter();
 }
 
@@ -1777,7 +1792,8 @@ function applyHistFilter() {
            (h.ernam && h.ernam.toLowerCase().indexOf(kw)>-1) ||
            (h.bsart && (h.bsart.toLowerCase().indexOf(kw)>-1 ||
              getBsartLabel(h.bsart).toLowerCase().indexOf(kw)>-1)) ||
-           ((h.app_by||h.del_by) && (h.app_by||h.del_by).toLowerCase().indexOf(kw)>-1);
+           ((h.app_by||h.del_by) && (h.app_by||h.del_by).toLowerCase().indexOf(kw)>-1) ||
+           (getPlantLabel(h.werks).toLowerCase().indexOf(kw)>-1);
   });
 
   if (histSortOrder === 'asc') {
@@ -1794,18 +1810,43 @@ function applyHistFilter() {
     });
   }
 
-  var totalPages = histPageSize===0 ? 1 : Math.ceil(histFilteredData.length/histPageSize)||1;
+  var totalPages = histPageSize===0 ? 1 : Math.ceil(groupHistByBanfn(histFilteredData).length/histPageSize)||1;
   if (histCurPage>totalPages) histCurPage=1;
   renderHistView();
 }
 
+/* Kelompokkan baris history (per item) jadi per No PR — satu PR
+   bisa banyak item, jadi ditampilkan sebagai satu kartu (konsep
+   sama dengan po-card di list pending). */
+function groupHistByBanfn(rows) {
+  var map={}, order=[];
+  rows.forEach(function(h){
+    if (!map[h.banfn]){
+      map[h.banfn]={
+        banfn:h.banfn, werks:h.werks, bsart:h.bsart,
+        ernam:h.ernam, erdat:h.erdat, waers:h.waers, ekgrp:h.ekgrp,
+        app_by:h.app_by, app_at:h.app_at, app_tm:h.app_tm,
+        del_by:h.del_by, del_at:h.del_at, del_tm:h.del_tm,
+        reason:h.reason,
+        items:[], totalAmt:0
+      };
+      order.push(h.banfn);
+    }
+    map[h.banfn].items.push(h);
+    map[h.banfn].totalAmt += parseNum(h.total)||0;
+  });
+  return order.map(function(b){ return map[b]; });
+}
+
 function renderHistView() {
   var isApp = (histType==='approve');
-  var total = histFilteredData.length;
+  var groups = groupHistByBanfn(histFilteredData);
+  var total = groups.length;
   var totalPages = histPageSize===0 ? 1 : Math.ceil(total/histPageSize)||1;
+  if (histCurPage>totalPages) histCurPage=1;
   var start = histPageSize===0 ? 0 : (histCurPage-1)*histPageSize;
   var end   = histPageSize===0 ? total : Math.min(start+histPageSize,total);
-  var pageData = histFilteredData.slice(start,end);
+  var pageGroups = groups.slice(start,end);
 
   var title = isApp ? '&#10003; History Approve &mdash; ' : '&#128465; History Reject &mdash; ';
   var color = isApp ? 'var(--success-d)' : 'var(--danger-d)';
@@ -1813,12 +1854,12 @@ function renderHistView() {
   var html='';
   html+='<div class="sticky-top"><div class="pg-hdr">';
   html+='<div class="pg-title" style="color:'+color+';">'+title+getPlantLabel(curPlant)+'</div>';
-  html+='<div class="pg-sub">'+total+' record '+(isApp?'approved':'rejected')+'</div>';
+  html+='<div class="pg-sub">'+total+' PR '+(isApp?'approved':'rejected')+'</div>';
   html+='</div></div>';
 
   html+='<div class="sticky-toolbar"><div class="toolbar">';
   html+='<div class="search-wrap"><span>&#128269;</span>'+
-        '<input type="text" id="histSearchInp" placeholder="Cari No PR, Item... (Enter)"'+
+        '<input type="text" id="histSearchInp" placeholder="Cari No PR, Item, Plant... (Enter)"'+
         ' value="'+(document.getElementById('histSearchInp')?escHtml(document.getElementById('histSearchInp').value):'')+'"'+
         ' onkeydown="onHistSearchKey(event)" onblur="onHistSearchBlur()"></div>';
 
@@ -1842,10 +1883,13 @@ function renderHistView() {
   });
   html+='</select>';
 
-  html+='<div class="pg-count">'+total+' record</div>';
+  html+='<div class="expand-bar"><button class="btn-exp" id="histBtnAll" onclick="toggleHistAll()">'+
+        (histAllExpanded?'&#9650; Collapse':'&#9660; Expand')+'</button></div>';
+
+  html+='<div class="pg-count">'+total+' PR</div>';
   html+='</div></div>';
 
-  html+='<div id="histTableWrap">'+buildHistTable(pageData,histType)+'</div>';
+  html+='<div id="histTableWrap">'+buildHistCards(pageGroups,histType)+'</div>';
 
   html+=renderHistPagination(total,totalPages,start,end);
 
@@ -1854,62 +1898,93 @@ function renderHistView() {
 }
 
 /* ════════════════════════════════════════════════════════════════
-   BUILD HISTORY TABLE
+   BUILD HISTORY CARDS — dikelompokkan per No PR, expand/collapse
+   per kartu (konsep sama dengan po-card di list pending).
    ════════════════════════════════════════════════════════════════ */
-function buildHistTable(data,type) {
+function buildHistCards(groups,type) {
   var isApp=(type==='approve');
 
-  if (data.length===0){
+  if (groups.length===0){
     return '<div class="empty" style="padding:50px 20px;">'+
            '<div class="empty-ico">&#128270;</div>'+
            '<div class="empty-txt">Tidak ada history '+(isApp?'approve':'reject')+'</div></div>';
   }
 
-  var html=
-    '<div class="hist-table-wrap"><table class="hist-table"><thead><tr>'+
-    '<th>No PR</th><th>Item</th><th>Kategori</th><th>Deskripsi</th>'+
-    '<th>Dibuat Oleh</th><th>Tgl PR</th><th class="num">Qty</th><th>UoM</th>'+
-    '<th class="num">Harga</th><th class="num">Total</th><th>Curr</th><th>PGrp</th>'+
-    (isApp
-      ? '<th>Diapprove Oleh</th><th>Tgl Approve</th><th>Jam</th>'
-      : '<th>Direject Oleh</th><th>Tgl Reject</th><th>Jam</th><th>Alasan</th>')+
-    '</tr></thead><tbody>';
+  var byColor = isApp ? 'color:var(--success-d);' : 'color:var(--danger-d);';
+  var html='';
 
-  data.forEach(function(h){
-    var w  = h.waers||'IDR';
-    var cc = curClass(w);
-    var bcls = (h.bsart==='PRK9' || h.bsart==='RSBR') ? 'cat-prk9' : 'cat-roto';
-    var byColor = isApp ? 'color:var(--success-d);' : 'color:var(--danger-d);';
+  groups.forEach(function(g,idx){
+    var waers = g.waers||'IDR';
+    var amt   = fmtAmt(g.totalAmt,waers);
+    var itCnt = g.items.length;
+    var bcls  = (g.bsart==='PRK9' || g.bsart==='RSBR') ? 'cat-prk9' : 'cat-roto';
+    var delay = Math.min(idx,8)*28;
 
-    html+='<tr>';
-    html+='<td style="font-family:\'DM Mono\',monospace;font-weight:600;color:var(--primary-d);">'+
-          escHtml(h.banfn)+'</td>';
-    html+='<td style="font-family:\'DM Mono\',monospace;font-size:12px;">'+escHtml(h.bnfpo)+'</td>';
-    html+='<td><span class="chip '+bcls+'">'+escHtml(getBsartLabel(h.bsart))+'</span></td>';
-    html+='<td style="font-weight:500;max-width:180px;white-space:normal;">'+escHtml(h.txz01||'-')+'</td>';
-    html+='<td>'+escHtml(h.ernam||'-')+'</td>';
-    html+='<td style="color:var(--muted);">'+escHtml(h.erdat||'-')+'</td>';
-    html+='<td class="num">'+fmtQty(h.menge)+'</td>';
-    html+='<td><span class="chip">'+escHtml(h.meins||'-')+'</span></td>';
-    html+='<td class="num">'+fmtAmt(h.preis,w)+'</td>';
-    html+='<td class="num" style="font-weight:700;">'+fmtAmt(h.total,w)+'</td>';
-    html+='<td><span class="chip '+cc+'">'+escHtml(w)+'</span></td>';
-    html+='<td><span class="chip">'+escHtml(h.ekgrp||'-')+'</span></td>';
+    html+='<div class="po-card'+(histAllExpanded?' expanded':'')+'"'+
+          ' id="histCard_'+g.banfn+'" style="animation-delay:'+delay+'ms;"'+
+          ' onclick="toggleHistExpand(\''+g.banfn+'\')">';
 
+    html+='<div class="card-top">';
+    html+='<span class="card-num">'+escHtml(g.banfn)+'</span>';
+    html+='<span class="badge" style="background:'+
+          (isApp?'var(--success-lt);color:var(--success-d)'
+                :'var(--danger-lt);color:var(--danger-d)')+';">'+
+          (isApp?'&#10003; Approved':'&#10007; Rejected')+'</span>';
+    html+='<span class="badge b-plant">'+escHtml(g.werks)+' '+escHtml(getPlantLabel(g.werks))+'</span>';
+    html+='<span class="chip '+bcls+'">'+escHtml(getBsartLabel(g.bsart))+'</span>';
+    if (itCnt>0) html+='<span class="badge b-items">'+itCnt+' item</span>';
+
+    html+='<div class="card-amount"><div class="card-amount-val">'+amt+'</div>'+
+          '<div class="card-amount-lbl">'+waers+' Total</div></div>';
+    html+='</div>'; /* card-top */
+
+    html+='<div class="card-meta">';
+    html+='<div><div class="meta-lbl">Dibuat Oleh</div><div class="meta-val">'+
+          escHtml(g.ernam||'-')+'</div></div>';
+    html+='<div><div class="meta-lbl">Tgl PR</div><div class="meta-val">'+
+          escHtml(g.erdat||'-')+'</div></div>';
     if (isApp){
-      html+='<td style="font-weight:700;'+byColor+'">'+escHtml(h.app_by||'-')+'</td>';
-      html+='<td style="color:var(--muted);">'+escHtml(h.app_at||'-')+'</td>';
-      html+='<td style="color:var(--muted);font-size:12px;">'+escHtml(h.app_tm||'-')+'</td>';
+      html+='<div><div class="meta-lbl">Diapprove Oleh</div><div class="meta-val" style="'+byColor+'">'+
+            escHtml(g.app_by||'-')+'</div></div>';
+      html+='<div><div class="meta-lbl">Tgl Approve</div><div class="meta-val">'+
+            escHtml(g.app_at||'-')+(g.app_tm?' '+escHtml(g.app_tm):'')+'</div></div>';
     } else {
-      html+='<td style="font-weight:700;'+byColor+'">'+escHtml(h.del_by||'-')+'</td>';
-      html+='<td style="color:var(--muted);">'+escHtml(h.del_at||'-')+'</td>';
-      html+='<td style="color:var(--muted);font-size:12px;">'+escHtml(h.del_tm||'-')+'</td>';
-      html+='<td style="font-size:12px;max-width:180px;white-space:normal;">'+escHtml(h.reason||'-')+'</td>';
+      html+='<div><div class="meta-lbl">Direject Oleh</div><div class="meta-val" style="'+byColor+'">'+
+            escHtml(g.del_by||'-')+'</div></div>';
+      html+='<div><div class="meta-lbl">Tgl Reject</div><div class="meta-val">'+
+            escHtml(g.del_at||'-')+(g.del_tm?' '+escHtml(g.del_tm):'')+'</div></div>';
     }
-    html+='</tr>';
+    html+='</div>'; /* card-meta */
+
+    if (!isApp && g.reason)
+      html+='<div style="padding:0 18px 14px 47px;font-size:12px;color:var(--muted);">'+
+            '<b>Alasan:</b> '+escHtml(g.reason)+'</div>';
+
+    html+='<div class="card-detail" id="histDet_'+g.banfn+'" onclick="event.stopPropagation()">'+
+          '<div class="card-detail-inner"><div class="card-detail-scroll">'+
+          '<table class="detail-tbl"><thead><tr>'+
+          '<th>Item</th><th>Deskripsi</th><th class="num">Qty</th><th>UoM</th>'+
+          '<th class="num">Harga</th><th class="num">Total</th><th>Curr</th><th>PGrp</th>'+
+          '</tr></thead><tbody>';
+    g.items.forEach(function(h){
+      var w  = h.waers||waers;
+      var cc = curClass(w);
+      html+='<tr>';
+      html+='<td style="font-family:\'DM Mono\',monospace;font-size:12px;">'+escHtml(h.bnfpo)+'</td>';
+      html+='<td>'+escHtml(h.txz01||'-')+'</td>';
+      html+='<td class="num">'+fmtQty(h.menge)+'</td>';
+      html+='<td><span class="chip">'+escHtml(h.meins||'-')+'</span></td>';
+      html+='<td class="num">'+fmtAmt(h.preis,w)+'</td>';
+      html+='<td class="num">'+fmtAmt(h.total,w)+'</td>';
+      html+='<td><span class="chip '+cc+'">'+escHtml(w)+'</span></td>';
+      html+='<td>'+escHtml(h.ekgrp||'-')+'</td>';
+      html+='</tr>';
+    });
+    html+='</tbody></table></div></div></div>'; /* card-detail-scroll/inner/detail */
+
+    html+='</div>'; /* po-card */
   });
 
-  html+='</tbody></table></div>';
   return html;
 }
 
@@ -2006,12 +2081,13 @@ function renderHistPagination(total,totalPages,start,end) {
   return buildPagination({
     total:total, totalPages:totalPages, start:start, end:end,
     curPage:histCurPage, pageSize:histPageSize,
-    goFn:'histGoPage', label:'record'
+    goFn:'histGoPage', label:'PR'
   });
 }
 
 function histGoPage(pg) {
-  var tp=histPageSize===0?1:Math.ceil(histFilteredData.length/histPageSize)||1;
+  var total=groupHistByBanfn(histFilteredData).length;
+  var tp=histPageSize===0?1:Math.ceil(total/histPageSize)||1;
   if (pg<1) pg=1;
   if (pg>tp) pg=tp;
   histCurPage=pg;
@@ -2074,6 +2150,37 @@ function expandAll() {
 function collapseAll() {
   allExpanded=false;
   document.querySelectorAll('.po-card').forEach(function(c){ c.classList.remove('expanded'); });
+}
+
+/* ════════════════════════════════════════════════════════════════
+   HISTORY EXPAND / COLLAPSE — per kartu & toggle semua (konsep
+   sama dengan toggleExpand/toggleAll di list pending). Data history
+   sudah lengkap di memori (tidak perlu lazy-fetch seperti pending).
+   ════════════════════════════════════════════════════════════════ */
+function toggleHistExpand(banfn) {
+  var card=document.getElementById('histCard_'+banfn);
+  if (!card) return;
+  card.classList.toggle('expanded');
+}
+
+function toggleHistAll() {
+  if (histAllExpanded) { histCollapseAll(); } else { histExpandAll(); }
+  updateHistAllBtn();
+}
+
+function updateHistAllBtn() {
+  var btn=document.getElementById('histBtnAll');
+  if (btn) btn.innerHTML=histAllExpanded?'&#9650; Collapse':'&#9660; Expand';
+}
+
+function histExpandAll() {
+  histAllExpanded=true;
+  document.querySelectorAll('#histTableWrap .po-card').forEach(function(c){ c.classList.add('expanded'); });
+}
+
+function histCollapseAll() {
+  histAllExpanded=false;
+  document.querySelectorAll('#histTableWrap .po-card').forEach(function(c){ c.classList.remove('expanded'); });
 }
 
 /* ════════════════════════════════════════════════════════════════
