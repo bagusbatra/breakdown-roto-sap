@@ -231,8 +231,8 @@ CASE lv_action.
 * Sidebar sekarang menghitung jumlah PR per PLANT x KATEGORI.
 * Daftar kategori per plant di-define inline di bawah (bsart list-nya
 * harus selalu sinkron dengan CATEGORY_MAP di index.htm).
-*   1200 (Surabaya) : MTN=ROTO | RND=RSBR,PRK9 | SVC=PRKS
-*   1300 (Semarang)  : MTN=ROTO | SVC=PRKS
+*   Surabaya (1200,2000,1000,1001,1100) : MTN=ROTO | RND=RSBR,PRK9 | SVC=PRKS
+*   Semarang (1300,3000)                : MTN=ROTO | SVC=PRKS
     DATA: lv_is_app_s   TYPE string.
     DATA: lt_sb_uniq    TYPE STANDARD TABLE OF eban,
           lt_rj_uniq    TYPE STANDARD TABLE OF zroto_rej_hist,
@@ -263,6 +263,28 @@ CASE lv_action.
     ls_cat_def-werks = '2000'. ls_cat_def-category = 'RND'.
     ls_cat_def-bsart_cs = 'RSBR,PRK9'. APPEND ls_cat_def TO lt_cat_def.
     ls_cat_def-werks = '2000'. ls_cat_def-category = 'SVC'.
+    ls_cat_def-bsart_cs = 'PRKS'. APPEND ls_cat_def TO lt_cat_def.
+    ls_cat_def-werks = '1000'. ls_cat_def-category = 'MTN'.
+    ls_cat_def-bsart_cs = 'ROTO'. APPEND ls_cat_def TO lt_cat_def.
+    ls_cat_def-werks = '1000'. ls_cat_def-category = 'RND'.
+    ls_cat_def-bsart_cs = 'RSBR,PRK9'. APPEND ls_cat_def TO lt_cat_def.
+    ls_cat_def-werks = '1000'. ls_cat_def-category = 'SVC'.
+    ls_cat_def-bsart_cs = 'PRKS'. APPEND ls_cat_def TO lt_cat_def.
+    ls_cat_def-werks = '1001'. ls_cat_def-category = 'MTN'.
+    ls_cat_def-bsart_cs = 'ROTO'. APPEND ls_cat_def TO lt_cat_def.
+    ls_cat_def-werks = '1001'. ls_cat_def-category = 'RND'.
+    ls_cat_def-bsart_cs = 'RSBR,PRK9'. APPEND ls_cat_def TO lt_cat_def.
+    ls_cat_def-werks = '1001'. ls_cat_def-category = 'SVC'.
+    ls_cat_def-bsart_cs = 'PRKS'. APPEND ls_cat_def TO lt_cat_def.
+    ls_cat_def-werks = '1100'. ls_cat_def-category = 'MTN'.
+    ls_cat_def-bsart_cs = 'ROTO'. APPEND ls_cat_def TO lt_cat_def.
+    ls_cat_def-werks = '1100'. ls_cat_def-category = 'RND'.
+    ls_cat_def-bsart_cs = 'RSBR,PRK9'. APPEND ls_cat_def TO lt_cat_def.
+    ls_cat_def-werks = '1100'. ls_cat_def-category = 'SVC'.
+    ls_cat_def-bsart_cs = 'PRKS'. APPEND ls_cat_def TO lt_cat_def.
+    ls_cat_def-werks = '3000'. ls_cat_def-category = 'MTN'.
+    ls_cat_def-bsart_cs = 'ROTO'. APPEND ls_cat_def TO lt_cat_def.
+    ls_cat_def-werks = '3000'. ls_cat_def-category = 'SVC'.
     ls_cat_def-bsart_cs = 'PRKS'. APPEND ls_cat_def TO lt_cat_def.
 
     DATA: lv_sb_pend TYPE string,

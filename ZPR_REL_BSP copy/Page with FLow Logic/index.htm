@@ -859,19 +859,53 @@ var CATEGORY_DEF = {
      icon:'&#128300;'},
     {code:'SVC',label:'PR Service',bsart:'PRKS',
      icon:'&#128736;'}
+  ],
+  '1000':[
+    {code:'MTN',label:'PR Maintenance',bsart:'ROTO',
+     icon:'&#128203;'},
+    {code:'RND',label:'PR RND',bsart:'RSBR,PRK9',
+     icon:'&#128300;'},
+    {code:'SVC',label:'PR Service',bsart:'PRKS',
+     icon:'&#128736;'}
+  ],
+  '1001':[
+    {code:'MTN',label:'PR Maintenance',bsart:'ROTO',
+     icon:'&#128203;'},
+    {code:'RND',label:'PR RND',bsart:'RSBR,PRK9',
+     icon:'&#128300;'},
+    {code:'SVC',label:'PR Service',bsart:'PRKS',
+     icon:'&#128736;'}
+  ],
+  '1100':[
+    {code:'MTN',label:'PR Maintenance',bsart:'ROTO',
+     icon:'&#128203;'},
+    {code:'RND',label:'PR RND',bsart:'RSBR,PRK9',
+     icon:'&#128300;'},
+    {code:'SVC',label:'PR Service',bsart:'PRKS',
+     icon:'&#128736;'}
+  ],
+  '3000':[
+    {code:'MTN',label:'PR Maintenance',bsart:'ROTO',
+     icon:'&#128203;'},
+    {code:'SVC',label:'PR Service',bsart:'PRKS',
+     icon:'&#128736;'}
   ]
 };
 
 var sbCounts = {
-  pending:  { '1200':{}, '1300':{}, '2000':{} },
-  hist_app: { '1200':{}, '1300':{}, '2000':{} },
-  hist_rej: { '1200':{}, '1300':{}, '2000':{} }
+  pending:  { '1200':{}, '1300':{}, '2000':{}, '1000':{}, '1001':{}, '1100':{}, '3000':{} },
+  hist_app: { '1200':{}, '1300':{}, '2000':{}, '1000':{}, '1001':{}, '1100':{}, '3000':{} },
+  hist_rej: { '1200':{}, '1300':{}, '2000':{}, '1000':{}, '1001':{}, '1100':{}, '3000':{} }
 };
 
 var PLANT_LABELS = {
   '1200':'Surabaya',
   '1300':'Semarang',
-  '2000':'Surabaya'
+  '2000':'Surabaya',
+  '1000':'Surabaya',
+  '1001':'Surabaya',
+  '1100':'Surabaya',
+  '3000':'Semarang'
 };
 
 var ESTKZ_MAP = {
@@ -955,12 +989,14 @@ function getCategoryDef(werks,category) {
 }
 
 function getEffectiveWerks(werks) {
-  if (werks === '1200') return '1200,2000';
+  if (werks === '1200') return '1200,2000,1000,1001,1100';
+  if (werks === '1300') return '1300,3000';
   return werks;
 }
 
 function getSidebarWerks(werks) {
-  if (werks === '1200') return ['1200','2000'];
+  if (werks === '1200') return ['1200','2000','1000','1001','1100'];
+  if (werks === '1300') return ['1300','3000'];
   return [werks];
 }
 
@@ -1097,7 +1133,7 @@ function loadSidebarData() {
     .then(function(res){
       if (res.status==='S'){
         isApprover=(res.is_approver===true);
-        ['1200','1300','2000'].forEach(function(w){
+        ['1200','1300','2000','1000','1001','1100','3000'].forEach(function(w){
           sbCounts.pending[w] =
             normalizeCatCounts(res.pending,w);
           sbCounts.hist_app[w] =
