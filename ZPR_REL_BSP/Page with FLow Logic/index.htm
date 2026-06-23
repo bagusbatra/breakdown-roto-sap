@@ -848,18 +848,27 @@ var CATEGORY_DEF = {
      icon:'&#128203;'},
     {code:'SVC',label:'PR Service',bsart:'PRKS',
      icon:'&#128736;'}
+  ],
+  '2000':[
+    {code:'MTN',label:'PR Maintenance',bsart:'ROTO',
+     icon:'&#128203;'},
+    {code:'RND',label:'PR RND',bsart:'RSBR,PRK9',
+     icon:'&#128300;'},
+    {code:'SVC',label:'PR Service',bsart:'PRKS',
+     icon:'&#128736;'}
   ]
 };
 
 var sbCounts = {
-  pending:  { '1200':{}, '1300':{} },
-  hist_app: { '1200':{}, '1300':{} },
-  hist_rej: { '1200':{}, '1300':{} }
+  pending:  { '1200':{}, '1300':{}, '2000':{} },
+  hist_app: { '1200':{}, '1300':{}, '2000':{} },
+  hist_rej: { '1200':{}, '1300':{}, '2000':{} }
 };
 
 var PLANT_LABELS = {
   '1200':'Surabaya',
-  '1300':'Semarang'
+  '1300':'Semarang',
+  '2000':'Surabaya'
 };
 
 var ESTKZ_MAP = {
@@ -942,12 +951,30 @@ function getCategoryDef(werks,category) {
   return null;
 }
 
+function getEffectiveWerks(werks) {
+  if (werks === '1200') return '1200,2000';
+  return werks;
+}
+
+function getSidebarWerks(werks) {
+  if (werks === '1200') return ['1200','2000'];
+  return [werks];
+}
+
+function getPlantLabel(werks) {
+  var primary = (werks||'').split(',')[0];
+  return PLANT_LABELS[primary]||primary;
+}
+
 function getPlantTotalPending(werks) {
-  var cats =CATEGORY_DEF[werks]||[];
+  var codes = getSidebarWerks(werks);
   var total=0;
-  cats.forEach(function(c){
-    total+=parseInt(
-      (sbCounts.pending[werks]||{})[c.code])||0;
+  codes.forEach(function(w){
+    var cats = CATEGORY_DEF[w]||[];
+    cats.forEach(function(c){
+      total+=parseInt(
+        (sbCounts.pending[w]||{})[c.code])||0;
+    });
   });
   return total;
 }
@@ -1067,7 +1094,7 @@ function loadSidebarData() {
     .then(function(res){
       if (res.status==='S'){
         isApprover=(res.is_approver===true);
-        ['1200','1300'].forEach(function(w){
+        ['1200','1300','2000'].forEach(function(w){
           sbCounts.pending[w] =
             normalizeCatCounts(res.pending,w);
           sbCounts.hist_app[w] =
@@ -1110,9 +1137,11 @@ function renderSidebar() {
       html+='<div class="sb-divider"></div>';
 
     var cats    =CATEGORY_DEF[p.code]||[];
-    var isOpen  =(curPlant===p.code)||
+    var primary = curPlant.split(',')[0];
+    var isOpen  =(primary===p.code)||
                  (openSections[p.code]===true);
     var pendTot =getPlantTotalPending(p.code);
+    var effWerks = getEffectiveWerks(p.code);
 
     html+='<div class="sb-section'+
           (isOpen?' open':'')+
@@ -1140,36 +1169,49 @@ function renderSidebar() {
     /* Submenu internal Plant */
     html+='<div class="sb-submenu">';
 
-    /* A. TOMBOL PENDING SESUAI DOC TYPE (Langsung klik tanpa submenu lagi) */
+    /* A. TOMBOL PENDING SESUAI DOC TYPE */
     cats.forEach(function(cat){
-      var pend=(sbCounts.pending[p.code]||{})[cat.code]||0;
-      var isPendActive=(curPlant===p.code && curCategory===cat.code && curMode==='pending');
+      var codes = getSidebarWerks(p.code);
+      var pend = 0;
+      codes.forEach(function(w){
+        pend += parseInt((sbCounts.pending[w]||{})[cat.code])||0;
+      });
+      var isPendActive=(primary===p.code && curCategory===cat.code && curMode==='pending');
 
       html+='<a class="sb-link'+(isPendActive?' active':'')+'" style="padding-left:20px;" '+
-            'onclick="switchView(\''+p.code+'\',\''+cat.code+'\',\'pending\')">';
+            'onclick="switchView(\''+effWerks+'\',\''+cat.code+'\',\'pending\')">';
       html+='<span style="display:flex;align-items:center;gap:7px;">'+cat.icon+' '+cat.label+'</span>';
       if (pend>0) html+='<span class="sb-badge sb-badge-pending">'+pend+'</span>';
       html+='</a>';
     });
 
-    /* B. TOMBOL HISTORY APPROVE (Per Plant - Gabungan) */
+    /* B. TOMBOL HISTORY APPROVE */
+    var codes = getSidebarWerks(p.code);
     var happTot=0;
-    cats.forEach(function(c){happTot+=parseInt((sbCounts.hist_app[p.code]||{})[c.code])||0;});
-    var isAppActive=(curPlant===p.code && curMode==='hist_app');
+    cats.forEach(function(c){
+      codes.forEach(function(w){
+        happTot+=parseInt((sbCounts.hist_app[w]||{})[c.code])||0;
+      });
+    });
+    var isAppActive=(primary===p.code && curMode==='hist_app');
 
     html+='<a class="sb-link'+(isAppActive?' active-app':'')+'" style="padding-left:20px; border-top:1px dashed #e5e7eb;" '+
-          'onclick="switchView(\''+p.code+'\',\'ALL\',\'hist_app\')">';
+          'onclick="switchView(\''+effWerks+'\',\'ALL\',\'hist_app\')">';
     html+='<span style="display:flex;align-items:center;gap:7px;">&#10003; History Approve</span>';
     if (happTot>0) html+='<span class="sb-badge sb-badge-app">'+happTot+'</span>';
     html+='</a>';
 
-    /* C. TOMBOL HISTORY REJECT (Per Plant - Gabungan) */
+    /* C. TOMBOL HISTORY REJECT */
     var hrejTot=0;
-    cats.forEach(function(c){hrejTot+=parseInt((sbCounts.hist_rej[p.code]||{})[c.code])||0;});
-    var isRejActive=(curPlant===p.code && curMode==='hist_rej');
+    cats.forEach(function(c){
+      codes.forEach(function(w){
+        hrejTot+=parseInt((sbCounts.hist_rej[w]||{})[c.code])||0;
+      });
+    });
+    var isRejActive=(primary===p.code && curMode==='hist_rej');
 
     html+='<a class="sb-link'+(isRejActive?' active-rej':'')+'" style="padding-left:20px;" '+
-          'onclick="switchView(\''+p.code+'\',\'ALL\',\'hist_rej\')">';
+          'onclick="switchView(\''+effWerks+'\',\'ALL\',\'hist_rej\')">';
     html+='<span style="display:flex;align-items:center;gap:7px;">&#128465; History Reject</span>';
     if (hrejTot>0) html+='<span class="sb-badge sb-badge-rej">'+hrejTot+'</span>';
     html+='</a>';
@@ -1203,7 +1245,8 @@ function toggleCategory(catKey) {
    SWITCH VIEW
    ================================================================ */
 function switchView(plant,category,mode) {
-  var catDef = getCategoryDef(plant,category);
+  var primaryPlant = plant.split(',')[0];
+  var catDef = getCategoryDef(primaryPlant,category);
 
   curPlant       = plant;
   curCategory    = category;
@@ -1343,7 +1386,7 @@ function renderList() {
         '<div class="pg-hdr">'+
         '<div class="pg-title">'+
         catIcon+' '+catLbl+' &mdash; '+
-        PLANT_LABELS[curPlant]+'</div>'+
+        getPlantLabel(curPlant)+'</div>'+
         '<div class="pg-sub">'+
         total+' PR menunggu approval';
   if (curEstkzFilter==='MRP')
@@ -1552,7 +1595,7 @@ function renderHistTable(data,type) {
         '<div class="pg-hdr">'+
         '<div class="pg-title"'+
         ' style="color:'+color+';">'+
-        title+PLANT_LABELS[curPlant]+
+        title+getPlantLabel(curPlant)+
         ' &middot; '+catLbl+'</div>'+
         '<div class="pg-sub">'+
         data.length+' record '+

@@ -128,6 +128,11 @@ DATA: lt_return  TYPE STANDARD TABLE OF bapiret2,
       lt_delitem TYPE STANDARD TABLE OF bapieband,
       ls_delitem TYPE bapieband.
 
+DATA: lt_werks_rng   TYPE RANGE OF eban-werks,
+      ls_werks_rng   LIKE LINE OF lt_werks_rng,
+      lt_werks_split TYPE STANDARD TABLE OF string,
+      lv_werks_part  TYPE string.
+
 DATA: lv_rel_status TYPE bapimmpara-rel_status,
       lv_rel_ind    TYPE bapimmpara-rel_ind.
 
@@ -253,6 +258,12 @@ CASE lv_action.
     ls_cat_def-bsart_cs = 'ROTO'. APPEND ls_cat_def TO lt_cat_def.
     ls_cat_def-werks = '1300'. ls_cat_def-category = 'SVC'.
     ls_cat_def-bsart_cs = 'PRKS'. APPEND ls_cat_def TO lt_cat_def.
+    ls_cat_def-werks = '2000'. ls_cat_def-category = 'MTN'.
+    ls_cat_def-bsart_cs = 'ROTO'. APPEND ls_cat_def TO lt_cat_def.
+    ls_cat_def-werks = '2000'. ls_cat_def-category = 'RND'.
+    ls_cat_def-bsart_cs = 'RSBR,PRK9'. APPEND ls_cat_def TO lt_cat_def.
+    ls_cat_def-werks = '2000'. ls_cat_def-category = 'SVC'.
+    ls_cat_def-bsart_cs = 'PRKS'. APPEND ls_cat_def TO lt_cat_def.
 
     DATA: lv_sb_pend TYPE string,
           lv_sb_app  TYPE string,
@@ -374,6 +385,19 @@ CASE lv_action.
 
     parse_bsart_range lv_bsart lt_bsart_rng.
 
+    CLEAR lt_werks_rng.
+    SPLIT lv_werks AT ',' INTO TABLE lt_werks_split.
+    LOOP AT lt_werks_split INTO lv_werks_part.
+      CONDENSE lv_werks_part.
+      IF lv_werks_part IS NOT INITIAL.
+        CLEAR ls_werks_rng.
+        ls_werks_rng-sign   = 'I'.
+        ls_werks_rng-option = 'EQ'.
+        ls_werks_rng-low    = lv_werks_part.
+        APPEND ls_werks_rng TO lt_werks_rng.
+      ENDIF.
+    ENDLOOP.
+
     CLEAR: lt_head, lt_items, lt_makt.
 
     SELECT banfn badat werks bsart txz01 ernam ekgrp
@@ -381,7 +405,7 @@ CASE lv_action.
       FROM eban
       INTO CORRESPONDING FIELDS OF TABLE lt_head
       WHERE bsart IN lt_bsart_rng
-        AND werks  = lv_werks
+        AND werks IN lt_werks_rng
         AND frgkz  = 'X'
         AND frgzu  = ' '
         AND loekz  = ' '
@@ -692,13 +716,26 @@ CASE lv_action.
       parse_bsart_range lv_bsart lt_bsart_rng.
     ENDIF.
 
+    CLEAR lt_werks_rng.
+    SPLIT lv_werks AT ',' INTO TABLE lt_werks_split.
+    LOOP AT lt_werks_split INTO lv_werks_part.
+      CONDENSE lv_werks_part.
+      IF lv_werks_part IS NOT INITIAL.
+        CLEAR ls_werks_rng.
+        ls_werks_rng-sign   = 'I'.
+        ls_werks_rng-option = 'EQ'.
+        ls_werks_rng-low    = lv_werks_part.
+        APPEND ls_werks_rng TO lt_werks_rng.
+      ENDIF.
+    ENDLOOP.
+
     CLEAR lt_hist_rej.
     SELECT banfn bnfpo werks bsart txz01 ernam erdat
            menge meins preis peinh waers ekgrp
            del_by del_at del_tm reason
       FROM zroto_rej_hist
       INTO CORRESPONDING FIELDS OF TABLE lt_hist_rej
-      WHERE werks = lv_werks
+      WHERE werks IN lt_werks_rng
         AND bsart IN lt_bsart_rng
       ORDER BY del_at DESCENDING del_tm DESCENDING.
 
@@ -789,13 +826,26 @@ CASE lv_action.
       parse_bsart_range lv_bsart lt_bsart_rng.
     ENDIF.
 
+    CLEAR lt_werks_rng.
+    SPLIT lv_werks AT ',' INTO TABLE lt_werks_split.
+    LOOP AT lt_werks_split INTO lv_werks_part.
+      CONDENSE lv_werks_part.
+      IF lv_werks_part IS NOT INITIAL.
+        CLEAR ls_werks_rng.
+        ls_werks_rng-sign   = 'I'.
+        ls_werks_rng-option = 'EQ'.
+        ls_werks_rng-low    = lv_werks_part.
+        APPEND ls_werks_rng TO lt_werks_rng.
+      ENDIF.
+    ENDLOOP.
+
     CLEAR lt_hist_app.
     SELECT banfn bnfpo werks bsart txz01 ernam erdat
            menge meins preis peinh waers ekgrp
            app_by app_at app_tm
       FROM zroto_app_hist
       INTO CORRESPONDING FIELDS OF TABLE lt_hist_app
-      WHERE werks = lv_werks
+      WHERE werks IN lt_werks_rng
         AND bsart IN lt_bsart_rng
       ORDER BY app_at DESCENDING app_tm DESCENDING.
 
