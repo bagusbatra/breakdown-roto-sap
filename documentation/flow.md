@@ -1,425 +1,276 @@
-# Flow Teknis — Release PR ROTO
+# Flow Teknis — Release PR/PO PT. Kayu Mebel Indonesia
 
-Dokumen ini menjelaskan alur request/response antara `index.htm` (frontend)
-dan `main.htm` (backend ABAP), berdasarkan kode di
-`ZPR_REL_BSP/Page with FLow Logic/`.
+Dokumen ini menjelaskan alur teknis untuk semua aplikasi BSP di repo ini.
 
 ---
 
-## 1. Arsitektur Komunikasi
+## 1. Ringkasan Arsitektur
+
+### 1.1 Tiga Model Arsitektur
+
+| Model | Aplikasi | Struktur | Data Loading |
+|-------|----------|----------|-------------|
+| **2-file SPA** | `ZPR_REL_BSP`, `ZBSP_PRCH_APP` | `index.htm` (UI) + `main.htm` (API) | On-demand via AJAX |
+| **Single-file monolitik** | `ZPO_REL_BSP` | 1 file `main.htm` (ABAP+HTML+CSS+JS) | Pre-load di ABAP, embed JSON |
+| **Merge hybrid** | `ZPR_REL_BSP/index-merge.htm` | 1 file hasil merge (2811 baris) | Campuran kedua model |
+
+### 1.2 Komunikasi Klien-Server
 
 ```
-Browser (index.htm)
-   │
-   │  fetch('main.htm?action=XXX', {GET|POST})
-   ▼
-main.htm (ABAP scriptlet, BSP)
-   │
-   │  SELECT/CALL FUNCTION (BAPI)
-   ▼
-SAP Tables: EBAN, MAKT, USR21, ADRP,
-            ZROTO_APP_HIST, ZROTO_REJ_HIST
+Browser
+  │  fetch('main.htm?action=XXX', {GET|POST})
+  ▼
+main.htm (ABAP, BSP Page with Flow Logic)
+  │  SELECT / CALL FUNCTION (BAPI)
+  ▼
+SAP Tables
 ```
 
-- `index.htm` adalah **single page app sederhana**. Hanya 1x render penuh
-  (saat browser load), setelah itu semua perubahan tampilan (`mainContent`,
-  `sidebar`, `fab`) dilakukan dengan `innerHTML =` dari JS, berdasarkan hasil
-  `fetch()` ke `main.htm`.
-- `main.htm` **tidak pernah render HTML**. Begitu menerima request:
-  - jika `action` kosong → redirect ke `index.htm`
-    (`_m_navigation->next_page('index.htm')`)
-  - jika `action` terisi → set header `Content-Type: application/json`,
-    proses `CASE lv_action`, lalu `response->append_cdata(lv_output)` dan
-    `_m_navigation->response_complete()`.
-- Semua JSON dibangun **manual** dengan `CONCATENATE` string — bukan pakai
-  serializer ABAP (`/ui2/cl_json` dsb). Ada macro `escape_json` untuk
-  meng-escape `\`, `"`, `/`, dan whitespace khusus (newline/CR/tab) supaya
-  JSON tetap valid.
+- **GET**: `GET_SIDEBAR`, `GET_LIST`, `GET_DETAIL`, `GET_HIST_APP`, `GET_HIST_REJ`
+- **POST** (form-urlencoded): `PROCESS` (approve/reject)
+- Response: JSON (dibangun manual via `CONCATENATE` + macro `escape_json`)
 
 ---
 
-## 1.1 Flowchart Aplikasi (Garis Besar)
+## 2. Aplikasi Release PR — Flow Detail
 
-```mermaid
-flowchart TD
-    A[User buka index.htm] --> B[Scriptlet ABAP: BAPI_USER_GET_DETAIL\nambil nama user login]
-    B --> C[Render shell HTML/CSS/JS]
-    C --> D[init -> loadSidebarData\nGET_SIDEBAR]
-    D --> E[renderSidebar\nSurabaya & Semarang,\nbadge Pending/HistApp/HistRej]
-    E --> F{User klik menu sidebar}
+### 2.1 Action Handler (main.htm)
 
-    F -->|PR One Time Off| G[switchView pending\nfetchList -> GET_LIST]
-    F -->|History Approve| H[switchView hist_app\nfetchHistApp -> GET_HIST_APP]
-    F -->|History Reject| I[switchView hist_rej\nfetchHistRej -> GET_HIST_REJ]
+| Action | Fungsi |
+|--------|--------|
+| `GET_SIDEBAR` | Hitung count pending & history per plant+kategori |
+| `GET_LIST` | Ambil data PR pending (header+total) per plant+kategori |
+| `GET_DETAIL` | Ambil item-item dari suatu PR |
+| `GET_HIST_APP` | History approve dari `ZROTO_APP_HIST` |
+| `GET_HIST_REJ` | History reject dari `ZROTO_REJ_HIST` |
+| `PROCESS` | Eksekusi approve/reject |
 
-    G --> J[renderList: cards\n+ search/pagination/filter ESTKZ]
-    J --> K{User expand card?}
-    K -->|Ya| L[loadDetail -> GET_DETAIL\nrender tabel item]
-    K -->|Tidak| J
+### 2.2 Perbedaan Pendekatan GET_SIDEBAR
 
-    J --> M{isApprover?}
-    M -->|Tidak| N[Hanya read-only,\ntanpa checkbox & FAB]
-    M -->|Ya| O[Tampilkan checkbox + FAB]
-    O --> P{Pilih PR lalu klik}
-    P -->|Approve| Q[Modal konfirmasi Approve]
-    P -->|Reject| R[Modal konfirmasi Reject\n+ input alasan]
-    Q --> S[processAction 'approve']
-    R --> T[processAction 'delete']
-    S --> U[POST main.htm action=PROCESS\npr_action=approve, sequential per PR]
-    T --> V[POST main.htm action=PROCESS\npr_action=delete, sequential per PR]
-    U --> W[Reload sidebar + list]
-    V --> W
-
-    H --> X[renderHistTable: tabel history approve]
-    I --> Y[renderHistTable: tabel history reject]
+**Pendekatan Hardcode (ZBSP_PRCH_APP original):**
+```abap
+count_pending 'ROTO' '1200' lv_s_1200_roto.
+count_pending 'PRK9' '1200' lv_s_1200_PRK9.
+" ...manual untuk setiap plant+kategori...
 ```
 
----
-
-## 2. Inisialisasi Halaman (Page Load)
-
-1. Browser request `index.htm`.
-2. Scriptlet ABAP di awal file:
-   - Ambil `sy-uname` (user SAP yang login via SSO/ICF).
-   - Panggil `BAPI_USER_GET_DETAIL` untuk dapat `fullname` user.
-   - Fallback: jika fullname kosong, pakai `sy-uname`.
-   - Hasilnya dipakai untuk avatar (inisial huruf pertama username) dan label
-     nama di header (`<%=lv_fullname2%>`).
-3. HTML+CSS+JS dikirim ke browser. Sidebar (`<aside id="sidebar">`) dan main
-   content (`<main id="mainContent">`) masih kosong/placeholder.
-4. JS `init()` dipanggil di akhir `<script>` → `loadSidebarData()`.
-
----
-
-## 3. Load Sidebar — `GET_SIDEBAR`
-
-**Request:** `GET main.htm?action=GET_SIDEBAR`
-
-**Logic backend (`main.htm`):**
-- Cek apakah `sy-uname = 'KMI-BOD'` → `lv_is_approver = 'X'/' '`.
-- Untuk masing-masing plant `1200` dan `1300`:
-  - **Pending**: `SELECT banfn FROM eban WHERE bsart='ROTO' AND werks=<plant>
-    AND frgkz='X' AND frgzu=' ' AND loekz=' '`, lalu
-    `DELETE ADJACENT DUPLICATES COMPARING banfn` → hitung jumlah PR unik
-    pending.
-  - **History Reject**: `SELECT banfn FROM zroto_rej_hist WHERE werks=<plant>`
-    → hitung baris (tidak di-dedup).
-  - **History Approve**: idem dari `zroto_app_hist`.
-- Output JSON:
-  ```json
-  {
-    "status": "S",
-    "is_approver": true,
-    "pending":  {"1200": n, "1300": n},
-    "hist_rej": {"1200": n, "1300": n},
-    "hist_app": {"1200": n, "1300": n}
-  }
-  ```
-
-**Logic frontend (`index.htm`):**
-- Simpan `isApprover` & `sbCounts.*` ke variabel global.
-- `renderSidebar()` membangun 2 section plant (Surabaya & Semarang), masing-
-  masing punya 3 link:
-  1. **PR One Time Off** (pending) — badge jumlah pending
-  2. **History Approve** — badge jumlah approve
-  3. **History Reject** — badge jumlah reject
-- Section plant terbuka otomatis jika `curPlant === plant code` atau user
-  pernah membuka section itu (`openSections`).
-
----
-
-## 4. Switch View — `switchView(plant, mode)`
-
-Dipanggil saat user klik salah satu link sidebar. Reset semua state lokal
-(`curPage=1`, `selBanfns={}`, `searchKw=''`, `allExpanded=false`,
-`curEstkzFilter=''`), lalu `renderSidebar()` ulang (highlight menu aktif),
-`showLoading()`, dan dispatch sesuai `mode`:
-
-| mode | Fungsi dipanggil | Action API |
-|---|---|---|
-| `pending` | `fetchList('')` | `GET_LIST` |
-| `hist_app` | `fetchHistApp()` | `GET_HIST_APP` |
-| `hist_rej` | `fetchHistRej()` | `GET_HIST_REJ` |
-
----
-
-## 5. Daftar PR Pending — `GET_LIST`
-
-**Request:** `GET main.htm?action=GET_LIST&werks=<plant>&estkz=<''|MRP|NONMRP>`
-
-**Logic backend:**
-1. Validasi `werks` tidak kosong.
-2. `SELECT` header PR dari `EBAN` dengan filter:
-   `bsart='ROTO' AND werks=<plant> AND frgkz='X' AND frgzu=' ' AND loekz=' '`,
-   `ORDER BY banfn DESCENDING`.
-3. Dedup per `banfn` (1 PR bisa punya banyak baris/item di EBAN).
-4. Filter tambahan berdasarkan `estkz` (jenis kebutuhan):
-   - `MRP` → hanya `estkz = 'B'`
-   - `NONMRP` → hanya `estkz <> 'B'`
-   - kosong → semua
-5. Build range `banfn` dari header yang lolos, lalu `SELECT` semua **item**
-   (`bnfpo`, `matnr`, `menge`, `preis`, dll) dari `EBAN` untuk PR-PR tsb
-   (`loekz=' '`).
-6. Kumpulkan `matnr` unik → `SELECT maktx FROM makt` (deskripsi material,
-   bahasa = `sy-langu`) — *catatan: `lt_makt` di-select tapi tidak dipakai
-   untuk response GET_LIST (hanya dipakai di GET_DETAIL)*.
-7. Kumpulkan `ernam` (creator) unik → join `USR21` → `ADRP` (filter
-   `date_from <= sy-datum`, ambil yang terbaru) untuk dapat **nama lengkap**
-   pembuat PR.
-8. Loop tiap header PR:
-   - Hitung `total_value` = Σ(`menge * preis`) dari semua item milik PR itu.
-   - Ambil `waers` (currency) dari item pertama, default `IDR` jika kosong.
-   - Format tanggal `badat` (YYYYMMDD → DD.MM.YYYY) via macro `fmt_date`.
-   - Resolve nama lengkap creator (`ernam_full`), fallback ke `ernam`.
-   - Escape teks bebas (`txz01`, nama lengkap) via `escape_json`.
-   - Hitung `item_count`.
-9. Output JSON:
-   ```json
-   {"status":"S","message":"OK","data":[
-     {
-       "banfn":"...", "badat":"DD.MM.YYYY", "werks":"1200",
-       "bsart":"ROTO", "txz01":"...", "ernam":"...",
-       "ernam_full":"...", "ekgrp":"...", "estkz":"B",
-       "item_count":"3", "total_value":"1234.56", "waers":"IDR"
-     }, ...
-   ]}
-   ```
-
-**Logic frontend (`renderList`)**:
-- `allData` = hasil API. `getFiltered()` melakukan **search client-side**
-  (cocokkan `banfn`, `ernam_full`, `ernam`, `txz01`, `ekgrp`, atau label
-  ESTKZ terhadap `searchKw`, case-insensitive).
-- Pagination client-side: `pageSize` ∈ {10, 20, 50, 0(=All)}.
-- Render:
-  - Sticky header (judul plant + jumlah PR + label filter ESTKZ aktif).
-  - Sticky toolbar: tombol *Select All* (hanya jika `isApprover`), search box,
-    dropdown page size, dropdown filter ESTKZ (Semua/MRP/Non-MRP), tombol
-    Expand All / Collapse All, counter jumlah PR.
-  - Untuk tiap PR → "card" dengan:
-    - checkbox (jika approver)
-    - nomor PR, badge status "Pending", badge plant, badge jenis (MRP/Non-MRP
-      berdasar `estkz`), badge jumlah item
-    - total nilai (kanan, diformat `fmtAmt`)
-    - meta grid: Dibuat Oleh, Deskripsi, Purch. Group, Tgl PR
-    - area detail (kosong, lazy-load saat expand)
-- FAB (floating action bar Approve/Reject) muncul hanya jika `isApprover`
-  dan `total > 0`.
-- Jika `allExpanded === true` (user pernah klik "Expand"), semua card di
-  halaman saat ini langsung `loadDetail()`.
-
-### Filter ESTKZ (`onEstkzFilter`)
-Saat dropdown filter berubah → reset `selBanfns`, `showLoading()`, lalu
-`fetchList(val)` ulang ke server (filter dilakukan **di server**, bukan
-client).
-
-### Search (`onSearchInput`)
-Debounce 300ms → set `searchKw`, reset ke halaman 1 & `selBanfns`, lalu
-`renderList()` (filter **client-side**, tidak hit server lagi).
-
----
-
-## 6. Detail Item PR — `GET_DETAIL` (lazy load saat expand)
-
-**Trigger:** `toggleExpand(banfn)` → jika card belum expanded, panggil
-`loadDetail(banfn)`. Hasil di-cache via `el.dataset.loaded='1'` (tidak fetch
-ulang jika sudah pernah).
-
-**Request:** `GET main.htm?action=GET_DETAIL&banfn=<banfn>`
-
-**Logic backend:**
-1. Validasi `banfn` tidak kosong.
-2. `SELECT` semua item `EBAN` untuk `banfn` tsb (`loekz=' '`), `ORDER BY bnfpo`.
-3. Jika kosong → return `data: []`.
-4. Kumpulkan `matnr` unik → `SELECT maktx FROM makt` (deskripsi material).
-5. Loop tiap item:
-   - `total` = `menge * preis`.
-   - `maktx` = deskripsi material (fallback ke `txz01` jika material tidak
-     ada deskripsi/material kosong).
-   - Format `lfdat` (tanggal butuh) via `fmt_date`.
-   - Escape `txz01` & `maktx`.
-6. Output JSON: array item dengan `bnfpo`, `matnr`, `txz01`, `maktx`, `menge`,
-   `meins`, `preis`, `peinh`, `waers`, `total`, `lfdat`.
-
-**Logic frontend:** render tabel item (Item/Material/Deskripsi/Qty/UoM/
-Harga per Unit/Total/Curr/Tgl Butuh) di dalam `#detContent_<banfn>`. Badge
-warna currency: IDR=abu, USD=biru, lainnya=kuning.
-
----
-
-## 7. History Approve / Reject — `GET_HIST_APP` / `GET_HIST_REJ`
-
-**Request:** `GET main.htm?action=GET_HIST_APP&werks=<plant>` atau
-`GET_HIST_REJ`.
-
-**Logic backend:**
-- `SELECT * FROM zroto_app_hist` (atau `zroto_rej_hist`) `WHERE werks=<plant>`,
-  `ORDER BY app_at/del_at DESCENDING, app_tm/del_tm DESCENDING` (terbaru di
-  atas). Tidak ada dedup — 1 baris per item PR yang pernah diproses.
-- Per baris: hitung `total = menge * preis`, format tanggal `erdat` (tanggal
-  PR dibuat) dan `app_at`/`del_at` (tanggal aksi), format jam `app_tm`/`del_tm`
-  dari `HHMMSS` → `HH:MM:SS`.
-- Untuk reject, sertakan `reason` (alasan reject, escaped).
-
-**Logic frontend (`renderHistTable` / `buildHistTable`)**:
-- Render tabel dengan kolom: No PR, Item, Deskripsi, Dibuat Oleh, Tgl PR, Qty,
-  UoM, Harga, Total, Curr, PGrp, lalu kolom khusus:
-  - Approve: Diapprove Oleh, Tgl Approve, Jam
-  - Reject: Direject Oleh, Tgl Reject, Jam, Alasan
-- Search box di atas tabel — filter **client-side** (debounce 300ms) terhadap
-  `banfn`, `txz01`, `ernam`, `app_by`/`del_by`. Data lengkap (`data`) di-embed
-  langsung sebagai JSON literal di `oninput` handler
-  (`JSON.stringify(data)`) — lihat catatan di `notes/investigation.md` soal
-  pendekatan ini.
-- FAB disembunyikan di view history (`document.getElementById('fab').className='fab'`).
-
----
-
-## 8. Approve / Reject — `PROCESS`
-
-### 8.1 Pemilihan PR (frontend)
-- Hanya muncul jika `isApprover === true`.
-- User centang checkbox per card (`toggleSelect`) atau klik **Select All**
-  (`toggleSelectAll`, hanya untuk PR di halaman aktif/`pageData`).
-- FAB menampilkan jumlah PR terpilih (`updateFabInfo`).
-- Klik **Approve** → `showModalApprove()` → modal konfirmasi (info: akan
-  release via `BAPI_REQUISITION_RELEASE`, release code `P2`).
-- Klik **Reject** → `showModalReject()` → modal konfirmasi + textarea alasan
-  (opsional). Info: PR akan **dihapus (delete)** dari SAP.
-
-### 8.2 Eksekusi (`processAction`)
-- Dipanggil dengan `banfns` (array nomor PR terpilih), `action`
-  (`'approve'`/`'delete'`), `notes`.
-- **Sequential, satu per satu** (bukan paralel) — `doNext(idx)` rekursif.
-- Tampilkan overlay loading dengan progress `Processing X / total...`.
-- Untuk tiap `banfn`:
-  ```
-  POST main.htm
-  body: action=PROCESS&banfn=<banfn>&pr_action=<approve|delete>&notes=<notes>
-  ```
-  - Jika `status==='S'`: `ok++`, animasikan card menghilang (fade + collapse).
-  - Jika `status!=='S'`: simpan pesan error ke `errs[]`.
-- Setelah semua selesai:
-  - Tampilkan toast sukses (`ok` PR berhasil di-approve/reject & delete) dan/
-    atau toast error (maks 3 pesan ditampilkan + "(+N lagi)").
-  - Reset `selBanfns`.
-  - `loadSidebarData()` (refresh badge counter).
-  - Setelah delay 700ms → reload view aktif (`fetchList`/`fetchHistApp`/
-    `fetchHistRej`) dengan state plant/mode/filter yang sama.
-
-### 8.3 Flowchart Backend `PROCESS`
-
-**Approve:**
-
-```mermaid
-flowchart TD
-    A[POST action=PROCESS\npr_action=approve, banfn] --> B{is_approver?}
-    B -->|Tidak| Z1[Return E:\nAnda tidak memiliki hak akses]
-    B -->|Ya| C{banfn kosong?}
-    C -->|Ya| Z2[Return E:\nBANFN tidak boleh kosong]
-    C -->|Tidak| D[SELECT items EBAN\nWHERE banfn, loekz=' ']
-    D --> E{items ditemukan?}
-    E -->|Tidak| Z3[Return E:\nPR tidak ditemukan/sudah diproses]
-    E -->|Ya| F[Loop tiap item:\nBAPI_REQUISITION_RELEASE\nrel_code='P2']
-    F --> G{ada item sukses\nlv_ap_ok > 0 ?}
-    G -->|Tidak| H[BAPI_TRANSACTION_ROLLBACK]
-    H --> Z4[Return E: pesan error\nitem terakhir gagal]
-    G -->|Ya| I[BAPI_TRANSACTION_COMMIT WAIT]
-    I --> J[Loop SEMUA item ->\nMODIFY ZROTO_APP_HIST\napp_by/app_at/app_tm]
-    J --> K[COMMIT WORK AND WAIT]
-    K --> Z5[Return S: PR berhasil di-approve\nN item]
+**Pendekatan Dinamis (ZPR_REL_BSP index-merge):**
+```abap
+lt_cat_def = VALUE #(
+  ( werks = '1200' category = 'MTN' bsart = 'ROTO' )
+  ( werks = '1200' category = 'RND' bsart = 'RSBR,PRK9' )
+  ...
+).
+LOOP AT lt_cat_def INTO ls_cat_def.
+  SELECT COUNT(*) ... WHERE werks = ls_cat_def-werks AND ...
+ENDLOOP.
 ```
 
-**Reject / Delete:**
+### 2.3 Perbedaan Model Kategori
 
-```mermaid
-flowchart TD
-    A[POST action=PROCESS\npr_action=delete, banfn, notes] --> B{is_approver?}
-    B -->|Tidak| Z1[Return E:\nAnda tidak memiliki hak akses]
-    B -->|Ya| C{banfn kosong?}
-    C -->|Ya| Z2[Return E:\nBANFN tidak boleh kosong]
-    C -->|Tidak| D[SELECT items EBAN\nWHERE banfn, loekz=' ']
-    D --> E{items ditemukan?}
-    E -->|Tidak| Z3[Return E:\nPR tidak ditemukan/sudah diproses]
-    E -->|Ya| F[Loop tiap item ->\nMODIFY ZROTO_REJ_HIST\ndel_by/del_at/del_tm/reason]
-    F --> G[COMMIT WORK AND WAIT\n*history sudah permanen*]
-    G --> H[Build lt_delitem delete_ind='L'\nBAPI_REQUISITION_DELETE]
-    H --> I{ada return type 'E'?}
-    I -->|Tidak| Z4[Return S: PR berhasil\ndi-reject/delete]
-    I -->|Ya| J[DELETE FROM ZROTO_REJ_HIST\nWHERE banfn = ...]
-    J --> K[COMMIT WORK AND WAIT\n*rollback history*]
-    K --> Z5[Return E: pesan error\ndari BAPI_REQUISITION_DELETE]
+| Aspek | ZBSP_PRCH_APP | ZPR_REL_BSP (index-merge) |
+|-------|---------------|---------------------------|
+| Paradigma | Technical (doc type = key) | Functional (business process = key) |
+| Struktur | `PR_CATEGORIES` flat + `PLANT_CATEGORIES` | `CATEGORY_DEF` per-plant array |
+| Contoh | `'ROTO':{label:'Maintenance'}` | `{code:'MTN', bsart:'ROTO'}` |
+| Plant grouping | Backend merge (1200+2000) | Frontend passthrough (`'1200,2000'`) |
+
+### 2.4 Bug Fixes yang Sudah Diterapkan
+
+| Bug | Fix | File |
+|-----|-----|------|
+| History approve catat SEMUA item | Loop `lt_items_ok` saja | main.htm |
+| XSS di renderHistTable | Data via variabel global `histData`/`histType` | index.htm |
+| Reject tidak transaksional | BAPI delete dulu, baru history + COMMIT | main.htm |
+| Closed PR (`statu='B'`) muncul | Tambah `statu NE 'B'` | main.htm |
+| PR tanpa item open | Validasi item-level SELECT SINGLE | main.htm |
+
+### 2.5 UI Changes dari Merge jasa_copy (index-merge.htm)
+
+| Area | Perubahan |
+|------|-----------|
+| CSS variables | 11 → 32 (design tokens) |
+| Google Font | DM Sans → Inter |
+| Badge pending | "Pending" → "In Release" |
+| Expand/collapse | 2 tombol → 1 tombol toggle |
+| Toast animation | Tanpa fade → fade-out (opacity + translateX) |
+| Welcome modal | Tidak ada → muncul setiap refresh (Navigation Timing API) |
+| Skeleton loading | Tidak ada → shimmer animation |
+| ResizeObserver | Tidak ada → sticky toolbar dinamis |
+| Empty state padding | 40px → 50px |
+| MRP filter colors | Hardcode hex → CSS variables |
+| Card detail table | Inline styles → class `.detail-tbl` |
+| History search params | 3 params (val, data, type) → 1 param (val) |
+| Duplicate functions | 11+ fungsi muncul di 2 script block (perlu dibersihkan) |
+
+### 2.6 Remaining Visual Differences (Belum Diselaraskan)
+
+1. Google Font: DM+Sans vs Inter
+2. Welcome btn text: "Mulai" vs "Mulai Bekerja"
+3. byColor: `--success`/`--danger` vs `--success-d`/`--danger-d`
+4. Font-weight approver name: 600 vs 700
+5. `white-space:normal` di description/reason cell
+6. Sidebar img inline styles
+7. Sidebar gap: 6px vs 7px
+8. Page title update di switchView
+
+---
+
+## 3. Aplikasi Release PO — ZPO_REL_BSP
+
+### 3.1 Arsitektur Single-File
+
+Berbeda dengan aplikasi PR, `ZPO_REL_BSP` adalah **single-file BSP**:
+- ABAP preamble: pre-load data via `Z_FM_YMMR068` untuk 2 plant
+- Data diserialisasi ke JSON dan di-embed ke JavaScript sebagai `ALL_DATA1` (header) & `ALL_DATA2` (item)
+- Action API di-handle di awal file, lalu `response_complete()` + `EXIT`
+- HTML + CSS + JS sisanya untuk render UI
+
+### 3.2 Action Handler
+
+| Action | Fungsi |
+|--------|--------|
+| `GET_HISTORY_REL` | Riwayat release dari `CDHDR`+`CDPOS` (tcode ME28/ME29N) |
+| `GET_HISTORY_REJ` | Riwayat reject dari `CDHDR`+`CDPOS` (PROCSTAT='08') + `READ_TEXT` |
+| `GET_HISTORY_COUNT` | Badge count sidebar |
+| `GET_HISTORY_ITEMS` | Item detail PO riwayat (lazy load) |
+| `GET_OGR` | Outstanding Goods Receipt |
+| `BULK_REL` | Release massal via `Z_PO_RELEASE2` |
+| `BULK_REJ` | Reject massal via `Z_PO_COMMENT_UPDATE` + `Z_PO_REJECT` |
+
+### 3.3 Data Source
+
+- **Function Module**: `Z_FM_YMMR068` — mengambil data PO header & item per plant
+- **History**: SAP Change Documents (`CDHDR`/`CDPOS`), bukan custom Z tables
+- **Release**: `Z_PO_RELEASE2` (dengan release code dari field `frgco`)
+- **Reject**: `Z_PO_COMMENT_UPDATE` (simpan reason) + `Z_PO_REJECT`
+- **Text**: `READ_TEXT` untuk baca komentar reject (object `EKKO`, ID `F01`)
+
+### 3.4 Frontend Functions
+
+| Kelompok | Fungsi |
+|----------|--------|
+| Sidebar | `renderSidebar()`, `switchView()`, `switchHistory()`, `switchOGR()` |
+| List | `renderCards()`, `renderCardListOnly()`, `getFilteredData()` |
+| History | `loadHistory()`, `renderHistoryPage()`, `renderHistItemTable()` |
+| OGR | `loadOGR()`, `renderOGRPage()`, `ogrRenderCards()` |
+| Action | `submitAction()` — bulk release/reject via XHR |
+| Utility | `parseAbapNum()`, `formatAmount()`, `formatDate()`, `formatTime()` |
+
+### 3.5 Fitur Unik (tidak ada di PR apps)
+
+- Outstanding GR monitoring
+- Date range filter di history
+- Server-side pagination (offset/limit)
+- Popstate/URL restore
+- Kategori sebagai grup BSART (`POTYPE_MAP`)
+- Alasan reject wajib via SAP text (bukan tabel Z)
+
+---
+
+## 4. Flow Approve (PROCESS)
+
+### 4.1 PR Approve (BAPI_REQUISITION_RELEASE)
+
+```
+1. LOOP setiap item PR
+   └─ BAPI_REQUISITION_RELEASE(rel_code='P2', use_exceptions='X', no_commit_work='X')
+      ├─ sukses → lv_ap_ok++
+      └─ gagal  → ambil pesan error
+2. IF lv_ap_ok > 0
+   ├─ BAPI_TRANSACTION_COMMIT WAIT='X'
+   ├─ LOOP lt_items_ok → MODIFY zroto_app_hist
+   └─ COMMIT WORK AND WAIT
+   ELSE → BAPI_TRANSACTION_ROLLBACK
+```
+
+### 4.2 PR Reject (BAPI_REQUISITION_DELETE)
+
+```
+1. BAPI_REQUISITION_DELETE (delete_ind='L')
+2. IF tidak ada return type 'E'
+   ├─ LOOP item → MODIFY zroto_rej_hist (dengan reason)
+   └─ COMMIT WORK AND WAIT
+   ELSE
+   ├─ DELETE FROM zroto_rej_hist WHERE banfn=...
+   └─ COMMIT WORK AND WAIT (rollback history)
+```
+
+### 4.3 PO Bulk Release (Z_PO_RELEASE2)
+
+```
+1. LOOP setiap PO terpilih (max 500)
+   └─ Z_PO_RELEASE2(purchaseorder, po_rel_code)
+      ├─ sukses → lanjut
+      └─ error (type 'E'/'A') → break + return error
+2. Jika semua sukses → BAPI_TRANSACTION_COMMIT
+```
+
+### 4.4 PO Bulk Reject (Z_PO_REJECT)
+
+```
+1. LOOP setiap PO terpilih
+   ├─ Z_PO_COMMENT_UPDATE(purchaseorder, comment_text, text_id='F01')
+   └─ Z_PO_REJECT(purchaseorder)
+      └─ error → break + return error
 ```
 
 ---
 
-### 8.4 Logic backend `PROCESS` (penjelasan teks)
+## 5. State Management (Frontend)
 
-**Guard awal:**
-- Jika `lv_is_approver = false` → `{"status":"E","message":"Anda tidak
-  memiliki hak akses"}`.
-- Jika `banfn` kosong → error.
-- `SELECT` semua item EBAN untuk `banfn` (`loekz=' '`). Jika kosong → error
-  "PR ... tidak ditemukan atau sudah diproses".
+### 5.1 ZPR_REL_BSP / ZBSP_PRCH_APP
 
-**A. `pr_action = 'approve'`**
-1. Loop tiap item PR → `CALL FUNCTION 'BAPI_REQUISITION_RELEASE'`
-   (`number=banfn`, `rel_code='P2'`, `item=bnfpo`, `use_exceptions='X'`,
-   `no_commit_work='X'`).
-   - Sukses → `lv_ap_ok++`.
-   - Gagal → ambil pesan error dari `lt_return` (type `E`) atau dari
-     `sy-subrc` (mapping ke pesan generik per exception).
-2. Jika `lv_ap_ok > 0`:
-   - `BAPI_TRANSACTION_COMMIT WAIT='X'`.
-   - **Loop ulang semua item** (bukan hanya yang sukses!) → `MODIFY
-     zroto_app_hist` (insert/update record history approve) dengan data item
-     + `app_by=sy-uname`, `app_at=sy-datum`, `app_tm=sy-uzeit`.
-   - `COMMIT WORK AND WAIT`.
-   - Return sukses dengan jumlah item yang berhasil di-release.
-3. Jika `lv_ap_ok = 0`:
-   - `BAPI_TRANSACTION_ROLLBACK`.
-   - Return error dengan pesan dari item terakhir yang gagal.
+| Variabel | Tipe | Fungsi |
+|----------|------|--------|
+| `curPlant` | string | Plant aktif |
+| `curMode` | string | Mode: pending/hist_app/hist_rej |
+| `curBsart` | string | Kategori PR aktif |
+| `isApprover` | boolean | User adalah approver |
+| `allData` | array | Data PR dari GET_LIST |
+| `selBanfns` | object | PR yang dicentang |
+| `filteredData` | array | Data setelah filter search |
+| `histData`/`histType` | array/string | Data history (fix XSS) |
+| `pageSize`/`curPage` | number | Pagination |
+| `searchKw` | string | Keyword pencarian |
 
-**B. `pr_action = 'delete'`**
-1. Loop tiap item PR → `MODIFY zroto_rej_hist` (insert record history reject)
-   dengan data item + `del_by`, `del_at`, `del_tm`, `reason=lv_notes`.
-   `COMMIT WORK AND WAIT` — **history disimpan duluan, sebelum delete BAPI
-   dipanggil**.
-2. Build `lt_delitem` (semua item, `delete_ind='L'` = flag delete).
-3. `CALL FUNCTION 'BAPI_REQUISITION_DELETE'` (`number=banfn`,
-   `requisition_items_to_delete=lt_delitem`).
-4. Jika tidak ada `return` bertipe `E` → anggap sukses, return
-   `"PR ... berhasil di-reject/delete"`.
-5. Jika ada error → **rollback manual**: `DELETE FROM zroto_rej_hist WHERE
-   banfn=...` lalu `COMMIT WORK AND WAIT` (membatalkan history yang sudah
-   ditulis di langkah 1), lalu return error.
+### 5.2 ZPO_REL_BSP
 
-**C. `pr_action` lain** → `{"status":"E","message":"pr_action tidak valid"}`.
+Data pre-loaded: `ALL_DATA1` (header), `ALL_DATA2` (item), `POTYPE_MAP`, `BSART_POTYPE_MAP`.
 
 ---
 
-## 9. Format Angka & Tanggal (frontend helper)
+## 6. Teknis Umum
 
-- `parseNum(s)`: parsing angka dari string SAP (yang kadang pakai `,` sebagai
-  desimal dan `.` sebagai ribuan, atau sebaliknya). Heuristik: jika ada >1
-  titik → anggap titik = pemisah ribuan, koma = desimal.
-- `fmtAmt(raw, waers)`: format mata uang.
-  - Untuk currency "zero decimal" (`IDR`, `JPY`, `KRW`, `VND`) → dikalikan
-    100 lalu dibulatkan tanpa desimal (karena nilai SAP untuk currency ini
-    disimpan dalam representasi "x100"? — perlu konfirmasi, lihat
-    `notes/investigation.md`).
-  - Currency lain → 2 desimal, format locale `id-ID`.
-- `fmtQty(raw)`: quantity — integer tanpa desimal, atau 3 desimal jika ada
-  pecahan.
-- `fmt_date` (ABAP macro): `YYYYMMDD` → `DD.MM.YYYY`, atau `-` jika kosong/
-  `00000000`.
+### 6.1 BSP Objects
 
----
+| Objek | Fungsi |
+|-------|--------|
+| `request->get_form_field('name')` | Baca parameter |
+| `response->set_header_field(...)` | Set response header |
+| `response->append_cdata(lv_output)` | Tulis response body |
+| `_m_navigation->next_page('...')` | Redirect |
+| `_m_navigation->response_complete()` | Tandai response selesai |
 
-## 10. Logout
+### 6.2 ABAP Macros (main.htm)
 
-- Tombol logout (`doLogout`) → konfirmasi `confirm()` → set
-  `sessionStorage.logged_out='1'` → `fetch('/sap/public/bc/icf/logoff')` →
-  redirect XHR sync ke `index.htm` untuk memicu re-auth, lalu
-  `window.location.replace(index.htm)`.
-- Listener `pageshow` (untuk kasus halaman di-restore dari bfcache setelah
-  logout) → redirect ulang ke `/sap/public/bc/icf/logoff`.
+- `escape_json`: escape `\`, `"`, `/`, newline/CR/tab untuk JSON
+- `fmt_date`: konversi `YYYYMMDD` → `DD.MM.YYYY`
+- `count_pending`: hitung PR pending per plant+kategori (hanya di ZBSP_PRCH_APP)
+- `check_werks_allowed`: validasi akses user ke plant (hanya di ZBSP_PRCH_APP)
+- `parse_bsart_range`: parse comma-separated BSART ke RANGE table
+
+### 6.3 Format Data
+
+- **Tanggal**: `YYYYMMDD` → `DD.MM.YYYY` (via `fmt_date` macro)
+- **Jam**: `HHMMSS` → `HH:MM:SS` (via JS `formatTime`)
+- **Angka**: SAP format (`,` desimal, `.` ribuan) → JS `parseNum`
+- **Currency**: Zero-decimal (IDR, JPY, KRW, VND) → `Math.round(n*100)`, lainnya → 2 desimal
+
+### 6.4 Keamanan
+
+- **Approver**: Hardcode `KMI-BOD` (PR apps) vs tanpa check (PO app)
+- **Plant restriction**: Backend `check_werks_allowed` (ZBSP_PRCH_APP) vs frontend-only (ZPR_REL_BSP)
+- **CSRF**: Tidak ada token CSRF di POST request
+- **XSS**: Sudah di-fix — data via variabel global, bukan embed di atribut HTML
+- **Logout**: `/sap/public/bc/icf/logoff` dengan basic auth logout
