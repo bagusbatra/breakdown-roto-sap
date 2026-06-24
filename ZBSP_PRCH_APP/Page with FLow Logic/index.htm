@@ -504,6 +504,20 @@ body.sb-collapsed .main     { margin-left:0; }
   letter-spacing:.04em; text-transform:uppercase;
 }
 
+/* PR/group dengan item lintas mata uang: tumpuk satu baris per
+   currency, masing-masing lebih kecil dari tampilan single-currency
+   karena ruang horizontal kartu tetap sama */
+.card-amount-multi { display:flex; flex-direction:column; gap:2px; }
+.card-amount-row {
+  display:flex; align-items:baseline; justify-content:flex-end; gap:6px;
+}
+.card-amount-row .card-amount-val {
+  font-size:13px; letter-spacing:-.1px;
+}
+.card-amount-row .card-amount-lbl {
+  font-size:9.5px; min-width:30px; text-align:left;
+}
+
 .card-meta {
   display:grid; grid-template-columns:repeat(4,1fr);
   gap:14px; padding:2px 18px 16px 47px;
@@ -1138,6 +1152,27 @@ function fmtAmt(raw, waers) {
     {minimumFractionDigits:2, maximumFractionDigits:2});
 }
 
+/* Render blok total di card-top. totals = [{waers,total},...] —
+   1 currency = tampilan lama (1 baris besar), >1 currency = ditumpuk
+   per baris supaya tidak salah jumlah lintas mata uang. */
+function renderCardAmount(totals) {
+  if (!totals || !totals.length) totals = [{waers:'IDR', total:0}];
+  if (totals.length === 1) {
+    var t = totals[0];
+    return '<div class="card-amount"><div class="card-amount-val">'+
+           fmtAmt(t.total,t.waers)+'</div><div class="card-amount-lbl">'+
+           escHtml(t.waers||'IDR')+' Total</div></div>';
+  }
+  var html = '<div class="card-amount card-amount-multi">';
+  totals.forEach(function(t){
+    html += '<div class="card-amount-row"><span class="card-amount-val">'+
+            fmtAmt(t.total,t.waers)+'</span><span class="card-amount-lbl">'+
+            escHtml(t.waers||'IDR')+'</span></div>';
+  });
+  html += '</div>';
+  return html;
+}
+
 function fmtQty(raw) {
   var n = parseNum(raw);
   if (isNaN(n)) return '0';
@@ -1443,12 +1478,10 @@ function renderSidebar() {
   ];
 
   /* KMI-BOD & BASIS: tidak difilter (lihat semua plant).
-     KMI-U052: hanya Surabaya. KMI-U051: hanya Semarang.
+     KMI-U052: Surabaya & Semarang. KMI-U051: hanya Semarang.
      KMI-U151: hanya Surabaya. */
   var ucUser = (CUR_USER||'').toUpperCase();
-  if (ucUser==='KMI-U052') {
-    plants = plants.filter(function(p){ return p.code==='1200'; });
-  } else if (ucUser==='KMI-U051') {
+  if (ucUser==='KMI-U051') {
     plants = plants.filter(function(p){ return p.code==='1300'; });
   } else if (ucUser==='KMI-U151') {
     plants = plants.filter(function(p){ return p.code==='1200'; });
@@ -1706,8 +1739,6 @@ function renderList() {
           '</div></div>';
   } else {
     pageData.forEach(function(pr, idx){
-      var waers = pr.waers||'IDR';
-      var amt   = fmtAmt(pr.total_value,waers);
       var isMRP = (pr.estkz==='B');
       var ecls  = isMRP?'b-mrp':'b-nonmrp';
       var elbl  = getEstkzLabel(pr.estkz);
@@ -1727,8 +1758,7 @@ function renderList() {
       html+='<span class="badge '+ecls+'">'+escHtml(elbl)+'</span>';
       if (itCnt>0) html+='<span class="badge b-items">'+itCnt+' item</span>';
 
-      html+='<div class="card-amount"><div class="card-amount-val">'+amt+'</div>'+
-            '<div class="card-amount-lbl">'+waers+' Total</div></div>';
+      html+=renderCardAmount(pr.totals);
       html+='</div>'; /* card-top */
 
       html+='<div class="card-meta">';
@@ -1828,12 +1858,16 @@ function groupHistByBanfn(rows) {
         app_by:h.app_by, app_at:h.app_at, app_tm:h.app_tm,
         del_by:h.del_by, del_at:h.del_at, del_tm:h.del_tm,
         reason:h.reason,
-        items:[], totalAmt:0
+        items:[], totals:[]
       };
       order.push(h.banfn);
     }
-    map[h.banfn].items.push(h);
-    map[h.banfn].totalAmt += parseNum(h.total)||0;
+    var grp = map[h.banfn];
+    grp.items.push(h);
+    var w = (h.waers||grp.waers||'IDR');
+    var t = grp.totals.filter(function(x){ return x.waers===w; })[0];
+    if (!t) { t={waers:w, total:0}; grp.totals.push(t); }
+    t.total += parseNum(h.total)||0;
   });
   return order.map(function(b){ return map[b]; });
 }
@@ -1914,8 +1948,6 @@ function buildHistCards(groups,type) {
   var html='';
 
   groups.forEach(function(g,idx){
-    var waers = g.waers||'IDR';
-    var amt   = fmtAmt(g.totalAmt,waers);
     var itCnt = g.items.length;
     var bcls  = (g.bsart==='PRK9' || g.bsart==='RSBR') ? 'cat-prk9' : 'cat-roto';
     var delay = Math.min(idx,8)*28;
@@ -1934,8 +1966,7 @@ function buildHistCards(groups,type) {
     html+='<span class="chip '+bcls+'">'+escHtml(getBsartLabel(g.bsart))+'</span>';
     if (itCnt>0) html+='<span class="badge b-items">'+itCnt+' item</span>';
 
-    html+='<div class="card-amount"><div class="card-amount-val">'+amt+'</div>'+
-          '<div class="card-amount-lbl">'+waers+' Total</div></div>';
+    html+=renderCardAmount(g.totals);
     html+='</div>'; /* card-top */
 
     html+='<div class="card-meta">';
@@ -1967,7 +1998,7 @@ function buildHistCards(groups,type) {
           '<th class="num">Harga</th><th class="num">Total</th><th>Curr</th><th>PGrp</th>'+
           '</tr></thead><tbody>';
     g.items.forEach(function(h){
-      var w  = h.waers||waers;
+      var w  = h.waers||g.waers||'IDR';
       var cc = curClass(w);
       html+='<tr>';
       html+='<td style="font-family:\'DM Mono\',monospace;font-size:12px;">'+escHtml(h.bnfpo)+'</td>';

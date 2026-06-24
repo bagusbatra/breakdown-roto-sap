@@ -29,7 +29,7 @@ lv_uname        = sy-uname.
 *----------------------------------------------------------------------
 * PLANT RESTRICTION PER USER
 * KMI-BOD & BASIS  -> tidak dibatasi (semua plant).
-* KMI-U052         -> hanya plant 1200 (Surabaya).
+* KMI-U052         -> plant 1200 (Surabaya) & 1300 (Semarang).
 * KMI-U051         -> hanya plant 1300 (Semarang).
 *----------------------------------------------------------------------
 lv_uname_uc = lv_uname.
@@ -178,13 +178,11 @@ DEFINE escape_json.
 END-OF-DEFINITION.
 
 " Cek apakah user saat ini boleh akses plant &1 (werks)
-" KMI-U052 = Surabaya (1200) only, KMI-U051 = Semarang (1300) only
+" KMI-U052 = Surabaya (1200) & Semarang (1300), KMI-U051 = Semarang (1300) only
 " KMI-U151 = Surabaya (1200) only
 DEFINE check_werks_allowed.
   lv_plant_ok = abap_true.
-  IF lv_uname_uc = 'KMI-U052' AND &1 NE '1200'.
-    lv_plant_ok = abap_false.
-  ELSEIF lv_uname_uc = 'KMI-U051' AND &1 NE '1300'.
+  IF lv_uname_uc = 'KMI-U051' AND &1 NE '1300'.
     lv_plant_ok = abap_false.
   ELSEIF lv_uname_uc = 'KMI-U151' AND &1 NE '1200'.
     lv_plant_ok = abap_false.
@@ -402,10 +400,9 @@ CASE lv_action.
     CONDENSE lv_s_1300_PRKS NO-GAPS.
 
     " Sembunyikan data plant yang tidak diizinkan utk user ini
-    " (KMI-U052 = Surabaya only, KMI-U051 = Semarang only)
+    " (KMI-U052 = Surabaya & Semarang, KMI-U051 = Semarang only)
     " (KMI-U151 = Surabaya only)
-    IF lv_uname_uc = 'KMI-U052'
-    OR lv_uname_uc = 'KMI-U151'.
+    IF lv_uname_uc = 'KMI-U151'.
       lv_s_1300_roto = '0'.
       lv_s_1300_PRK9 = '0'.
       lv_s_1300_PRKS = '0'.
@@ -634,33 +631,41 @@ CASE lv_action.
       ENDIF.
     ENDIF.
 
-    DATA: lv_gl_totpr TYPE p DECIMALS 2,
-          lv_gl_waers TYPE waers,
-          lv_gl_tstr  TYPE string,
-          lv_gl_bdat  TYPE string,
-          lv_gl_txz01 TYPE string,
-          lv_gl_full  TYPE string,
-          lv_gl_itcnt TYPE string,
-          lv_gl_icnt  TYPE i,
-          ls_gl_item  TYPE ty_eban_item.
+    TYPES: BEGIN OF ty_gl_curr,
+             waers TYPE eban-waers,
+             totpr TYPE p LENGTH 8 DECIMALS 2,
+           END OF ty_gl_curr.
+
+    DATA: lv_gl_bdat     TYPE string,
+          lv_gl_txz01    TYPE string,
+          lv_gl_full     TYPE string,
+          lv_gl_itcnt    TYPE string,
+          lv_gl_icnt     TYPE i,
+          ls_gl_item     TYPE ty_eban_item,
+          lt_gl_curr     TYPE STANDARD TABLE OF ty_gl_curr,
+          ls_gl_curr     TYPE ty_gl_curr,
+          lv_gl_totals   TYPE string,
+          lv_gl_tsep     TYPE string,
+          lv_gl_camt     TYPE string.
 
     CLEAR: lv_json, lv_sep.
 
     LOOP AT lt_head INTO ls_head.
-      CLEAR: lv_gl_totpr, lv_gl_waers, lv_gl_icnt.
+      CLEAR: lt_gl_curr, lv_gl_icnt.
 
       LOOP AT lt_items INTO ls_gl_item
         WHERE banfn = ls_head-banfn.
-        lv_gl_totpr = lv_gl_totpr +
-          ( ls_gl_item-menge * ls_gl_item-preis ).
-        IF lv_gl_waers IS INITIAL.
-          lv_gl_waers = ls_gl_item-waers.
-        ENDIF.
+        CLEAR ls_gl_curr.
+        ls_gl_curr-waers = ls_gl_item-waers.
+        ls_gl_curr-totpr = ls_gl_item-menge * ls_gl_item-preis.
+        COLLECT ls_gl_curr INTO lt_gl_curr.
         lv_gl_icnt = lv_gl_icnt + 1.
       ENDLOOP.
 
-      IF lv_gl_waers IS INITIAL.
-        lv_gl_waers = 'IDR'.
+      IF lt_gl_curr IS INITIAL.
+        CLEAR ls_gl_curr.
+        ls_gl_curr-waers = 'IDR'.
+        APPEND ls_gl_curr TO lt_gl_curr.
       ENDIF.
 
       CLEAR lv_gl_full.
@@ -673,14 +678,23 @@ CASE lv_action.
       ENDIF.
 
       fmt_date ls_head-badat lv_gl_bdat.
-      lv_gl_tstr  = lv_gl_totpr.
-      CONDENSE lv_gl_tstr NO-GAPS.
       lv_gl_txz01 = ls_head-txz01.
       lv_gl_itcnt = lv_gl_icnt.
       CONDENSE lv_gl_itcnt NO-GAPS.
 
       escape_json lv_gl_txz01.
       escape_json lv_gl_full.
+
+      CLEAR: lv_gl_totals, lv_gl_tsep.
+      LOOP AT lt_gl_curr INTO ls_gl_curr.
+        lv_gl_camt = ls_gl_curr-totpr.
+        CONDENSE lv_gl_camt NO-GAPS.
+        CONCATENATE lv_gl_totals lv_gl_tsep
+          '{"waers":"' ls_gl_curr-waers '",'
+          '"total":"'  lv_gl_camt      '"}'
+          INTO lv_gl_totals.
+        lv_gl_tsep = ','.
+      ENDLOOP.
 
       CONCATENATE lv_json lv_sep
         '{"banfn":"'      ls_head-banfn  '",'
@@ -693,8 +707,7 @@ CASE lv_action.
         '"ekgrp":"'       ls_head-ekgrp  '",'
         '"estkz":"'       ls_head-estkz  '",'
         '"item_count":"'  lv_gl_itcnt    '",'
-        '"total_value":"' lv_gl_tstr     '",'
-        '"waers":"'       lv_gl_waers    '"}'
+        '"totals":['      lv_gl_totals   ']}'
         INTO lv_json.
       lv_sep = ','.
     ENDLOOP.
