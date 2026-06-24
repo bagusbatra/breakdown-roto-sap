@@ -310,6 +310,49 @@ ENDIF.
     }
     .btn-exp:hover { background:#f3f4f6; }
 
+    /* Tombol Filter — mengumpulkan filter sekunder (ESTKZ + plant)
+       jadi satu panel dropdown supaya toolbar tetap ringkas. */
+    .filter-wrap { position:relative; }
+    .btn-filter {
+      height:34px; padding:0 14px;
+      border:1px solid var(--border); background:#fff;
+      border-radius:8px; font-family:inherit;
+      font-size:12px; font-weight:600; color:#374151;
+      cursor:pointer; display:flex; align-items:center;
+      gap:6px; transition:background .12s;
+    }
+    .btn-filter:hover { background:#f3f4f6; }
+    .btn-filter.active {
+      border-color:#a5b4fc; color:var(--primary); background:var(--primary-lt);
+    }
+    .filter-badge {
+      display:inline-flex; align-items:center; justify-content:center;
+      min-width:16px; height:16px; padding:0 4px;
+      border-radius:999px; background:var(--primary); color:#fff;
+      font-size:10px; font-weight:700; line-height:1;
+    }
+    .filter-panel {
+      display:none; position:absolute;
+      top:calc(100% + 8px); left:0;
+      background:#fff; border:1px solid #e5e7eb;
+      border-radius:10px; box-shadow:0 8px 24px rgba(0,0,0,.12);
+      padding:14px; width:210px; z-index:500;
+    }
+    .filter-panel.open { display:block; }
+    .filter-panel-row { display:flex; flex-direction:column; gap:5px; margin-bottom:12px; }
+    .filter-panel-row:last-of-type { margin-bottom:0; }
+    .filter-panel-lbl {
+      font-size:10px; color:var(--muted); font-weight:600;
+      letter-spacing:.04em; text-transform:uppercase;
+    }
+    .filter-panel select { width:100%; }
+    .filter-panel-reset {
+      margin-top:12px; padding-top:10px; border-top:1px solid #f3f4f6;
+      text-align:center; font-size:12px; font-weight:600;
+      color:var(--danger); cursor:pointer;
+    }
+    .filter-panel-reset:hover { text-decoration:underline; }
+
     /* ── PAGINATION ── */
     .pagination-bar {
       display:flex; align-items:center;
@@ -379,6 +422,19 @@ ENDIF.
     .card-amount-lbl {
       font-size:10px; color:var(--muted);
       font-weight:400; display:block;
+    }
+    /* PR/group dengan item lintas mata uang: tumpuk satu baris per
+       currency (lihat renderCardAmount), bukan dijumlah jadi satu
+       angka yang salah karena beda currency. */
+    .card-amount-multi { display:flex; flex-direction:column; gap:2px; }
+    .card-amount-row {
+      display:flex; align-items:baseline;
+      justify-content:flex-end; gap:6px;
+    }
+    .card-amount-row-val { font-size:13px; font-weight:700; color:#057a55; }
+    .card-amount-row-lbl {
+      font-size:9.5px; color:var(--muted); font-weight:400;
+      min-width:28px; text-align:left;
     }
     .card-meta {
       display:grid; grid-template-columns:repeat(4,1fr);
@@ -825,6 +881,8 @@ var openSections   = {};
 var openCategories = {};
 var curEstkzFilter = '';
 var curSort      = 'newest';
+var curPlantSub  = '';  // filter sub-plant (werks asli) dlm grup sidebar
+var filterPanelOpen = false; // panel "Filter" (ESTKZ + plant), shared pending & history
 
 var allData      = [];
 var selBanfns    = {};
@@ -951,6 +1009,27 @@ function fmtAmt(raw, waers) {
   return n.toLocaleString('id-ID',
     {minimumFractionDigits:2,
      maximumFractionDigits:2});
+}
+
+/* Render blok total di card-top. totals = [{waers,total},...] —
+   1 currency = tampilan lama (1 baris besar), >1 currency = ditumpuk
+   per baris supaya tidak salah jumlah lintas mata uang. */
+function renderCardAmount(totals) {
+  if (!totals || !totals.length) totals = [{waers:'IDR', total:0}];
+  if (totals.length === 1) {
+    var t = totals[0];
+    return '<div class="card-amount">'+fmtAmt(t.total,t.waers)+
+           '<span class="card-amount-lbl">'+escHtml(t.waers||'IDR')+
+           ' Total</span></div>';
+  }
+  var html = '<div class="card-amount card-amount-multi">';
+  totals.forEach(function(t){
+    html += '<div class="card-amount-row">'+
+            '<span class="card-amount-row-val">'+fmtAmt(t.total,t.waers)+'</span>'+
+            '<span class="card-amount-row-lbl">'+escHtml(t.waers||'IDR')+'</span></div>';
+  });
+  html += '</div>';
+  return html;
 }
 
 function fmtQty(raw) {
@@ -1306,9 +1385,12 @@ function switchView(plant,category,mode) {
   searchKw       = '';
   allExpanded    = false;
   curEstkzFilter = '';
+  curPlantSub    = '';
+  filterPanelOpen= false;
   histCurPage    = 1;
   histSearchKw   = '';
   histAllExpanded= false;
+  histPlantSub   = '';
 
   document.getElementById('fab').className='fab';
   renderSidebar();
@@ -1390,6 +1472,61 @@ function onEstkzFilter(val) {
   fetchList(val);
 }
 
+function onPlantSubFilter(val) {
+  curPlantSub=val;
+  curPage=1;
+  renderList();
+}
+
+function onHistPlantSubFilter(val) {
+  histPlantSub=val;
+  histCurPage=1;
+  renderHistContent();
+}
+
+/* ================================================================
+   FILTER PANEL — tombol Filter di toolbar pending & history,
+   membungkus filter sekunder (ESTKZ + plant) jadi satu dropdown
+   supaya toolbar tetap ringkas.
+   ================================================================ */
+function toggleFilterPanel(e) {
+  if (e) e.stopPropagation();
+  filterPanelOpen=!filterPanelOpen;
+  var panel=document.getElementById('filterPanel');
+  var btn  =document.getElementById('btnFilter');
+  if (panel) panel.classList.toggle('open',filterPanelOpen);
+  if (btn)   btn.classList.toggle('active',filterPanelOpen);
+}
+
+document.addEventListener('click', function(e){
+  var panel=document.getElementById('filterPanel');
+  var btn  =document.getElementById('btnFilter');
+  if (panel && btn && !btn.contains(e.target) && !panel.contains(e.target)){
+    panel.classList.remove('open');
+    btn.classList.remove('active');
+    filterPanelOpen=false;
+  }
+});
+
+function resetPrFilters() {
+  curPlantSub='';
+  curPage=1;
+  if (curEstkzFilter){
+    curEstkzFilter='';
+    selBanfns={};
+    showLoading();
+    fetchList('');
+  } else {
+    renderList();
+  }
+}
+
+function resetHistFilters() {
+  histPlantSub='';
+  histCurPage=1;
+  renderHistContent();
+}
+
 /* ================================================================
    GET FILTERED (client-side search)
    ================================================================ */
@@ -1411,6 +1548,8 @@ function getFiltered() {
              .toLowerCase().indexOf(kw)>-1);
       })
     :allData.slice();
+  if (curPlantSub)
+    arr=arr.filter(function(d){ return d.werks===curPlantSub; });
   if (curSort==='oldest')
     arr.sort(function(a,b){
       return (a.badat||'').localeCompare(b.badat||'');
@@ -1437,6 +1576,7 @@ function renderList() {
     :Math.min(start+pageSize,total);
   var pageData=filteredData.slice(start,end);
 
+  var primaryPlant=curPlant.split(',')[0];
   var catDef =getCategoryDef(curPlant,curCategory);
   var catIcon=catDef?catDef.icon:'&#128203;';
   var catLbl =catDef?catDef.label:'PR';
@@ -1501,6 +1641,14 @@ function renderList() {
         '>&#8593; Terlama</option>';
   html+='</select>';
 
+  var prFiltCnt=(curEstkzFilter?1:0)+(curPlantSub?1:0);
+  html+='<div class="filter-wrap">';
+  html+='<button class="btn-filter'+(filterPanelOpen?' active':'')+'"'+
+        ' id="btnFilter" onclick="toggleFilterPanel(event)">'+
+        '&#9881; Filter'+(prFiltCnt>0?'<span class="filter-badge">'+prFiltCnt+'</span>':'')+
+        '</button>';
+  html+='<div class="filter-panel'+(filterPanelOpen?' open':'')+'" id="filterPanel">';
+  html+='<div class="filter-panel-row"><span class="filter-panel-lbl">Jenis PR</span>';
   html+='<select class="estkz-select"'+
         ' onchange="onEstkzFilter(this.value)">';
   html+='<option value=""'+
@@ -1513,7 +1661,16 @@ function renderList() {
         (curEstkzFilter==='NONMRP'
           ?' selected':'')+
         '>Non-MRP saja</option>';
-  html+='</select>';
+  html+='</select></div>';
+  html+='<div class="filter-panel-row"><span class="filter-panel-lbl">Plant</span>';
+  html+='<select class="estkz-select" onchange="onPlantSubFilter(this.value)">';
+  html+='<option value=""'+(curPlantSub===''?' selected':'')+'>Semua Plant</option>';
+  getSidebarWerks(primaryPlant).forEach(function(w){
+    html+='<option value="'+w+'"'+(curPlantSub===w?' selected':'')+'>Plant '+w+'</option>';
+  });
+  html+='</select></div>';
+  if (prFiltCnt>0) html+='<div class="filter-panel-reset" onclick="resetPrFilters()">Reset Filter</div>';
+  html+='</div></div>';
 
   html+='<div class="expand-bar">'+
         '<button class="btn-exp"'+
@@ -1545,8 +1702,6 @@ function renderList() {
           '</div></div>';
   } else {
     pageData.forEach(function(pr){
-      var waers  =pr.waers||'IDR';
-      var amt    =fmtAmt(pr.total_value,waers);
       var isMRP  =(pr.estkz==='B');
       var ecls   =isMRP?'b-mrp':'b-nonmrp';
       var elbl   =getEstkzLabel(pr.estkz);
@@ -1581,9 +1736,7 @@ function renderList() {
         html+='<span class="badge b-items">'+
               itCnt+' item</span>';
 
-      html+='<div class="card-amount">'+amt;
-      html+='<span class="card-amount-lbl">'+
-            waers+' Total</span></div>';
+      html+=renderCardAmount(pr.totals);
 
       html+='</div>'; /* card-top */
 
@@ -1676,12 +1829,16 @@ function groupHistByBanfn(rows) {
         app_by:h.app_by, app_at:h.app_at, app_tm:h.app_tm,
         del_by:h.del_by, del_at:h.del_at, del_tm:h.del_tm,
         reason:h.reason,
-        items:[], totalAmt:0
+        items:[], totals:[]
       };
       order.push(h.banfn);
     }
-    map[h.banfn].items.push(h);
-    map[h.banfn].totalAmt += parseNum(h.total)||0;
+    var grp = map[h.banfn];
+    grp.items.push(h);
+    var w = (h.waers||grp.waers||'IDR');
+    var t = grp.totals.filter(function(x){ return x.waers===w; })[0];
+    if (!t) { t={waers:w, total:0}; grp.totals.push(t); }
+    t.total += parseNum(h.total)||0;
   });
   return order.map(function(b){ return map[b]; });
 }
@@ -1706,8 +1863,6 @@ function buildHistCards(groups,type) {
 
   var html='';
   groups.forEach(function(g){
-    var waers =g.waers||'IDR';
-    var amt   =fmtAmt(g.totalAmt,waers);
     var itCnt =g.items.length;
 
     html+='<div class="po-card'+
@@ -1737,9 +1892,7 @@ function buildHistCards(groups,type) {
       html+='<span class="badge b-items">'+
             itCnt+' item</span>';
 
-    html+='<div class="card-amount">'+amt;
-    html+='<span class="card-amount-lbl">'+
-          waers+' Total</span></div>';
+    html+=renderCardAmount(g.totals);
     html+='</div>'; /* card-top */
 
     html+='<div class="card-meta">';
@@ -1793,7 +1946,7 @@ function buildHistCards(groups,type) {
           '<th>Curr</th><th>PGrp</th>'+
           '</tr></thead><tbody>';
     g.items.forEach(function(h){
-      var w=h.waers||waers;
+      var w=h.waers||g.waers||'IDR';
       html+='<tr>';
       html+='<td style="font-family:\'DM Mono\','+
             'monospace;font-size:12px;">'+
@@ -1824,6 +1977,7 @@ var histPageSize=10;
 var histCurPage=1;
 var histSearchKw='';
 var histAllExpanded=false;
+var histPlantSub='';  // filter sub-plant (werks asli) dlm grup sidebar
 
 function onHistSearchTrigger(val) {
   histSearchKw=val.trim(); histCurPage=1;
@@ -1834,9 +1988,10 @@ function onHistSearchTrigger(val) {
    semua field yang relevan/terlihat di tabel, termasuk Plant dan
    Kategori yang sekarang ditampilkan sebagai kolom. */
 function getFilteredHist() {
-  if (!histSearchKw) return histData;
   var kw=histSearchKw.toLowerCase();
   return histData.filter(function(h){
+    if (histPlantSub && h.werks!==histPlantSub) return false;
+    if (!kw) return true;
     return h.banfn.toLowerCase().indexOf(kw)>-1||
       (h.txz01&&h.txz01.toLowerCase().indexOf(kw)>-1)||
       (h.ernam&&h.ernam.toLowerCase().indexOf(kw)>-1)||
@@ -1910,6 +2065,23 @@ function renderHistContent() {
           '</option>';
   });
   html+='</select>';
+
+  var histFiltCnt=histPlantSub?1:0;
+  html+='<div class="filter-wrap">';
+  html+='<button class="btn-filter'+(filterPanelOpen?' active':'')+'"'+
+        ' id="btnFilter" onclick="toggleFilterPanel(event)">'+
+        '&#9881; Filter'+(histFiltCnt>0?'<span class="filter-badge">'+histFiltCnt+'</span>':'')+
+        '</button>';
+  html+='<div class="filter-panel'+(filterPanelOpen?' open':'')+'" id="filterPanel">';
+  html+='<div class="filter-panel-row"><span class="filter-panel-lbl">Plant</span>';
+  html+='<select class="estkz-select" onchange="onHistPlantSubFilter(this.value)">';
+  html+='<option value=""'+(histPlantSub===''?' selected':'')+'>Semua Plant</option>';
+  getSidebarWerks(primaryPlant).forEach(function(w){
+    html+='<option value="'+w+'"'+(histPlantSub===w?' selected':'')+'>Plant '+w+'</option>';
+  });
+  html+='</select></div>';
+  if (histFiltCnt>0) html+='<div class="filter-panel-reset" onclick="resetHistFilters()">Reset Filter</div>';
+  html+='</div></div>';
 
   html+='<div class="expand-bar">'+
         '<button class="btn-exp"'+
