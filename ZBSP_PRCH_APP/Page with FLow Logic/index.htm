@@ -53,6 +53,7 @@ ENDIF.
      §15 SKELETON LOADING
      §16 EMPTY STATE
      §17 SCROLLBAR
+     §17b DASHBOARD            — menu paling atas, ringkasan per role
      §18 ANIMATIONS            — keyframes & transition utilities
      §19 RESPONSIVE            — breakpoint tablet & mobile
    Catatan: file ini SATU <style> block (BSP/SE80 friendly), tapi
@@ -367,6 +368,20 @@ body.sb-collapsed .main     { margin-left:0; }
 
 .sb-divider { height:1px; background:var(--border-soft); margin:10px 14px; }
 
+/* Menu Dashboard — item tunggal paling atas sidebar, di luar
+   grup plant (Surabaya/Semarang), bukan collapsible section. */
+.sb-dash-link {
+  margin:6px 10px 12px; padding:11px 12px;
+  border-radius:var(--radius-sm);
+  font-size:13.5px; font-weight:700;
+  color:var(--text-soft);
+  display:flex; align-items:center; gap:9px;
+  cursor:pointer; user-select:none;
+  transition:background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+.sb-dash-link:hover { background:var(--bg-soft); }
+.sb-dash-link.active { background:var(--primary-lt); color:var(--primary-d); }
+
 /* ──────────────────────────────────────────────────────────────
    §6  PAGE HEADER & TOOLBAR
    ────────────────────────────────────────────────────────────── */
@@ -444,6 +459,51 @@ body.sb-collapsed .main     { margin-left:0; }
   transition:background var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
 }
 .btn-exp:hover { background:var(--bg-soft); border-color:var(--muted-lt); }
+
+/* Tombol Filter — mengumpulkan filter sekunder (kategori/ESTKZ +
+   plant) yg sebelumnya berjajar di toolbar jadi satu panel dropdown,
+   supaya toolbar tetap ringkas di layar sempit. */
+.filter-wrap { position:relative; }
+.btn-filter {
+  height:36px; padding:0 14px;
+  border:1.5px solid var(--border); background:var(--surface);
+  border-radius:var(--radius-sm);
+  font-size:12.5px; font-weight:600; color:var(--text-soft);
+  cursor:pointer; display:flex; align-items:center; gap:6px;
+  transition:background var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
+}
+.btn-filter:hover { background:var(--bg-soft); border-color:var(--muted-lt); }
+.btn-filter.active {
+  border-color:var(--primary-lt2); color:var(--primary-d); background:var(--primary-lt);
+}
+.filter-badge {
+  display:inline-flex; align-items:center; justify-content:center;
+  min-width:17px; height:17px; padding:0 4px;
+  border-radius:999px; background:var(--primary); color:#fff;
+  font-size:10.5px; font-weight:700; line-height:1;
+}
+.filter-panel {
+  display:none; position:absolute;
+  top:calc(100% + 8px); left:0;
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:var(--radius-md); box-shadow:var(--shadow-lg);
+  padding:14px; width:220px; z-index:500;
+  animation:menuPop var(--dur-base) var(--ease-out);
+}
+.filter-panel.open { display:block; }
+.filter-panel-row { display:flex; flex-direction:column; gap:5px; margin-bottom:12px; }
+.filter-panel-row:last-of-type { margin-bottom:0; }
+.filter-panel-lbl {
+  font-size:10px; color:var(--muted); font-weight:600;
+  letter-spacing:.04em; text-transform:uppercase;
+}
+.filter-panel select { width:100%; }
+.filter-panel-reset {
+  margin-top:12px; padding-top:10px; border-top:1px solid var(--border-soft);
+  text-align:center; font-size:12px; font-weight:600;
+  color:var(--danger); cursor:pointer;
+}
+.filter-panel-reset:hover { text-decoration:underline; }
 
 /* ──────────────────────────────────────────────────────────────
    §7  PR CARD
@@ -834,6 +894,103 @@ body.sb-collapsed .main     { margin-left:0; }
 .hist-table-wrap::-webkit-scrollbar-thumb:hover { background:#b9c1d6; }
 
 /* ──────────────────────────────────────────────────────────────
+   §17b DASHBOARD — menu paling atas, ringkasan data sesuai role
+   (plant yg bisa diakses user login). Murni dari data sbCounts
+   (GET_SIDEBAR) yg sudah dimuat saat load awal — tanpa fetch baru.
+   ────────────────────────────────────────────────────────────── */
+.dash-kpi-grid {
+  display:grid; grid-template-columns:repeat(4,1fr); gap:14px;
+  margin-bottom:26px;
+}
+.dash-kpi-card {
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:var(--radius-md); box-shadow:var(--shadow-sm);
+  padding:18px; display:flex; align-items:center; gap:14px;
+  animation:cardIn var(--dur-slow) var(--ease-out) backwards;
+}
+.dash-kpi-ico {
+  width:42px; height:42px; border-radius:var(--radius-sm);
+  display:flex; align-items:center; justify-content:center;
+  font-size:19px; flex-shrink:0;
+}
+.dash-kpi-blue   .dash-kpi-ico { background:var(--primary-lt); color:var(--primary-d); }
+.dash-kpi-green  .dash-kpi-ico { background:var(--success-lt); color:var(--success-d); }
+.dash-kpi-red    .dash-kpi-ico { background:var(--danger-lt);  color:var(--danger-d); }
+.dash-kpi-purple .dash-kpi-ico { background:#f1eafe; color:#6d28d9; }
+.dash-kpi-num { font-size:23px; font-weight:800; color:var(--navy-900); letter-spacing:-.3px; line-height:1.15; }
+.dash-kpi-lbl { font-size:11.5px; color:var(--muted); font-weight:600; margin-top:1px; }
+
+.dash-section-title {
+  font-size:14px; font-weight:700; color:var(--navy-900);
+  margin:26px 0 12px; display:flex; align-items:center; gap:7px;
+}
+
+.dash-card {
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:var(--radius-md); box-shadow:var(--shadow-sm);
+  padding:18px 20px;
+}
+
+.dash-bar-row { display:flex; align-items:center; gap:12px; padding:8px 0; }
+.dash-bar-lbl {
+  width:150px; font-size:13px; font-weight:600; color:var(--text-soft);
+  flex-shrink:0; display:flex; align-items:center; gap:6px;
+}
+.dash-bar-track { flex:1; height:9px; border-radius:99px; background:var(--bg-soft); overflow:hidden; }
+.dash-bar-fill {
+  height:100%; border-radius:99px;
+  background:linear-gradient(90deg,var(--primary),#3b6df0);
+  transition:width var(--dur-slow) var(--ease);
+}
+.dash-bar-val { width:32px; text-align:right; font-size:13px; font-weight:700; color:var(--navy-900); }
+
+.dash-plant-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:14px; }
+.dash-plant-card {
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:var(--radius-md); box-shadow:var(--shadow-sm);
+  padding:18px 20px; cursor:pointer;
+  transition:box-shadow var(--dur-base) var(--ease),
+             border-color var(--dur-base) var(--ease),
+             transform var(--dur-base) var(--ease-out);
+}
+.dash-plant-card:hover {
+  box-shadow:var(--shadow-md); border-color:var(--primary-lt2); transform:translateY(-1px);
+}
+.dash-plant-hd {
+  display:flex; align-items:center; gap:9px;
+  font-size:14.5px; font-weight:700; color:var(--navy-900); margin-bottom:14px;
+}
+.dash-plant-hd img {
+  width:22px; height:22px; object-fit:cover; border-radius:5px;
+  box-shadow:0 0 0 1px var(--border);
+}
+.dash-plant-stats { display:flex; gap:24px; }
+.dash-plant-stats > div { display:flex; flex-direction:column; }
+.dash-plant-num { font-size:19px; font-weight:800; color:var(--navy-900); }
+.dash-plant-lbl {
+  font-size:10.5px; color:var(--muted); font-weight:600;
+  text-transform:uppercase; letter-spacing:.03em; margin-top:2px;
+}
+
+.dash-donut-wrap { display:flex; align-items:center; gap:28px; flex-wrap:wrap; }
+.dash-donut {
+  width:120px; height:120px; border-radius:50%;
+  display:flex; align-items:center; justify-content:center;
+  flex-shrink:0;
+}
+.dash-donut-hole {
+  width:78px; height:78px; border-radius:50%; background:var(--surface);
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  font-size:18px; font-weight:800; color:var(--navy-900); box-shadow:var(--shadow-xs);
+}
+.dash-donut-hole span {
+  font-size:9.5px; font-weight:600; color:var(--muted);
+  text-transform:uppercase; margin-top:1px;
+}
+.dash-donut-legend { display:flex; flex-direction:column; gap:10px; font-size:13px; font-weight:600; color:var(--text-soft); }
+.dash-donut-legend .dot { width:9px; height:9px; border-radius:50%; display:inline-block; margin-right:7px; }
+
+/* ──────────────────────────────────────────────────────────────
    §18 ANIMATIONS
    ────────────────────────────────────────────────────────────── */
 @keyframes cardIn {
@@ -880,6 +1037,7 @@ body.sb-collapsed .main     { margin-left:0; }
    ────────────────────────────────────────────────────────────── */
 @media (max-width:1280px) {
   .card-meta { grid-template-columns:repeat(3,1fr); }
+  .dash-kpi-grid { grid-template-columns:repeat(2,1fr); }
 }
 @media (max-width:1024px) {
   .sidebar {
@@ -899,6 +1057,9 @@ body.sb-collapsed .main     { margin-left:0; }
   .hdr-user { max-width:150px; }
   .hdr-user > span { max-width:75px; }
   .pg-title { font-size:18px; }
+  .dash-kpi-grid { grid-template-columns:1fr 1fr; }
+  .dash-plant-grid { grid-template-columns:1fr; }
+  .dash-bar-lbl { width:110px; font-size:12px; }
 }
 </style>
 
@@ -937,10 +1098,9 @@ body.sb-collapsed .main     { margin-left:0; }
 
 <!-- ════════════════ MAIN CONTENT ════════════════ -->
 <main class="main" id="mainContent">
-  <div class="empty">
-    <div class="empty-ico">&#128203;</div>
-    <div class="empty-txt">Pilih plant dari sidebar</div>
-    <div class="empty-hint">Daftar PR pending akan muncul setelah memilih kategori di sidebar kiri</div>
+  <div style="text-align:center;padding:70px;color:var(--muted);">
+    <div class="lo-spin" style="margin:0 auto 14px;"></div>
+    Memuat dashboard...
   </div>
 </main>
 
@@ -991,7 +1151,8 @@ body.sb-collapsed .main     { margin-left:0; }
      §U6  MODAL                 — closeModal, welcome modal
      §U7  INIT                  — init()
      §U8  LOAD SIDEBAR          — loadSidebarData, renderSidebar
-     §U9  RENDER SIDEBAR        — renderSidebar, toggleSection
+     §U9  RENDER SIDEBAR        — getVisiblePlants, renderSidebar, toggleSection
+     §U9b RENDER DASHBOARD      — renderDashboard, dashKpiCard
      §U10 SWITCH VIEW           — switchView
      §U11 FETCH LIST            — fetchList
      §U12 FETCH HISTORY         — fetchHistApp, fetchHistRej
@@ -1058,7 +1219,7 @@ var ESTKZ_MAP = {
    §C2  STATE — View
    ════════════════════════════════════════════════════════════════ */
 var curPlant       = '';
-var curMode        = '';
+var curMode        = 'dashboard';
 var curBsart       = 'ROTO';
 var openSections   = {};
 var curEstkzFilter = '';
@@ -1073,6 +1234,8 @@ var searchKw     = '';
 var allExpanded  = false;
 var filteredData = [];
 var prSortOrder  = '';  // '' = terbaru, 'asc' = terlama
+var curPlantSub  = '';  // filter sub-plant (werks asli) dlm grup sidebar
+var filterPanelOpen = false;  // panel "Filter" (ESTKZ/kategori + plant), shared pending & history
 
 /* ════════════════════════════════════════════════════════════════
    §C4  STATE — History (Approve / Reject)
@@ -1085,6 +1248,7 @@ var histFilteredData  = [];
 var histBsartFilter   = '';
 var histSortOrder     = '';
 var histAllExpanded   = false;
+var histPlantSub      = '';  // filter sub-plant (werks asli) dlm grup sidebar
 
 /* ════════════════════════════════════════════════════════════════
    §C5  STATE — Sidebar Counts
@@ -1103,6 +1267,15 @@ function getPlantLabel(w) {
 }
 function getPlantCats(w) {
   return (PLANT_DEF[w] && PLANT_DEF[w].categories) || [];
+}
+/* Daftar sub-plant (werks asli) dalam satu grup sidebar &1
+   (mis. '1200' -> Surabaya: 1200,2000,1000,1001,1100). Dipakai utk
+   dropdown filter plant di halaman pending/approve/reject. */
+function getSubPlants(w) {
+  var grpLabel = getPlantLabel(w);
+  return Object.keys(PLANT_DEF).filter(function(k){
+    return PLANT_DEF[k].label === grpLabel;
+  });
 }
 function getBsartLabel(bs) {
   if (!bs) return '-';
@@ -1263,6 +1436,44 @@ document.addEventListener('click', function(e){
 });
 
 /* ════════════════════════════════════════════════════════════════
+   FILTER PANEL — tombol Filter di toolbar pending & history,
+   membungkus filter sekunder (ESTKZ/kategori + plant) jadi satu
+   dropdown supaya toolbar tetap ringkas.
+   ════════════════════════════════════════════════════════════════ */
+function toggleFilterPanel(e) {
+  if (e) e.stopPropagation();
+  filterPanelOpen = !filterPanelOpen;
+  var panel = document.getElementById('filterPanel');
+  var btn   = document.getElementById('btnFilter');
+  if (panel) panel.classList.toggle('open', filterPanelOpen);
+  if (btn)   btn.classList.toggle('active', filterPanelOpen);
+}
+
+document.addEventListener('click', function(e){
+  var panel = document.getElementById('filterPanel');
+  var btn   = document.getElementById('btnFilter');
+  if (panel && btn && !btn.contains(e.target) && !panel.contains(e.target)){
+    panel.classList.remove('open');
+    btn.classList.remove('active');
+    filterPanelOpen = false;
+  }
+});
+
+function resetPrFilters() {
+  curEstkzFilter = '';
+  curPlantSub    = '';
+  curPage        = 1;
+  renderList();
+}
+
+function resetHistFilters() {
+  histBsartFilter = '';
+  histPlantSub    = '';
+  histCurPage     = 1;
+  applyHistFilter();
+}
+
+/* ════════════════════════════════════════════════════════════════
    LOGOUT
    ════════════════════════════════════════════════════════════════ */
 function doLogout() {
@@ -1325,6 +1536,7 @@ document.addEventListener('keydown', function(e){
    INIT
    ════════════════════════════════════════════════════════════════ */
 function init() {
+  showLoading();
   loadSidebarData();
   maybeShowWelcome();
 }
@@ -1360,8 +1572,12 @@ function loadSidebarData() {
         sbCounts.hist_app['1300']=parseInt(res.hist_app['1300'])||0;
       }
       renderSidebar();
+      if (curMode==='dashboard') renderDashboard();
     })
-    .catch(function(){renderSidebar();});
+    .catch(function(){
+      renderSidebar();
+      if (curMode==='dashboard') renderDashboard();
+    });
 }
 
 function showSidebarSkeleton() {
@@ -1470,25 +1686,38 @@ function closeWelcomeModal() {
 }
 
 /* ════════════════════════════════════════════════════════════════
-   RENDER SIDEBAR
+   VISIBLE PLANTS — grup plant (Surabaya/Semarang) yg boleh diakses
+   user login. Dipakai oleh renderSidebar() & renderDashboard() agar
+   logikanya tidak ditulis dua kali.
+   KMI-BOD & BASIS: tidak difilter (lihat semua plant).
+   KMI-U052: Surabaya & Semarang. KMI-U051: hanya Semarang.
+   KMI-U151: hanya Surabaya.
    ════════════════════════════════════════════════════════════════ */
-function renderSidebar() {
+function getVisiblePlants() {
   var plants=[
     {code:'1200',name:'Surabaya', img:'surabaya.png'},
     {code:'1300',name:'Semarang', img:'semarang.png'}
   ];
-
-  /* KMI-BOD & BASIS: tidak difilter (lihat semua plant).
-     KMI-U052: Surabaya & Semarang. KMI-U051: hanya Semarang.
-     KMI-U151: hanya Surabaya. */
   var ucUser = (CUR_USER||'').toUpperCase();
   if (ucUser==='KMI-U051') {
     plants = plants.filter(function(p){ return p.code==='1300'; });
   } else if (ucUser==='KMI-U151') {
     plants = plants.filter(function(p){ return p.code==='1200'; });
   }
+  return plants;
+}
+
+/* ════════════════════════════════════════════════════════════════
+   RENDER SIDEBAR
+   ════════════════════════════════════════════════════════════════ */
+function renderSidebar() {
+  var plants = getVisiblePlants();
 
   var html='';
+  html+='<div class="sb-dash-link'+(curMode==='dashboard'?' active':'')+'"'+
+        ' onclick="switchView(\'\',\'dashboard\')">'+
+        '<span style="font-size:15px;">&#128202;</span> Dashboard</div>';
+  html+='<div class="sb-divider"></div>';
 
   plants.forEach(function(p,pi){
     if (pi>0) html+='<div class="sb-divider"></div>';
@@ -1560,6 +1789,107 @@ function toggleSection(plantCode) {
 }
 
 /* ════════════════════════════════════════════════════════════════
+   RENDER DASHBOARD — menu paling atas, murni dari sbCounts (sudah
+   dimuat via GET_SIDEBAR saat init), difilter sesuai plant yg
+   boleh diakses role user login (getVisiblePlants()).
+   ════════════════════════════════════════════════════════════════ */
+function dashKpiCard(cls,icon,num,lbl) {
+  return '<div class="dash-kpi-card dash-kpi-'+cls+'">'+
+         '<div class="dash-kpi-ico">'+icon+'</div>'+
+         '<div><div class="dash-kpi-num">'+num+'</div>'+
+         '<div class="dash-kpi-lbl">'+lbl+'</div></div></div>';
+}
+
+function renderDashboard() {
+  var plants = getVisiblePlants();
+
+  var totPend=0, totApp=0, totRej=0;
+  var catTotals = {ROTO:0, PRK9:0, PRKS:0};
+  plants.forEach(function(p){
+    var pendObj = sbCounts.pending[p.code]||{};
+    getPlantCats(p.code).forEach(function(bs){
+      var c = pendObj[bs]||0;
+      totPend += c;
+      catTotals[bs] = (catTotals[bs]||0) + c;
+    });
+    totApp += sbCounts.hist_app[p.code]||0;
+    totRej += sbCounts.hist_rej[p.code]||0;
+  });
+  var totHist  = totApp + totRej;
+  var appRate  = totHist>0 ? Math.round((totApp/totHist)*100) : 0;
+  var roleLbl  = plants.map(function(p){ return p.name; }).join(' & ') || '-';
+
+  var html='';
+  html+='<div class="sticky-top"><div class="pg-hdr">';
+  html+='<div class="pg-title">&#128202; Dashboard</div>';
+  html+='<div class="pg-sub">Akses plant: '+escHtml(roleLbl)+'</div>';
+  html+='</div></div>';
+
+  html+='<div class="dash-kpi-grid">';
+  html+=dashKpiCard('blue',   '&#128203;', totPend, 'PR Menunggu Approval');
+  html+=dashKpiCard('green',  '&#10003;',  totApp,  'Total Approved (All-time)');
+  html+=dashKpiCard('red',    '&#10007;',  totRej,  'Total Rejected (All-time)');
+  html+=dashKpiCard('purple', '&#128200;', appRate+'%', 'Approval Rate');
+  html+='</div>';
+
+  html+='<div class="dash-section-title">&#128202; Pending per Kategori</div>';
+  html+='<div class="dash-card">';
+  var maxCat = Math.max(1, catTotals.ROTO, catTotals.PRK9, catTotals.PRKS);
+  ['ROTO','PRK9','PRKS'].forEach(function(bs){
+    var cat = CATEGORY_DEF[bs];
+    var val = catTotals[bs]||0;
+    var pct = Math.round((val/maxCat)*100);
+    html+='<div class="dash-bar-row">'+
+          '<div class="dash-bar-lbl">'+cat.icon+' '+cat.label+'</div>'+
+          '<div class="dash-bar-track"><div class="dash-bar-fill" style="width:'+pct+'%;"></div></div>'+
+          '<div class="dash-bar-val">'+val+'</div></div>';
+  });
+  html+='</div>';
+
+  if (plants.length>1) {
+    html+='<div class="dash-section-title">&#127970; Detail per Plant</div>';
+    html+='<div class="dash-plant-grid">';
+    plants.forEach(function(p){
+      var pendObj = sbCounts.pending[p.code]||{};
+      var pend=0;
+      getPlantCats(p.code).forEach(function(bs){ pend += pendObj[bs]||0; });
+      var app = sbCounts.hist_app[p.code]||0;
+      var rej = sbCounts.hist_rej[p.code]||0;
+      var firstCat = getPlantCats(p.code)[0]||'ROTO';
+      html+='<div class="dash-plant-card" onclick="switchView(\''+p.code+'\',\'pending\',\''+firstCat+'\')">';
+      html+='<div class="dash-plant-hd"><img src="'+p.img+'" alt="">'+escHtml(p.name)+'</div>';
+      html+='<div class="dash-plant-stats">'+
+            '<div><span class="dash-plant-num">'+pend+'</span>'+
+            '<span class="dash-plant-lbl">Pending</span></div>'+
+            '<div><span class="dash-plant-num" style="color:var(--success-d);">'+app+'</span>'+
+            '<span class="dash-plant-lbl">Approved</span></div>'+
+            '<div><span class="dash-plant-num" style="color:var(--danger-d);">'+rej+'</span>'+
+            '<span class="dash-plant-lbl">Rejected</span></div>'+
+            '</div></div>';
+    });
+    html+='</div>';
+  }
+
+  html+='<div class="dash-section-title">&#9878; Approve vs Reject (All-time)</div>';
+  html+='<div class="dash-card dash-donut-wrap">';
+  if (totHist===0) {
+    html+='<div class="empty-txt" style="padding:6px 0;">Belum ada history approve/reject</div>';
+  } else {
+    var appDeg = Math.round((totApp/totHist)*360);
+    html+='<div class="dash-donut" style="background:conic-gradient(var(--success) 0deg '+appDeg+'deg, var(--danger) '+appDeg+'deg 360deg);">'+
+          '<div class="dash-donut-hole">'+appRate+'%<span>Approved</span></div></div>';
+    html+='<div class="dash-donut-legend">'+
+          '<div><span class="dot" style="background:var(--success);"></span>Approved ('+totApp+')</div>'+
+          '<div><span class="dot" style="background:var(--danger);"></span>Rejected ('+totRej+')</div>'+
+          '</div>';
+  }
+  html+='</div>';
+
+  document.getElementById('mainContent').innerHTML=html;
+  observeToolbarOffset();
+}
+
+/* ════════════════════════════════════════════════════════════════
    SWITCH VIEW
    ════════════════════════════════════════════════════════════════ */
 function switchView(plant,mode,bsart) {
@@ -1570,18 +1900,25 @@ function switchView(plant,mode,bsart) {
   searchKw       = '';
   allExpanded    = false;
   curEstkzFilter = '';
+  curPlantSub    = '';
+  filterPanelOpen= false;
   histCurPage    = 1;
   histBsartFilter= '';
   histSortOrder  = '';
   histAllExpanded= false;
+  histPlantSub   = '';
 
   var t='Release PR';
-  if (mode==='pending' && CATEGORY_DEF[curBsart]) t+=' '+CATEGORY_DEF[curBsart].short;
+  if (mode==='dashboard') t='Dashboard';
+  else if (mode==='pending' && CATEGORY_DEF[curBsart]) t+=' '+CATEGORY_DEF[curBsart].short;
   else if (mode==='hist_app') t+=' - History Approve';
   else if (mode==='hist_rej') t+=' - History Reject';
   document.title = t+' - PT. Kayu Mebel Indonesia';
 
   renderSidebar();
+
+  if (mode==='dashboard') { renderDashboard(); return; }
+
   showLoading();
 
   if      (mode==='pending')  fetchList('');
@@ -1640,9 +1977,10 @@ function onEstkzFilter(val) {
    GET FILTERED (client-side search)
    ════════════════════════════════════════════════════════════════ */
 function getFiltered() {
-  if (!searchKw) return allData.slice();
-  var kw=searchKw.toLowerCase();
+  var kw = searchKw.toLowerCase();
   return allData.filter(function(d){
+    if (curPlantSub && d.werks !== curPlantSub) return false;
+    if (!kw) return true;
     return d.banfn.toLowerCase().indexOf(kw)>-1||
       (d.ernam_full && d.ernam_full.toLowerCase().indexOf(kw)>-1)||
       (d.ernam && d.ernam.toLowerCase().indexOf(kw)>-1)||
@@ -1650,6 +1988,12 @@ function getFiltered() {
       (d.ekgrp && d.ekgrp.toLowerCase().indexOf(kw)>-1)||
       (d.estkz && getEstkzLabel(d.estkz).toLowerCase().indexOf(kw)>-1);
   });
+}
+
+function onPlantSubFilter(val) {
+  curPlantSub = val;
+  curPage = 1;
+  renderList();
 }
 
 /* ════════════════════════════════════════════════════════════════
@@ -1710,11 +2054,26 @@ function renderList() {
   });
   html+='</select>';
 
+  var prFiltCnt = (curEstkzFilter?1:0) + (curPlantSub?1:0);
+  html+='<div class="filter-wrap">';
+  html+='<button class="btn-filter'+(filterPanelOpen?' active':'')+'" id="btnFilter" onclick="toggleFilterPanel(event)">'+
+        '&#9881; Filter'+(prFiltCnt>0?'<span class="filter-badge">'+prFiltCnt+'</span>':'')+'</button>';
+  html+='<div class="filter-panel'+(filterPanelOpen?' open':'')+'" id="filterPanel">';
+  html+='<div class="filter-panel-row"><span class="filter-panel-lbl">Jenis PR</span>';
   html+='<select class="estkz-select" onchange="onEstkzFilter(this.value)">';
   html+='<option value=""'+(curEstkzFilter===''?' selected':'')+'>Semua PR</option>';
   html+='<option value="MRP"'+(curEstkzFilter==='MRP'?' selected':'')+'>MRP saja (B)</option>';
   html+='<option value="NONMRP"'+(curEstkzFilter==='NONMRP'?' selected':'')+'>Non-MRP saja</option>';
-  html+='</select>';
+  html+='</select></div>';
+  html+='<div class="filter-panel-row"><span class="filter-panel-lbl">Plant</span>';
+  html+='<select class="estkz-select" onchange="onPlantSubFilter(this.value)">';
+  html+='<option value=""'+(curPlantSub===''?' selected':'')+'>Semua Plant</option>';
+  getSubPlants(curPlant).forEach(function(p){
+    html+='<option value="'+p+'"'+(curPlantSub===p?' selected':'')+'>Plant '+p+'</option>';
+  });
+  html+='</select></div>';
+  if (prFiltCnt>0) html+='<div class="filter-panel-reset" onclick="resetPrFilters()">Reset Filter</div>';
+  html+='</div></div>';
 
   html+='<select class="page-size-select" onchange="onPrSortOrder(this.value)">';
   html+='<option value=""'+(prSortOrder===''?' selected':'')+'>Terbaru</option>';
@@ -1817,6 +2176,7 @@ function applyHistFilter() {
 
   histFilteredData = histData.filter(function(h){
     if (histBsartFilter && h.bsart !== histBsartFilter) return false;
+    if (histPlantSub && h.werks !== histPlantSub) return false;
     if (!kw) return true;
     return h.banfn.toLowerCase().indexOf(kw)>-1 ||
            (h.txz01 && h.txz01.toLowerCase().indexOf(kw)>-1) ||
@@ -1894,17 +2254,32 @@ function renderHistView() {
 
   html+='<div class="sticky-toolbar"><div class="toolbar">';
   html+='<div class="search-wrap"><span>&#128269;</span>'+
-        '<input type="text" id="histSearchInp" placeholder="Cari No PR, Item, Plant... (Enter)"'+
+        '<input type="text" id="histSearchInp" placeholder="Cari No PR, Pembuat... (Enter)"'+
         ' value="'+(document.getElementById('histSearchInp')?escHtml(document.getElementById('histSearchInp').value):'')+'"'+
         ' onkeydown="onHistSearchKey(event)" onblur="onHistSearchBlur()"></div>';
 
+  var histFiltCnt = (histBsartFilter?1:0) + (histPlantSub?1:0);
+  html+='<div class="filter-wrap">';
+  html+='<button class="btn-filter'+(filterPanelOpen?' active':'')+'" id="btnFilter" onclick="toggleFilterPanel(event)">'+
+        '&#9881; Filter'+(histFiltCnt>0?'<span class="filter-badge">'+histFiltCnt+'</span>':'')+'</button>';
+  html+='<div class="filter-panel'+(filterPanelOpen?' open':'')+'" id="filterPanel">';
+  html+='<div class="filter-panel-row"><span class="filter-panel-lbl">Kategori</span>';
   html+='<select class="estkz-select" onchange="onHistBsartFilter(this.value)">';
   html+='<option value=""'+(histBsartFilter===''?' selected':'')+'>Semua Kategori</option>';
   Object.keys(CATEGORY_DEF).forEach(function(bs){
     html+='<option value="'+bs+'"'+(histBsartFilter===bs?' selected':'')+'>'+
           CATEGORY_DEF[bs].label+'</option>';
   });
-  html+='</select>';
+  html+='</select></div>';
+  html+='<div class="filter-panel-row"><span class="filter-panel-lbl">Plant</span>';
+  html+='<select class="estkz-select" onchange="onHistPlantSubFilter(this.value)">';
+  html+='<option value=""'+(histPlantSub===''?' selected':'')+'>Semua Plant</option>';
+  getSubPlants(curPlant).forEach(function(p){
+    html+='<option value="'+p+'"'+(histPlantSub===p?' selected':'')+'>Plant '+p+'</option>';
+  });
+  html+='</select></div>';
+  if (histFiltCnt>0) html+='<div class="filter-panel-reset" onclick="resetHistFilters()">Reset Filter</div>';
+  html+='</div></div>';
 
   html+='<select class="page-size-select" onchange="onHistSortOrder(this.value)">';
   html+='<option value=""'+(histSortOrder===''?' selected':'')+'>Terbaru</option>';
@@ -2135,6 +2510,12 @@ function histChangePageSize(val) {
 
 function onHistBsartFilter(val) {
   histBsartFilter=val;
+  histCurPage=1;
+  applyHistFilter();
+}
+
+function onHistPlantSubFilter(val) {
+  histPlantSub=val;
   histCurPage=1;
   applyHistFilter();
 }
