@@ -448,7 +448,8 @@ body.sb-collapsed .main     { margin-left:0; }
 /* ──────────────────────────────────────────────────────────────
    §7  PR CARD
    ────────────────────────────────────────────────────────────── */
-#cardContainer { display:flex; flex-direction:column; gap:11px; }
+#cardContainer,
+#histTableWrap { display:flex; flex-direction:column; gap:11px; }
 
 .po-card {
   background:var(--surface);
@@ -917,7 +918,7 @@ body.sb-collapsed .main     { margin-left:0; }
   </div>
   <div class="hdr-user" onclick="toggleUserMenu(event)">
     <div class="hdr-avatar"><%=lv_uname2(1)%></div>
-    <span title="IT"><%=lv_uname2%><svg class="hdr-user-chevron" width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2.5 4.5L6 8l3.5-3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+    <span title="name"><%=lv_fullname2%><svg class="hdr-user-chevron" width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2.5 4.5L6 8l3.5-3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
     <div id="userMenu" class="user-menu">
       <div class="user-menu-hd">
         <div class="user-menu-lbl">Logged in as</div>
