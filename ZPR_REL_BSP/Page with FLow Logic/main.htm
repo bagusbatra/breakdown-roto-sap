@@ -169,6 +169,22 @@ DEFINE escape_json.
   CONDENSE &1.
 END-OF-DEFINITION.
 
+" Khusus long-text multi-baris (Item Text PR): newline diubah jadi
+" \n LITERAL (bukan dihapus jadi spasi) supaya frontend bisa
+" render per baris di modal. Tidak pakai CONDENSE supaya spasi/
+" indentasi asli dalam 1 baris tetap terjaga.
+DEFINE escape_json_multiline.
+  REPLACE ALL OCCURRENCES OF '\' IN &1 WITH '\\'.
+  REPLACE ALL OCCURRENCES OF '"' IN &1 WITH '\"'.
+  REPLACE ALL OCCURRENCES OF '/' IN &1 WITH '\/'.
+  REPLACE ALL OCCURRENCES OF cl_abap_char_utilities=>cr_lf
+    IN &1 WITH cl_abap_char_utilities=>newline.
+  REPLACE ALL OCCURRENCES OF cl_abap_char_utilities=>newline
+    IN &1 WITH '\n'.
+  REPLACE ALL OCCURRENCES OF cl_abap_char_utilities=>horizontal_tab
+    IN &1 WITH '  '.
+END-OF-DEFINITION.
+
 DEFINE fmt_date.
   CLEAR &2.
   IF &1 IS INITIAL OR &1 = '00000000'.
@@ -850,6 +866,84 @@ CASE lv_action.
       lv_json ']}' INTO lv_output.
 
 *======================================================================
+  WHEN 'GET_ITEM_TEXT'.
+*======================================================================
+    IF lv_banfn IS INITIAL.
+      lv_output = '{"status":"E",' &
+        '"message":"banfn kosong","text":"","has_text":false}'.
+      response->append_cdata( lv_output ).
+      _m_navigation->response_complete( ).
+      EXIT.
+    ENDIF.
+
+    lv_banfn_e = lv_banfn.
+
+    DATA: lv_first_bnfpo TYPE eban-bnfpo,
+          lv_txt_name    TYPE thead-tdname,
+          lt_txt_lines   TYPE STANDARD TABLE OF tline,
+          ls_txt_line    TYPE tline,
+          lv_item_text   TYPE string,
+          lv_has_text    TYPE string.
+
+    " Ambil item pertama (BNFPO terkecil) dari PR ini — tanpa filter
+    " LOEKZ supaya tetap jalan utk history approve/reject (item history
+    " reject sudah LOEKZ='L', history approve tetap LOEKZ=' ').
+    CLEAR lv_first_bnfpo.
+    SELECT SINGLE MIN( bnfpo ) FROM eban
+      INTO lv_first_bnfpo
+      WHERE banfn = lv_banfn_e.
+
+    IF lv_first_bnfpo IS INITIAL.
+      lv_output = '{"status":"S","message":"OK",' &
+        '"text":"","has_text":false}'.
+      response->append_cdata( lv_output ).
+      _m_navigation->response_complete( ).
+      EXIT.
+    ENDIF.
+
+    " Format TDNAME = BANFN (10) + BNFPO (5) = 15 char
+    " (TDID 'B01', TDOBJECT 'EBAN')
+    CONCATENATE lv_banfn_e lv_first_bnfpo INTO lv_txt_name.
+
+    CLEAR: lt_txt_lines, lv_item_text.
+    CALL FUNCTION 'READ_TEXT'
+      EXPORTING
+        id       = 'B01'
+        language = 'E'
+        name     = lv_txt_name
+        object   = 'EBAN'
+      TABLES
+        lines    = lt_txt_lines
+      EXCEPTIONS
+        OTHERS   = 1.
+
+    IF sy-subrc = 0.
+      LOOP AT lt_txt_lines INTO ls_txt_line.
+        IF lv_item_text IS INITIAL.
+          lv_item_text = ls_txt_line-tdline.
+        ELSE.
+          CONCATENATE lv_item_text cl_abap_char_utilities=>newline
+            ls_txt_line-tdline INTO lv_item_text.
+        ENDIF.
+      ENDLOOP.
+    ENDIF.
+
+    IF lv_item_text IS INITIAL.
+      lv_has_text = 'false'.
+    ELSE.
+      lv_has_text = 'true'.
+    ENDIF.
+
+    escape_json_multiline lv_item_text.
+
+    CONCATENATE
+      '{"status":"S","message":"OK","banfn":"' lv_banfn_e '",'
+      '"item":"' lv_first_bnfpo '",'
+      '"text":"' lv_item_text '",'
+      '"has_text":' lv_has_text '}'
+      INTO lv_output.
+
+*======================================================================
   WHEN 'GET_HIST_REJ'.
 *======================================================================
     IF lv_werks IS INITIAL.
@@ -905,11 +999,54 @@ CASE lv_action.
           lv_h_reason TYPE string,
           lv_h_erdat  TYPE string,
           lv_h_delat  TYPE string,
-          lv_h_deltm  TYPE string.
+          lv_h_deltm  TYPE string,
+          lv_h_full   TYPE string.
+
+    " Lookup fullname pembuat (ERNAM) — sama seperti GET_LIST
+    CLEAR: lt_bnames, lt_u21, lt_adp, lt_uname_nm.
+    LOOP AT lt_hist_rej INTO ls_hist_rej.
+      IF ls_hist_rej-ernam IS NOT INITIAL.
+        CLEAR ls_bname.
+        ls_bname-bname = ls_hist_rej-ernam.
+        COLLECT ls_bname INTO lt_bnames.
+      ENDIF.
+    ENDLOOP.
+
+    IF lt_bnames IS NOT INITIAL.
+      SELECT * FROM usr21 INTO TABLE lt_u21
+        FOR ALL ENTRIES IN lt_bnames
+        WHERE bname = lt_bnames-bname.
+      IF lt_u21 IS NOT INITIAL.
+        SELECT * FROM adrp INTO TABLE lt_adp
+          FOR ALL ENTRIES IN lt_u21
+          WHERE persnumber = lt_u21-persnumber
+            AND date_from <= sy-datum.
+        SORT lt_adp BY persnumber date_from DESCENDING.
+        LOOP AT lt_u21 INTO ls_u21.
+          READ TABLE lt_adp INTO ls_adp
+            WITH KEY persnumber = ls_u21-persnumber.
+          IF sy-subrc = 0.
+            ls_uname_nm-bname    = ls_u21-bname.
+            ls_uname_nm-fullname = ls_adp-name_text.
+            APPEND ls_uname_nm TO lt_uname_nm.
+          ENDIF.
+        ENDLOOP.
+      ENDIF.
+    ENDIF.
 
     CLEAR: lv_json, lv_sep.
 
     LOOP AT lt_hist_rej INTO ls_hist_rej.
+      CLEAR lv_h_full.
+      READ TABLE lt_uname_nm INTO ls_uname_nm
+        WITH KEY bname = ls_hist_rej-ernam.
+      IF sy-subrc = 0.
+        lv_h_full = ls_uname_nm-fullname.
+      ELSE.
+        lv_h_full = ls_hist_rej-ernam.
+      ENDIF.
+      escape_json lv_h_full.
+
       lv_h_menge  = ls_hist_rej-menge.
       CONDENSE lv_h_menge NO-GAPS.
       lv_h_preis  = ls_hist_rej-preis.
@@ -940,6 +1077,7 @@ CASE lv_action.
         '"bsart":"'   ls_hist_rej-bsart  '",'
         '"txz01":"'   lv_h_txz01         '",'
         '"ernam":"'   ls_hist_rej-ernam  '",'
+        '"ernam_full":"' lv_h_full       '",'
         '"erdat":"'   lv_h_erdat         '",'
         '"menge":"'   lv_h_menge         '",'
         '"meins":"'   ls_hist_rej-meins  '",'
@@ -1014,11 +1152,54 @@ CASE lv_action.
           lv_a_txz01 TYPE string,
           lv_a_erdat TYPE string,
           lv_a_appat TYPE string,
-          lv_a_apptm TYPE string.
+          lv_a_apptm TYPE string,
+          lv_a_full  TYPE string.
+
+    " Lookup fullname pembuat (ERNAM) — sama seperti GET_LIST
+    CLEAR: lt_bnames, lt_u21, lt_adp, lt_uname_nm.
+    LOOP AT lt_hist_app INTO ls_hist_app.
+      IF ls_hist_app-ernam IS NOT INITIAL.
+        CLEAR ls_bname.
+        ls_bname-bname = ls_hist_app-ernam.
+        COLLECT ls_bname INTO lt_bnames.
+      ENDIF.
+    ENDLOOP.
+
+    IF lt_bnames IS NOT INITIAL.
+      SELECT * FROM usr21 INTO TABLE lt_u21
+        FOR ALL ENTRIES IN lt_bnames
+        WHERE bname = lt_bnames-bname.
+      IF lt_u21 IS NOT INITIAL.
+        SELECT * FROM adrp INTO TABLE lt_adp
+          FOR ALL ENTRIES IN lt_u21
+          WHERE persnumber = lt_u21-persnumber
+            AND date_from <= sy-datum.
+        SORT lt_adp BY persnumber date_from DESCENDING.
+        LOOP AT lt_u21 INTO ls_u21.
+          READ TABLE lt_adp INTO ls_adp
+            WITH KEY persnumber = ls_u21-persnumber.
+          IF sy-subrc = 0.
+            ls_uname_nm-bname    = ls_u21-bname.
+            ls_uname_nm-fullname = ls_adp-name_text.
+            APPEND ls_uname_nm TO lt_uname_nm.
+          ENDIF.
+        ENDLOOP.
+      ENDIF.
+    ENDIF.
 
     CLEAR: lv_json, lv_sep.
 
     LOOP AT lt_hist_app INTO ls_hist_app.
+      CLEAR lv_a_full.
+      READ TABLE lt_uname_nm INTO ls_uname_nm
+        WITH KEY bname = ls_hist_app-ernam.
+      IF sy-subrc = 0.
+        lv_a_full = ls_uname_nm-fullname.
+      ELSE.
+        lv_a_full = ls_hist_app-ernam.
+      ENDIF.
+      escape_json lv_a_full.
+
       lv_a_menge = ls_hist_app-menge.
       CONDENSE lv_a_menge NO-GAPS.
       lv_a_preis = ls_hist_app-preis.
@@ -1047,6 +1228,7 @@ CASE lv_action.
         '"bsart":"'   ls_hist_app-bsart  '",'
         '"txz01":"'   lv_a_txz01         '",'
         '"ernam":"'   ls_hist_app-ernam  '",'
+        '"ernam_full":"' lv_a_full       '",'
         '"erdat":"'   lv_a_erdat         '",'
         '"menge":"'   lv_a_menge         '",'
         '"meins":"'   ls_hist_app-meins  '",'

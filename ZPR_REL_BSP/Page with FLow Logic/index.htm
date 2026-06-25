@@ -302,13 +302,13 @@ ENDIF.
     }
     .btn-exp {
       height:34px; padding:0 14px;
-      border:1px solid var(--border); background:#fff;
+      border:1px solid var(--border); background:#d1fae5;
       border-radius:8px; font-family:inherit;
-      font-size:12px; font-weight:600; color:#374151;
+      font-size:12px; font-weight:600; color:var(--success);
       cursor:pointer; display:flex; align-items:center;
       gap:5px; transition:background .12s;
     }
-    .btn-exp:hover { background:#f3f4f6; }
+    .btn-exp:hover { background:var(--success); }
 
     /* Tombol Filter — mengumpulkan filter sekunder (ESTKZ + plant)
        jadi satu panel dropdown supaya toolbar tetap ringkas. */
@@ -648,6 +648,18 @@ ENDIF.
     .btn-success { background:var(--success); }
     .btn-danger  { background:var(--danger); }
 
+    /* Modal Item Text — menampilkan long-text item pertama PR (B01/EBAN) */
+    .modal-box-text { max-width:560px; }
+    .item-text-meta { font-size:12px; color:var(--muted); margin-bottom:14px; }
+    .item-text-body {
+      background:#f9fafb; border:1px solid var(--border);
+      border-radius:8px; padding:14px 16px;
+      font-size:13px; line-height:1.6; color:#374151;
+      white-space:pre-wrap; word-break:break-word;
+      max-height:50vh; overflow-y:auto;
+    }
+    .item-text-empty { color:var(--muted); font-style:italic; }
+
     /* ── SIDEBAR TOGGLE ── */
     .btn-toggle-sb {
       width:32px; height:32px; border:none;
@@ -855,6 +867,25 @@ ENDIF.
       <button class="btn btn-danger"
               onclick="confirmReject()">
         &#128465; Ya, Reject &amp; Delete
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL ITEM TEXT (long-text item pertama PR) -->
+<div class="modal" id="modalItemText"
+     onclick="if(event.target===this)
+              closeModal('modalItemText')">
+  <div class="modal-box modal-box-text">
+    <div class="modal-title">&#128196; Teks Item</div>
+    <div class="item-text-meta" id="itemTextMeta"></div>
+    <div class="item-text-body" id="itemTextBody">
+      <div class="lo-spin" style="width:20px;height:20px;border-width:2.5px;margin:0 auto;"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline"
+              onclick="closeModal('modalItemText')">
+        Tutup
       </button>
     </div>
   </div>
@@ -1204,6 +1235,37 @@ function showToast(type,msg) {
 function closeModal(id) {
   document.getElementById(id)
     .classList.remove('show');
+}
+
+/* Modal Item Text — ambil long-text item pertama (BNFPO terkecil)
+   dari PR &1 via action GET_ITEM_TEXT, lalu tampilkan di modal. */
+function showItemTextModal(banfn) {
+  var modal = document.getElementById('modalItemText');
+  var meta  = document.getElementById('itemTextMeta');
+  var body  = document.getElementById('itemTextBody');
+
+  meta.innerHTML = 'PR <b>'+escHtml(banfn)+'</b>';
+  body.innerHTML = '<div class="lo-spin" style="width:20px;height:20px;border-width:2.5px;margin:0 auto;"></div>';
+  modal.classList.add('show');
+
+  fetch(API_URL+'?action=GET_ITEM_TEXT&banfn='+encodeURIComponent(banfn))
+    .then(function(r){return r.json();})
+    .then(function(res){
+      if (res.status!=='S'){
+        body.innerHTML='<div class="item-text-empty">'+escHtml(res.message||'Gagal memuat teks.')+'</div>';
+        return;
+      }
+      if (!res.has_text){
+        meta.innerHTML = 'PR <b>'+escHtml(banfn)+'</b>';
+        body.innerHTML = '<div class="item-text-empty">Item ini tidak memiliki teks.</div>';
+        return;
+      }
+      meta.innerHTML = 'PR <b>'+escHtml(banfn)+'</b> &middot; Item '+escHtml(res.item);
+      body.innerHTML = escHtml(res.text);
+    })
+    .catch(function(){
+      body.innerHTML='<div class="item-text-empty">Gagal memuat teks.</div>';
+    });
 }
 
 /* ================================================================
@@ -1724,6 +1786,9 @@ function renderList() {
 
       html+='<span class="card-num">'+
             pr.banfn+'</span>';
+      html+='<button class="btn-exp" style="height:28px;padding:0 10px;font-size:11.5px;"'+
+            ' onclick="event.stopPropagation();showItemTextModal(\''+pr.banfn+'\')">'+
+            '&#128196; Lihat Teks</button>';
       html+='<span class="badge b-pending">'+
             '&#9679; Pending</span>';
       html+='<span class="badge b-plant">'+
@@ -1825,7 +1890,7 @@ function groupHistByBanfn(rows) {
     if (!map[h.banfn]){
       map[h.banfn]={
         banfn:h.banfn, werks:h.werks, bsart:h.bsart,
-        ernam:h.ernam, erdat:h.erdat, waers:h.waers, ekgrp:h.ekgrp,
+        ernam:h.ernam, ernam_full:h.ernam_full, erdat:h.erdat, waers:h.waers, ekgrp:h.ekgrp,
         app_by:h.app_by, app_at:h.app_at, app_tm:h.app_tm,
         del_by:h.del_by, del_at:h.del_at, del_tm:h.del_tm,
         reason:h.reason,
@@ -1862,18 +1927,21 @@ function buildHistCards(groups,type) {
     :'color:var(--danger);';
 
   var html='';
-  groups.forEach(function(g){
-    var itCnt =g.items.length;
+  groups.forEach(function(pr){
+    var itCnt =pr.items.length;
 
     html+='<div class="po-card'+
           (histAllExpanded?' expanded':'')+
-          '" id="histCard_'+g.banfn+'"'+
+          '" id="histCard_'+pr.banfn+'"'+
           ' onclick="toggleHistExpand(\''+
-          g.banfn+'\')">';
+          pr.banfn+'\')">';
 
     html+='<div class="card-top">';
     html+='<span class="card-num">'+
-          escHtml(g.banfn)+'</span>';
+          escHtml(pr.banfn)+'</span>';
+    html+='<button class="btn-exp" style="height:28px;padding:0 10px;font-size:11.5px;"'+
+          ' onclick="event.stopPropagation();showItemTextModal(\''+pr.banfn+'\')">'+
+          '&#128196; Lihat Teks</button>';
     html+='<span class="badge"'+
           ' style="background:'+
           (isApp?'#d1fae5;color:var(--success)'
@@ -1882,57 +1950,57 @@ function buildHistCards(groups,type) {
           (isApp?'&#10003; Approved':'&#10007; Rejected')+
           '</span>';
     html+='<span class="badge b-plant">'+
-          escHtml(g.werks)+' '+
-          escHtml(PLANT_LABELS[g.werks]||'')+
+          escHtml(pr.werks)+' '+
+          escHtml(PLANT_LABELS[pr.werks]||'')+
           '</span>';
     html+='<span class="badge b-mrp">'+
-          escHtml(getCategoryLabelByBsart(g.werks,g.bsart))+
+          escHtml(getCategoryLabelByBsart(pr.werks,pr.bsart))+
           '</span>';
     if (itCnt>0)
       html+='<span class="badge b-items">'+
             itCnt+' item</span>';
 
-    html+=renderCardAmount(g.totals);
+    html+=renderCardAmount(pr.totals);
     html+='</div>'; /* card-top */
 
     html+='<div class="card-meta">';
     html+='<div><div class="meta-lbl">'+
           'Dibuat Oleh</div>'+
           '<div class="meta-val">'+
-          escHtml(g.ernam||'-')+'</div></div>';
+          escHtml(pr.ernam_full||pr.ernam)+'</div></div>';
     html+='<div><div class="meta-lbl">'+
           'Tgl PR</div>'+
           '<div class="meta-val">'+
-          escHtml(g.erdat||'-')+'</div></div>';
+          escHtml(pr.erdat||'-')+'</div></div>';
     if (isApp){
       html+='<div><div class="meta-lbl">'+
             'Diapprove Oleh</div>'+
             '<div class="meta-val" style="'+byColor+'">'+
-            escHtml(g.app_by||'-')+'</div></div>';
+            escHtml(pr.app_by||'-')+'</div></div>';
       html+='<div><div class="meta-lbl">'+
             'Tgl Approve</div>'+
             '<div class="meta-val">'+
-            escHtml(g.app_at||'-')+
-            (g.app_tm?' '+escHtml(g.app_tm):'')+
+            escHtml(pr.app_at||'-')+
+            (pr.app_tm?' '+escHtml(pr.app_tm):'')+
             '</div></div>';
     } else {
       html+='<div><div class="meta-lbl">'+
             'Direject Oleh</div>'+
             '<div class="meta-val" style="'+byColor+'">'+
-            escHtml(g.del_by||'-')+'</div></div>';
+            escHtml(pr.del_by||'-')+'</div></div>';
       html+='<div><div class="meta-lbl">'+
             'Tgl Reject</div>'+
             '<div class="meta-val">'+
-            escHtml(g.del_at||'-')+
-            (g.del_tm?' '+escHtml(g.del_tm):'')+
+            escHtml(pr.del_at||'-')+
+            (pr.del_tm?' '+escHtml(pr.del_tm):'')+
             '</div></div>';
     }
     html+='</div>'; /* card-meta */
 
-    if (!isApp&&g.reason)
+    if (!isApp&&pr.reason)
       html+='<div style="padding:0 18px 14px 46px;'+
             'font-size:12px;color:var(--muted);">'+
-            '<b>Alasan:</b> '+escHtml(g.reason)+
+            '<b>Alasan:</b> '+escHtml(pr.reason)+
             '</div>';
 
     html+='<div class="card-detail"'+
@@ -1945,8 +2013,8 @@ function buildHistCards(groups,type) {
           '<th class="num">Total</th>'+
           '<th>Curr</th><th>PGrp</th>'+
           '</tr></thead><tbody>';
-    g.items.forEach(function(h){
-      var w=h.waers||g.waers||'IDR';
+    pr.items.forEach(function(h){
+      var w=h.waers||pr.waers||'IDR';
       html+='<tr>';
       html+='<td style="font-family:\'DM Mono\','+
             'monospace;font-size:12px;">'+
