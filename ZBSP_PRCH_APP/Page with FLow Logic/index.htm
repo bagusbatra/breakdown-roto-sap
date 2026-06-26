@@ -1276,6 +1276,7 @@ var histBsartFilter   = '';
 var histSortOrder     = '';
 var histAllExpanded   = false;
 var histPlantSub      = '';  // filter sub-plant (werks asli) dlm grup sidebar
+var histDateFilter    = (function(){ var d=new Date(),m=d.getMonth()+1; return ''+d.getFullYear()+(m<10?'0':'')+m; }()); // YYYYMM bulan ini (default)
 
 /* ════════════════════════════════════════════════════════════════
    §C5  STATE — Sidebar Counts
@@ -1311,6 +1312,50 @@ function getBsartLabel(bs) {
 function getEstkzLabel(e) {
   if (!e) return '-';
   return ESTKZ_MAP[e] || e;
+}
+
+/* ── History Date Filter helpers ──
+   parseDateYM       : "DD.MM.YYYY" -> YYYYMM sebagai angka (utk perbandingan)
+   currentMonthYM    : YYYYMM bulan ini sebagai string (default filter)
+   getHistMonthOptions : 3 opsi bulan terakhir (bulan ini - 2 s/d bulan ini)
+   getHistPeriodLabel  : label teks bulan yg sedang dipilih              */
+function parseDateYM(s) {
+  if (!s || s === '-') return 0;
+  var p = s.split('.');
+  if (p.length !== 3) return 0;
+  return parseInt(p[2], 10) * 100 + parseInt(p[1], 10);
+}
+
+function currentMonthYM() {
+  var d = new Date(), m = d.getMonth() + 1;
+  return '' + d.getFullYear() + (m < 10 ? '0' : '') + m;
+}
+
+function getHistMonthOptions() {
+  var ML = ['Jan','Feb','Mar','Apr','Mei','Jun',
+            'Jul','Agt','Sep','Okt','Nov','Des'];
+  var opts = [];
+  var now  = new Date();
+  for (var i = 0; i < 3; i++) {
+    var d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    var y = d.getFullYear();
+    var m = d.getMonth() + 1;
+    opts.push({
+      value: '' + y + (m < 10 ? '0' : '') + m,
+      label: ML[d.getMonth()] + ' ' + y
+    });
+  }
+  return opts; // terbaru dulu
+}
+
+function getHistPeriodLabel() {
+  var ML = ['Jan','Feb','Mar','Apr','Mei','Jun',
+            'Jul','Agt','Sep','Okt','Nov','Des'];
+  var ym = parseInt(histDateFilter, 10);
+  if (!ym) return '';
+  var y = Math.floor(ym / 100);
+  var m = ym % 100;
+  return ML[m - 1] + ' ' + y;
 }
 
 /* ════════════════════════════════════════════════════════════════
@@ -1496,6 +1541,7 @@ function resetPrFilters() {
 function resetHistFilters() {
   histBsartFilter = '';
   histPlantSub    = '';
+  histDateFilter  = currentMonthYM();
   histCurPage     = 1;
   applyHistFilter();
 }
@@ -1966,6 +2012,7 @@ function switchView(plant,mode,bsart) {
   histSortOrder  = '';
   histAllExpanded= false;
   histPlantSub   = '';
+  histDateFilter = currentMonthYM();
 
   var t='Release PR';
   if (mode==='dashboard') t='Dashboard';
@@ -2239,6 +2286,10 @@ function applyHistFilter() {
   histFilteredData = histData.filter(function(h){
     if (histBsartFilter && h.bsart !== histBsartFilter) return false;
     if (histPlantSub && h.werks !== histPlantSub) return false;
+    if (histDateFilter) {
+      var dt = h.app_at || h.del_at || '';
+      if (parseDateYM(dt) !== parseInt(histDateFilter, 10)) return false;
+    }
     if (!kw) return true;
     return h.banfn.toLowerCase().indexOf(kw)>-1 ||
            (h.txz01 && h.txz01.toLowerCase().indexOf(kw)>-1) ||
@@ -2311,7 +2362,8 @@ function renderHistView() {
   var html='';
   html+='<div class="sticky-top"><div class="pg-hdr">';
   html+='<div class="pg-title" style="color:'+color+';">'+title+getPlantLabel(curPlant)+'</div>';
-  html+='<div class="pg-sub">'+total+' PR '+(isApp?'approved':'rejected')+'</div>';
+  html+='<div class="pg-sub">'+total+' PR '+(isApp?'approved':'rejected')+
+        ' &mdash; <span style="color:var(--primary-d);font-weight:700;">'+escHtml(getHistPeriodLabel())+'</span></div>';
   html+='</div></div>';
 
   html+='<div class="sticky-toolbar"><div class="toolbar">';
@@ -2325,6 +2377,12 @@ function renderHistView() {
   html+='<button class="btn-filter'+(filterPanelOpen?' active':'')+'" id="btnFilter" onclick="toggleFilterPanel(event)">'+
         '&#9881; Filter'+(histFiltCnt>0?'<span class="filter-badge">'+histFiltCnt+'</span>':'')+'</button>';
   html+='<div class="filter-panel'+(filterPanelOpen?' open':'')+'" id="filterPanel">';
+  html+='<div class="filter-panel-row"><span class="filter-panel-lbl">Periode</span>';
+  html+='<select class="estkz-select" onchange="onHistDateFilter(this.value)">';
+  getHistMonthOptions().forEach(function(opt){
+    html+='<option value="'+opt.value+'"'+(histDateFilter===opt.value?' selected':'')+'>'+escHtml(opt.label)+'</option>';
+  });
+  html+='</select></div>';
   html+='<div class="filter-panel-row"><span class="filter-panel-lbl">Kategori</span>';
   html+='<select class="estkz-select" onchange="onHistBsartFilter(this.value)">';
   html+='<option value=""'+(histBsartFilter===''?' selected':'')+'>Semua Kategori</option>';
@@ -2587,6 +2645,12 @@ function onHistPlantSubFilter(val) {
 
 function onHistSortOrder(val) {
   histSortOrder=val;
+  histCurPage=1;
+  applyHistFilter();
+}
+
+function onHistDateFilter(val) {
+  histDateFilter=val;
   histCurPage=1;
   applyHistFilter();
 }

@@ -350,6 +350,8 @@ CASE lv_action.
     SELECT banfn FROM zroto_rej_hist
       INTO CORRESPONDING FIELDS OF TABLE lt_rj_uniq
       WHERE werks IN ('1200','2000','1000','1001','1100').
+    SORT lt_rj_uniq BY banfn.
+    DELETE ADJACENT DUPLICATES FROM lt_rj_uniq COMPARING banfn.
     lv_rj_1200 = lines( lt_rj_uniq ).
     lv_sr_1200 = lv_rj_1200.
     CONDENSE lv_sr_1200 NO-GAPS.
@@ -359,6 +361,8 @@ CASE lv_action.
     SELECT banfn FROM zroto_rej_hist
       INTO CORRESPONDING FIELDS OF TABLE lt_rj_uniq
       WHERE werks IN ('1300','3000').
+    SORT lt_rj_uniq BY banfn.
+    DELETE ADJACENT DUPLICATES FROM lt_rj_uniq COMPARING banfn.
     lv_rj_1300 = lines( lt_rj_uniq ).
     lv_sr_1300 = lv_rj_1300.
     CONDENSE lv_sr_1300 NO-GAPS.
@@ -368,6 +372,8 @@ CASE lv_action.
     SELECT banfn FROM zroto_app_hist
       INTO CORRESPONDING FIELDS OF TABLE lt_ra_uniq
       WHERE werks IN ('1200','2000','1000','1001','1100').
+    SORT lt_ra_uniq BY banfn.
+    DELETE ADJACENT DUPLICATES FROM lt_ra_uniq COMPARING banfn.
     lv_ra_1200 = lines( lt_ra_uniq ).
     lv_sa_1200 = lv_ra_1200.
     CONDENSE lv_sa_1200 NO-GAPS.
@@ -377,6 +383,8 @@ CASE lv_action.
     SELECT banfn FROM zroto_app_hist
       INTO CORRESPONDING FIELDS OF TABLE lt_ra_uniq
       WHERE werks IN ('1300','3000').
+    SORT lt_ra_uniq BY banfn.
+    DELETE ADJACENT DUPLICATES FROM lt_ra_uniq COMPARING banfn.
     lv_ra_1300 = lines( lt_ra_uniq ).
     lv_sa_1300 = lv_ra_1300.
     CONDENSE lv_sa_1300 NO-GAPS.
