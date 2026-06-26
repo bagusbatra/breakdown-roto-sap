@@ -318,6 +318,8 @@ CASE lv_action.
           lv_ra_2000   TYPE i,
           lv_sa_1200   TYPE string,
           lv_sa_1300   TYPE string.
+    DATA: lv_mth_from  TYPE d,
+          lv_mth_to    TYPE d.
 
     " Pending per plant per kategori (kontrak JSON: §8.0
     " development-to-roto.md)
@@ -345,11 +347,19 @@ CASE lv_action.
     count_pending 'ROTO' '3000' lv_s_3000_roto.
     count_pending 'PRKS' '3000' lv_s_3000_PRKS.
 
+    " Hitung history hanya untuk bulan berjalan (sinkron dgn
+    " default filter frontend = bulan saat ini).
+    lv_mth_from = sy-datum.
+    lv_mth_from+6(2) = '01'.
+    lv_mth_to = lv_mth_from.
+    lv_mth_to+6(2) = '31'.
+
     " History Reject Surabaya + 2000 + 1000 + 1001 + 1100
     CLEAR lt_rj_uniq.
     SELECT banfn FROM zroto_rej_hist
       INTO CORRESPONDING FIELDS OF TABLE lt_rj_uniq
-      WHERE werks IN ('1200','2000','1000','1001','1100').
+      WHERE werks IN ('1200','2000','1000','1001','1100')
+        AND del_at BETWEEN lv_mth_from AND lv_mth_to.
     SORT lt_rj_uniq BY banfn.
     DELETE ADJACENT DUPLICATES FROM lt_rj_uniq COMPARING banfn.
     lv_rj_1200 = lines( lt_rj_uniq ).
@@ -360,7 +370,8 @@ CASE lv_action.
     CLEAR lt_rj_uniq.
     SELECT banfn FROM zroto_rej_hist
       INTO CORRESPONDING FIELDS OF TABLE lt_rj_uniq
-      WHERE werks IN ('1300','3000').
+      WHERE werks IN ('1300','3000')
+        AND del_at BETWEEN lv_mth_from AND lv_mth_to.
     SORT lt_rj_uniq BY banfn.
     DELETE ADJACENT DUPLICATES FROM lt_rj_uniq COMPARING banfn.
     lv_rj_1300 = lines( lt_rj_uniq ).
@@ -371,7 +382,8 @@ CASE lv_action.
     CLEAR lt_ra_uniq.
     SELECT banfn FROM zroto_app_hist
       INTO CORRESPONDING FIELDS OF TABLE lt_ra_uniq
-      WHERE werks IN ('1200','2000','1000','1001','1100').
+      WHERE werks IN ('1200','2000','1000','1001','1100')
+        AND app_at BETWEEN lv_mth_from AND lv_mth_to.
     SORT lt_ra_uniq BY banfn.
     DELETE ADJACENT DUPLICATES FROM lt_ra_uniq COMPARING banfn.
     lv_ra_1200 = lines( lt_ra_uniq ).
@@ -382,7 +394,8 @@ CASE lv_action.
     CLEAR lt_ra_uniq.
     SELECT banfn FROM zroto_app_hist
       INTO CORRESPONDING FIELDS OF TABLE lt_ra_uniq
-      WHERE werks IN ('1300','3000').
+      WHERE werks IN ('1300','3000')
+        AND app_at BETWEEN lv_mth_from AND lv_mth_to.
     SORT lt_ra_uniq BY banfn.
     DELETE ADJACENT DUPLICATES FROM lt_ra_uniq COMPARING banfn.
     lv_ra_1300 = lines( lt_ra_uniq ).
