@@ -1125,6 +1125,43 @@ function getCategoryLabelByBsart(werks,bsart) {
   return bsart||'-';
 }
 
+/* ── History Date Filter helpers ──
+   parseDateYM       : "DD.MM.YYYY" -> YYYYMM sebagai angka
+   currentMonthYM    : YYYYMM bulan ini sebagai string (default filter)
+   getHistMonthOptions : 3 opsi bulan terakhir (bulan ini s/d bulan ini-2)
+   getHistPeriodLabel  : label teks bulan yg sedang dipilih            */
+function parseDateYM(s) {
+  if (!s || s==='-') return 0;
+  var p=s.split('.');
+  if (p.length!==3) return 0;
+  return parseInt(p[2],10)*100+parseInt(p[1],10);
+}
+
+function currentMonthYM() {
+  var d=new Date(), m=d.getMonth()+1;
+  return ''+d.getFullYear()+(m<10?'0':'')+m;
+}
+
+function getHistMonthOptions() {
+  var ML=['Jan','Feb','Mar','Apr','Mei','Jun',
+          'Jul','Agt','Sep','Okt','Nov','Des'];
+  var opts=[], now=new Date();
+  for (var i=0;i<3;i++){
+    var d=new Date(now.getFullYear(),now.getMonth()-i,1);
+    var y=d.getFullYear(), m=d.getMonth()+1;
+    opts.push({ value:''+y+(m<10?'0':'')+m, label:ML[d.getMonth()]+' '+y });
+  }
+  return opts;
+}
+
+function getHistPeriodLabel() {
+  var ML=['Jan','Feb','Mar','Apr','Mei','Jun',
+          'Jul','Agt','Sep','Okt','Nov','Des'];
+  var ym=parseInt(histDateFilter,10);
+  if (!ym) return '';
+  return ML[(ym%100)-1]+' '+Math.floor(ym/100);
+}
+
 function getPlantTotalPending(werks) {
   var codes = getSidebarWerks(werks);
   var total=0;
@@ -1453,6 +1490,7 @@ function switchView(plant,category,mode) {
   histSearchKw   = '';
   histAllExpanded= false;
   histPlantSub   = '';
+  histDateFilter = currentMonthYM();
 
   document.getElementById('fab').className='fab';
   renderSidebar();
@@ -1585,6 +1623,13 @@ function resetPrFilters() {
 
 function resetHistFilters() {
   histPlantSub='';
+  histDateFilter=currentMonthYM();
+  histCurPage=1;
+  renderHistContent();
+}
+
+function onHistDateFilter(val) {
+  histDateFilter=val;
   histCurPage=1;
   renderHistContent();
 }
@@ -2046,6 +2091,7 @@ var histCurPage=1;
 var histSearchKw='';
 var histAllExpanded=false;
 var histPlantSub='';  // filter sub-plant (werks asli) dlm grup sidebar
+var histDateFilter=(function(){ var d=new Date(),m=d.getMonth()+1; return ''+d.getFullYear()+(m<10?'0':'')+m; }()); // YYYYMM bulan ini (default)
 
 function onHistSearchTrigger(val) {
   histSearchKw=val.trim(); histCurPage=1;
@@ -2059,6 +2105,10 @@ function getFilteredHist() {
   var kw=histSearchKw.toLowerCase();
   return histData.filter(function(h){
     if (histPlantSub && h.werks!==histPlantSub) return false;
+    if (histDateFilter) {
+      var dt=h.app_at||h.del_at||'';
+      if (parseDateYM(dt)!==parseInt(histDateFilter,10)) return false;
+    }
     if (!kw) return true;
     return h.banfn.toLowerCase().indexOf(kw)>-1||
       (h.txz01&&h.txz01.toLowerCase().indexOf(kw)>-1)||
@@ -2107,6 +2157,8 @@ function renderHistContent() {
         '<div class="pg-sub">'+
         total+' PR '+
         (isApp?'approved':'rejected')+
+        ' &mdash; <span style="color:var(--primary-d);font-weight:700;">'+
+        escHtml(getHistPeriodLabel())+'</span>'+
         '</div></div></div>';
 
   html+='<div style="margin-bottom:14px;'+
@@ -2141,6 +2193,12 @@ function renderHistContent() {
         '&#9881; Filter'+(histFiltCnt>0?'<span class="filter-badge">'+histFiltCnt+'</span>':'')+
         '</button>';
   html+='<div class="filter-panel'+(filterPanelOpen?' open':'')+'" id="filterPanel">';
+  html+='<div class="filter-panel-row"><span class="filter-panel-lbl">Periode</span>';
+  html+='<select class="estkz-select" onchange="onHistDateFilter(this.value)">';
+  getHistMonthOptions().forEach(function(opt){
+    html+='<option value="'+opt.value+'"'+(histDateFilter===opt.value?' selected':'')+'>'+escHtml(opt.label)+'</option>';
+  });
+  html+='</select></div>';
   html+='<div class="filter-panel-row"><span class="filter-panel-lbl">Plant</span>';
   html+='<select class="estkz-select" onchange="onHistPlantSubFilter(this.value)">';
   html+='<option value=""'+(histPlantSub===''?' selected':'')+'>Semua Plant</option>';

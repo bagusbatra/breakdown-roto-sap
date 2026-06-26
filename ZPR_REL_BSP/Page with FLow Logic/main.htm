@@ -335,6 +335,9 @@ CASE lv_action.
     DATA: lt_werks_rng_sb TYPE RANGE OF eban-werks,
           ls_werks_rng_sb LIKE LINE OF lt_werks_rng_sb.
 
+    DATA: lv_mth_from TYPE d,
+          lv_mth_to   TYPE d.
+
     " bsart -> kategori, diturunkan otomatis dari lt_cat_def (BUKAN
     " hardcode terpisah), supaya kalau bsart_cs di lt_cat_def diubah
     " nanti, pemetaan ini ikut sinkron tanpa perlu diubah dua tempat.
@@ -391,16 +394,25 @@ CASE lv_action.
         AND loekz = ' '
       GROUP BY werks bsart.
 
-    SELECT werks bsart COUNT(*) AS cnt
+    " Hitung history hanya untuk bulan berjalan (sinkron dgn
+    " default filter frontend = bulan saat ini).
+    lv_mth_from = sy-datum.
+    lv_mth_from+6(2) = '01'.
+    lv_mth_to = lv_mth_from.
+    lv_mth_to+6(2) = '31'.
+
+    SELECT werks bsart COUNT( DISTINCT banfn ) AS cnt
       FROM zroto_rej_hist
       INTO TABLE lt_rj_grp
       WHERE werks IN lt_werks_rng_sb
+        AND del_at BETWEEN lv_mth_from AND lv_mth_to
       GROUP BY werks bsart.
 
-    SELECT werks bsart COUNT(*) AS cnt
+    SELECT werks bsart COUNT( DISTINCT banfn ) AS cnt
       FROM zroto_app_hist
       INTO TABLE lt_ap_grp
       WHERE werks IN lt_werks_rng_sb
+        AND app_at BETWEEN lv_mth_from AND lv_mth_to
       GROUP BY werks bsart.
 
     " Map bsart -> kategori (global, sama untuk semua plant) lalu
