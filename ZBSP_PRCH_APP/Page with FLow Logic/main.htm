@@ -71,7 +71,24 @@ TYPES: BEGIN OF ty_eban_item,
          loekz TYPE eban-loekz,
          estkz TYPE eban-estkz,
          bsart TYPE eban-bsart,
+         flief TYPE eban-flief,
+         lifnr TYPE eban-lifnr,
        END OF ty_eban_item.
+
+" Nama supplier (LFA1) — dipakai utk resolve kode vendor -> nama.
+TYPES: BEGIN OF ty_lfa1,
+         lifnr TYPE lfa1-lifnr,
+         name1 TYPE lfa1-name1,
+       END OF ty_lfa1.
+
+" Vendor per item EBAN — dipakai utk join balik snapshot history
+" (ZROTO_*_HIST tidak menyimpan supplier) ke EBAN via banfn+bnfpo.
+TYPES: BEGIN OF ty_eban_vend,
+         banfn TYPE eban-banfn,
+         bnfpo TYPE eban-bnfpo,
+         flief TYPE eban-flief,
+         lifnr TYPE eban-lifnr,
+       END OF ty_eban_vend.
 
 TYPES: BEGIN OF ty_makt,
          matnr TYPE makt-matnr,
@@ -134,6 +151,14 @@ DATA: lt_head      TYPE STANDARD TABLE OF ty_eban_head,
       ls_hist_rej  TYPE ty_hist_rej,
       lt_hist_app  TYPE STANDARD TABLE OF ty_hist_app,
       ls_hist_app  TYPE ty_hist_app.
+
+DATA: lt_lfa1      TYPE STANDARD TABLE OF ty_lfa1,
+      ls_lfa1      TYPE ty_lfa1,
+      lt_evnd      TYPE STANDARD TABLE OF ty_eban_vend,
+      ls_evnd      TYPE ty_eban_vend,
+      lt_vnd_rng   TYPE RANGE OF lfa1-lifnr,
+      ls_vnd_rng   LIKE LINE OF lt_vnd_rng,
+      lv_vnd_code  TYPE string.
 
 DATA: lt_return  TYPE STANDARD TABLE OF bapiret2,
       ls_return  TYPE bapiret2,
@@ -212,6 +237,43 @@ DEFINE fmt_date.
   ELSE.
     CONCATENATE &1+6(2) '.' &1+4(2) '.' &1+0(4)
       INTO &2.
+  ENDIF.
+END-OF-DEFINITION.
+
+" Tambahkan kode vendor &1 ke range lt_vnd_rng (skip kosong & duplikat)
+" — dipakai utk mengumpulkan LIFNR/FLIEF sebelum SELECT nama dari LFA1.
+DEFINE add_vendor_rng.
+  IF &1 IS NOT INITIAL.
+    READ TABLE lt_vnd_rng WITH KEY low = &1
+      TRANSPORTING NO FIELDS.
+    IF sy-subrc NE 0.
+      CLEAR ls_vnd_rng.
+      ls_vnd_rng-sign   = 'I'.
+      ls_vnd_rng-option = 'EQ'.
+      ls_vnd_rng-low    = &1.
+      APPEND ls_vnd_rng TO lt_vnd_rng.
+    ENDIF.
+  ENDIF.
+END-OF-DEFINITION.
+
+" Bangun tampilan supplier "kode - nama" dari LFA1 (leading zero kode
+" dibuang). Kode kosong -> '-'. Hasil sudah di-escape utk JSON.
+" &1 = kode vendor (flief/lifnr), &2 = output string
+DEFINE build_vendor_disp.
+  CLEAR &2.
+  IF &1 IS INITIAL.
+    &2 = '-'.
+  ELSE.
+    lv_vnd_code = &1.
+    SHIFT lv_vnd_code LEFT DELETING LEADING '0'.
+    CLEAR ls_lfa1.
+    READ TABLE lt_lfa1 INTO ls_lfa1 WITH KEY lifnr = &1.
+    IF sy-subrc = 0 AND ls_lfa1-name1 IS NOT INITIAL.
+      CONCATENATE lv_vnd_code ' - ' ls_lfa1-name1 INTO &2.
+    ELSE.
+      &2 = lv_vnd_code.
+    ENDIF.
+    escape_json &2.
   ENDIF.
 END-OF-DEFINITION.
 
@@ -768,7 +830,7 @@ CASE lv_action.
 
     SELECT banfn bnfpo matnr txz01 menge meins preis
            peinh waers lfdat werks ekgrp ernam badat
-           loekz estkz
+           loekz estkz flief lifnr
       FROM eban
       INTO CORRESPONDING FIELDS OF TABLE lt_items
       WHERE banfn = lv_banfn_e
@@ -807,6 +869,20 @@ CASE lv_action.
           AND spras = sy-langu.
     ENDIF.
 
+    " Kumpulkan kode supplier (Fixed + Desired Vendor) lalu ambil
+    " nama dari LFA1.
+    CLEAR lt_vnd_rng.
+    LOOP AT lt_items INTO ls_item.
+      add_vendor_rng ls_item-flief.
+      add_vendor_rng ls_item-lifnr.
+    ENDLOOP.
+    CLEAR lt_lfa1.
+    IF lt_vnd_rng IS NOT INITIAL.
+      SELECT lifnr name1 FROM lfa1
+        INTO CORRESPONDING FIELDS OF TABLE lt_lfa1
+        WHERE lifnr IN lt_vnd_rng.
+    ENDIF.
+
     DATA: lv_dt_menge TYPE string,
           lv_dt_preis TYPE string,
           lv_dt_peinh TYPE string,
@@ -817,6 +893,8 @@ CASE lv_action.
           lv_dt_matnr TYPE string,
           lv_dt_lfdat TYPE string,
           lv_dt_bnfpo TYPE string,
+          lv_dt_flief TYPE string,
+          lv_dt_lifnr TYPE string,
           ls_dt_makt  TYPE ty_makt.
 
     CLEAR: lv_json, lv_sep.
@@ -852,6 +930,8 @@ CASE lv_action.
       fmt_date ls_item-lfdat lv_dt_lfdat.
       escape_json lv_dt_txz01.
       escape_json lv_dt_maktx.
+      build_vendor_disp ls_item-flief lv_dt_flief.
+      build_vendor_disp ls_item-lifnr lv_dt_lifnr.
 
       CONCATENATE lv_json lv_sep
         '{"bnfpo":"' lv_dt_bnfpo   '",'
@@ -864,7 +944,9 @@ CASE lv_action.
         '"peinh":"'  lv_dt_peinh   '",'
         '"waers":"'  ls_item-waers '",'
         '"total":"'  lv_dt_tstr    '",'
-        '"lfdat":"'  lv_dt_lfdat   '"}'
+        '"lfdat":"'  lv_dt_lfdat   '",'
+        '"flief":"'  lv_dt_flief   '",'
+        '"lifnr":"'  lv_dt_lifnr   '"}'
         INTO lv_json.
       lv_sep = ','.
     ENDLOOP.
@@ -1019,7 +1101,28 @@ CASE lv_action.
           lv_h_erdat  TYPE string,
           lv_h_delat  TYPE string,
           lv_h_deltm  TYPE string,
+          lv_h_flief  TYPE string,
+          lv_h_lifnr  TYPE string,
           lv_h_full   TYPE string.
+
+    " Supplier tidak disimpan di snapshot ZROTO_REJ_HIST — join balik
+    " ke EBAN via banfn+bnfpo (baris EBAN tetap ada walau loekz='L').
+    CLEAR: lt_evnd, lt_vnd_rng, lt_lfa1.
+    SELECT banfn bnfpo flief lifnr FROM eban
+      INTO CORRESPONDING FIELDS OF TABLE lt_evnd
+      FOR ALL ENTRIES IN lt_hist_rej
+      WHERE banfn = lt_hist_rej-banfn
+        AND bnfpo = lt_hist_rej-bnfpo.
+    SORT lt_evnd BY banfn bnfpo.
+    LOOP AT lt_evnd INTO ls_evnd.
+      add_vendor_rng ls_evnd-flief.
+      add_vendor_rng ls_evnd-lifnr.
+    ENDLOOP.
+    IF lt_vnd_rng IS NOT INITIAL.
+      SELECT lifnr name1 FROM lfa1
+        INTO CORRESPONDING FIELDS OF TABLE lt_lfa1
+        WHERE lifnr IN lt_vnd_rng.
+    ENDIF.
 
     " Lookup fullname pembuat (ERNAM) — sama seperti GET_LIST
     CLEAR: lt_bnames, lt_u21, lt_adp, lt_uname_nm.
@@ -1089,6 +1192,14 @@ CASE lv_action.
       escape_json lv_h_txz01.
       escape_json lv_h_reason.
 
+      CLEAR ls_evnd.
+      READ TABLE lt_evnd INTO ls_evnd
+        WITH KEY banfn = ls_hist_rej-banfn
+                 bnfpo = ls_hist_rej-bnfpo
+        BINARY SEARCH.
+      build_vendor_disp ls_evnd-flief lv_h_flief.
+      build_vendor_disp ls_evnd-lifnr lv_h_lifnr.
+
       CONCATENATE lv_json lv_sep
         '{"banfn":"'  ls_hist_rej-banfn  '",'
         '"bnfpo":"'   ls_hist_rej-bnfpo  '",'
@@ -1105,6 +1216,8 @@ CASE lv_action.
         '"waers":"'   ls_hist_rej-waers  '",'
         '"total":"'   lv_h_tstr          '",'
         '"ekgrp":"'   ls_hist_rej-ekgrp  '",'
+        '"flief":"'   lv_h_flief         '",'
+        '"lifnr":"'   lv_h_lifnr         '",'
         '"del_by":"'  ls_hist_rej-del_by '",'
         '"del_at":"'  lv_h_delat         '",'
         '"del_tm":"'  lv_h_deltm         '",'
@@ -1184,7 +1297,28 @@ CASE lv_action.
           lv_a_erdat TYPE string,
           lv_a_appat TYPE string,
           lv_a_apptm TYPE string,
+          lv_a_flief TYPE string,
+          lv_a_lifnr TYPE string,
           lv_a_full  TYPE string.
+
+    " Supplier tidak disimpan di snapshot ZROTO_APP_HIST — join balik
+    " ke EBAN via banfn+bnfpo untuk mengambil Fixed/Desired Vendor.
+    CLEAR: lt_evnd, lt_vnd_rng, lt_lfa1.
+    SELECT banfn bnfpo flief lifnr FROM eban
+      INTO CORRESPONDING FIELDS OF TABLE lt_evnd
+      FOR ALL ENTRIES IN lt_hist_app
+      WHERE banfn = lt_hist_app-banfn
+        AND bnfpo = lt_hist_app-bnfpo.
+    SORT lt_evnd BY banfn bnfpo.
+    LOOP AT lt_evnd INTO ls_evnd.
+      add_vendor_rng ls_evnd-flief.
+      add_vendor_rng ls_evnd-lifnr.
+    ENDLOOP.
+    IF lt_vnd_rng IS NOT INITIAL.
+      SELECT lifnr name1 FROM lfa1
+        INTO CORRESPONDING FIELDS OF TABLE lt_lfa1
+        WHERE lifnr IN lt_vnd_rng.
+    ENDIF.
 
     " Lookup fullname pembuat (ERNAM) — sama seperti GET_LIST
     CLEAR: lt_bnames, lt_u21, lt_adp, lt_uname_nm.
@@ -1252,6 +1386,14 @@ CASE lv_action.
       fmt_date ls_hist_app-app_at lv_a_appat.
       escape_json lv_a_txz01.
 
+      CLEAR ls_evnd.
+      READ TABLE lt_evnd INTO ls_evnd
+        WITH KEY banfn = ls_hist_app-banfn
+                 bnfpo = ls_hist_app-bnfpo
+        BINARY SEARCH.
+      build_vendor_disp ls_evnd-flief lv_a_flief.
+      build_vendor_disp ls_evnd-lifnr lv_a_lifnr.
+
       CONCATENATE lv_json lv_sep
         '{"banfn":"'  ls_hist_app-banfn  '",'
         '"bnfpo":"'   ls_hist_app-bnfpo  '",'
@@ -1268,6 +1410,8 @@ CASE lv_action.
         '"waers":"'   ls_hist_app-waers  '",'
         '"total":"'   lv_a_tstr          '",'
         '"ekgrp":"'   ls_hist_app-ekgrp  '",'
+        '"flief":"'   lv_a_flief         '",'
+        '"lifnr":"'   lv_a_lifnr         '",'
         '"app_by":"'  ls_hist_app-app_by '",'
         '"app_at":"'  lv_a_appat         '",'
         '"app_tm":"'  lv_a_apptm         '"}'

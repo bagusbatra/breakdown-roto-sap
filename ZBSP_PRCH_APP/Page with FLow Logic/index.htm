@@ -2495,6 +2495,7 @@ function buildHistCards(groups,type) {
           '<table class="detail-tbl"><thead><tr>'+
           '<th>Item</th><th>Deskripsi</th><th class="num">Qty</th><th>UoM</th>'+
           '<th class="num">Harga</th><th class="num">Total</th><th>Curr</th><th>PGrp</th>'+
+          '<th>Fixed Vendor</th><th>Desired Vendor</th>'+
           '</tr></thead><tbody>';
     pr.items.forEach(function(h){
       var w  = h.waers||pr.waers||'IDR';
@@ -2508,6 +2509,8 @@ function buildHistCards(groups,type) {
       html+='<td class="num">'+fmtAmt(h.total,w)+'</td>';
       html+='<td><span class="chip '+cc+'">'+escHtml(w)+'</span></td>';
       html+='<td>'+escHtml(h.ekgrp||'-')+'</td>';
+      html+='<td>'+escHtml(h.flief||'-')+'</td>';
+      html+='<td>'+escHtml(h.lifnr||'-')+'</td>';
       html+='</tr>';
     });
     html+='</tbody></table></div></div></div>'; /* card-detail-scroll/inner/detail */
@@ -2746,7 +2749,8 @@ function loadDetail(banfn) {
       var html='<div class="card-detail-scroll"><table class="detail-tbl"><thead><tr>'+
         '<th>Item</th><th>Material</th><th>Deskripsi</th><th class="num">Qty</th>'+
         '<th>UoM</th><th class="num">Harga/Unit</th><th class="num">Total</th>'+
-        '<th>Curr</th><th>Tgl Butuh</th></tr></thead><tbody>';
+        '<th>Curr</th><th>Tgl Butuh</th>'+
+        '<th>Fixed Vendor</th><th>Desired Vendor</th></tr></thead><tbody>';
 
       items.forEach(function(it){
         var w=it.waers||waers;
@@ -2762,6 +2766,8 @@ function loadDetail(banfn) {
         html+='<td class="num" style="font-weight:700;">'+fmtAmt(it.total,w)+'</td>';
         html+='<td><span class="chip '+cc+'">'+escHtml(w)+'</span></td>';
         html+='<td style="color:var(--muted);">'+escHtml(it.lfdat||'-')+'</td>';
+        html+='<td>'+escHtml(it.flief||'-')+'</td>';
+        html+='<td>'+escHtml(it.lifnr||'-')+'</td>';
         html+='</tr>';
       });
       html+='</tbody></table></div>';
