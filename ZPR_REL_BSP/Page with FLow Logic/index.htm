@@ -659,6 +659,15 @@ ENDIF.
       max-height:50vh; overflow-y:auto;
     }
     .item-text-empty { color:var(--muted); font-style:italic; }
+    /* Fallback Work Order / Equipment (IW33) saat item tanpa teks */
+    .wo-note { color:var(--muted); font-size:12px;
+      font-style:italic; margin-bottom:10px; }
+    .wo-tbl { width:100%; border-collapse:collapse;
+      font-size:12.5px; white-space:normal; }
+    .wo-tbl th, .wo-tbl td {
+      border:1px solid var(--border); padding:6px 9px;
+      text-align:left; vertical-align:top; }
+    .wo-tbl th { background:#fff; font-weight:600; color:#374151; }
 
     /* ── SIDEBAR TOGGLE ── */
     .btn-toggle-sb {
@@ -1292,8 +1301,28 @@ function showItemTextModal(banfn) {
         body.innerHTML='<div class="item-text-empty">'+escHtml(res.message||'Gagal memuat teks.')+'</div>';
         return;
       }
-      if (!res.has_text){
+      // PR SVC_MAINT: selalu tampilkan Work Order (abaikan long-text).
+      if (res.is_svc){
         meta.innerHTML = 'PR <b>'+escHtml(banfn)+'</b>';
+        if (res.has_wo && res.wo_list && res.wo_list.length){
+          var h = '<div class="wo-note">Data Work Order terkait (IW33):</div>'+
+            '<table class="wo-tbl"><thead><tr>'+
+            '<th>No. Work Order</th><th>No. Equipment</th>'+
+            '<th>Keterangan Equipment</th></tr></thead><tbody>';
+          res.wo_list.forEach(function(w){
+            h += '<tr><td>'+escHtml(w.aufnr||'-')+'</td>'+
+              '<td>'+escHtml(w.equnr||'-')+'</td>'+
+              '<td>'+escHtml(w.eqktx||'-')+'</td></tr>';
+          });
+          h += '</tbody></table>';
+          body.innerHTML = h;
+        } else {
+          body.innerHTML = '<div class="item-text-empty">Item ini tidak memiliki data Work Order.</div>';
+        }
+        return;
+      }
+      // Creator lain: perilaku long-text seperti biasa.
+      if (!res.has_text){
         body.innerHTML = '<div class="item-text-empty">Item ini tidak memiliki teks.</div>';
         return;
       }

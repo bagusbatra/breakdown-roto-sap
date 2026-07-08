@@ -890,12 +890,32 @@ CASE lv_action.
 
     lv_banfn_e = lv_banfn.
 
+    TYPES: BEGIN OF ty_wo,
+             aufnr TYPE ebkn-aufnr,
+             equnr TYPE afih-equnr,
+             eqktx TYPE eqkt-eqktx,
+           END OF ty_wo.
+
     DATA: lv_first_bnfpo TYPE eban-bnfpo,
           lv_txt_name    TYPE thead-tdname,
           lt_txt_lines   TYPE STANDARD TABLE OF tline,
           ls_txt_line    TYPE tline,
           lv_item_text   TYPE string,
-          lv_has_text    TYPE string.
+          lv_has_text    TYPE string,
+          lt_aufnr       TYPE STANDARD TABLE OF ebkn-aufnr,
+          lv_aufnr       TYPE ebkn-aufnr,
+          lt_wo          TYPE STANDARD TABLE OF ty_wo,
+          ls_wo          TYPE ty_wo,
+          lv_wo_equnr    TYPE afih-equnr,
+          lv_wo_eqktx    TYPE eqkt-eqktx,
+          lv_pr_ernam    TYPE eban-ernam,
+          lv_is_svc      TYPE string,
+          lv_has_wo      TYPE string,
+          lv_wo_json     TYPE string,
+          lv_wo_sep      TYPE string,
+          lv_aufnr_d     TYPE string,
+          lv_equnr_d     TYPE string,
+          lv_eqktx_e     TYPE string.
 
     " Ambil item pertama (BNFPO terkecil) dari PR ini — tanpa filter
     " LOEKZ supaya tetap jalan utk history approve/reject (item history
@@ -948,11 +968,85 @@ CASE lv_action.
 
     escape_json_multiline lv_item_text.
 
+    " Work Order (IW33) & Equipment terkait dari SELURUH item PR
+    " (via account assignment). EBKN(AUFNR) -> AFIH(EQUNR) -> EQKT(EQKTX).
+    " HANYA berlaku bila PR dibuat oleh user SVC_MAINT (PR auto dari
+    " maintenance order). Untuk SVC_MAINT, WO SELALU ditarik & long-text
+    " diabaikan; creator lain tetap memakai long-text seperti biasa.
+    CLEAR: lt_aufnr, lt_wo, lv_wo_json, lv_wo_sep, lv_has_wo,
+           lv_pr_ernam, lv_is_svc.
+
+    SELECT SINGLE ernam FROM eban INTO lv_pr_ernam
+      WHERE banfn = lv_banfn_e.
+
+    IF lv_pr_ernam = 'SVC_MAINT'.
+      lv_is_svc = 'true'.
+    ELSE.
+      lv_is_svc = 'false'.
+    ENDIF.
+
+    IF lv_pr_ernam = 'SVC_MAINT'.
+      SELECT aufnr FROM ebkn
+        INTO TABLE lt_aufnr
+        WHERE banfn = lv_banfn_e
+          AND aufnr <> space.
+      SORT lt_aufnr.
+      DELETE ADJACENT DUPLICATES FROM lt_aufnr.
+
+      LOOP AT lt_aufnr INTO lv_aufnr.
+        CLEAR: ls_wo, lv_wo_equnr, lv_wo_eqktx.
+        ls_wo-aufnr = lv_aufnr.
+
+        " Equipment dari header order PM
+        SELECT SINGLE equnr FROM afih INTO lv_wo_equnr
+          WHERE aufnr = lv_aufnr.
+        ls_wo-equnr = lv_wo_equnr.
+
+        " Keterangan equipment (bahasa login -> fallback 'E')
+        IF lv_wo_equnr IS NOT INITIAL.
+          SELECT SINGLE eqktx FROM eqkt INTO lv_wo_eqktx
+            WHERE equnr = lv_wo_equnr AND spras = sy-langu.
+          IF sy-subrc <> 0.
+            SELECT SINGLE eqktx FROM eqkt INTO lv_wo_eqktx
+              WHERE equnr = lv_wo_equnr AND spras = 'E'.
+          ENDIF.
+          ls_wo-eqktx = lv_wo_eqktx.
+        ENDIF.
+
+        APPEND ls_wo TO lt_wo.
+      ENDLOOP.
+    ENDIF.
+
+    IF lt_wo IS INITIAL.
+      lv_has_wo = 'false'.
+    ELSE.
+      lv_has_wo = 'true'.
+    ENDIF.
+
+    LOOP AT lt_wo INTO ls_wo.
+      lv_aufnr_d = ls_wo-aufnr.
+      SHIFT lv_aufnr_d LEFT DELETING LEADING '0'.
+      lv_equnr_d = ls_wo-equnr.
+      SHIFT lv_equnr_d LEFT DELETING LEADING '0'.
+      lv_eqktx_e = ls_wo-eqktx.
+      escape_json lv_eqktx_e.
+
+      CONCATENATE lv_wo_json lv_wo_sep
+        '{"aufnr":"' lv_aufnr_d '",'
+        '"equnr":"'  lv_equnr_d '",'
+        '"eqktx":"'  lv_eqktx_e '"}'
+        INTO lv_wo_json.
+      lv_wo_sep = ','.
+    ENDLOOP.
+
     CONCATENATE
       '{"status":"S","message":"OK","banfn":"' lv_banfn_e '",'
-      '"item":"' lv_first_bnfpo '",'
-      '"text":"' lv_item_text '",'
-      '"has_text":' lv_has_text '}'
+      '"item":"'    lv_first_bnfpo '",'
+      '"text":"'    lv_item_text   '",'
+      '"has_text":' lv_has_text    ','
+      '"is_svc":'   lv_is_svc      ','
+      '"has_wo":'   lv_has_wo      ','
+      '"wo_list":[' lv_wo_json     ']}'
       INTO lv_output.
 
 *======================================================================
