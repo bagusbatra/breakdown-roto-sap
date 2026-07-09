@@ -1617,6 +1617,87 @@ CASE lv_action.
         '"message":"pr_action tidak valid"}'.
     ENDIF.
 
+*======================================================================
+  WHEN 'GET_VAPID_KEY'.
+*======================================================================
+* Kirim VAPID public key ke frontend untuk pushManager.subscribe().
+* Public key boleh publik; private key HANYA ada di server Debian (.env).
+    lv_output = '{"status":"S","vapid_public":"BBIEvHSjYzluVDkCCuRMUrIF9SrIupRQZzn0qJE_FXtgMByyxeWhp5rhzuLE6vT3RZagmHOX5aokzu6TPomAroE"}'.
+
+*======================================================================
+  WHEN 'SAVE_SUB'.
+*======================================================================
+* Simpan 1 subscription device (rec_type='D') milik KMI-BOD ke ZPUSH_LOG.
+* Endpoint dipecah 2 kolom (SUB_ENDPOINT + SUB_ENDPOINT2) bila > 255 char.
+    DATA: lv_dev_id   TYPE zpush_log-device_id,
+          lv_endp     TYPE string,
+          lv_p256     TYPE zpush_log-sub_p256dh,
+          lv_auth     TYPE zpush_log-sub_auth,
+          lv_endp_len TYPE i,
+          ls_zpush    TYPE zpush_log.
+
+    IF lv_is_approver = abap_false.
+      lv_output = '{"status":"E","message":"Not authorized"}'.
+    ELSE.
+      lv_dev_id = request->get_form_field( 'device_id' ).
+      lv_endp   = request->get_form_field( 'endpoint' ).
+      lv_p256   = request->get_form_field( 'p256dh' ).
+      lv_auth   = request->get_form_field( 'auth' ).
+
+      IF lv_dev_id IS INITIAL OR lv_endp IS INITIAL
+         OR lv_p256 IS INITIAL OR lv_auth IS INITIAL.
+        lv_output = '{"status":"E","message":"Subscription tidak lengkap"}'.
+      ELSE.
+        CLEAR ls_zpush.
+        ls_zpush-rec_type  = 'D'.
+        ls_zpush-device_id = lv_dev_id.
+        CLEAR ls_zpush-banfn.
+        ls_zpush-uname     = sy-uname.
+
+        lv_endp_len = strlen( lv_endp ).
+        IF lv_endp_len > 255.
+          ls_zpush-sub_endpoint  = lv_endp(255).
+          ls_zpush-sub_endpoint2 = lv_endp+255.
+        ELSE.
+          ls_zpush-sub_endpoint  = lv_endp.
+          CLEAR ls_zpush-sub_endpoint2.
+        ENDIF.
+
+        ls_zpush-sub_p256dh = lv_p256.
+        ls_zpush-sub_auth   = lv_auth.
+        GET TIME STAMP FIELD ls_zpush-sent_at.
+        ls_zpush-sent_stat  = 'S'.
+        ls_zpush-sent_msg   = 'Subscribed'.
+
+        MODIFY zpush_log FROM ls_zpush.
+        IF sy-subrc = 0.
+          lv_output = '{"status":"S"}'.
+        ELSE.
+          lv_output = '{"status":"E","message":"Gagal simpan subscription"}'.
+        ENDIF.
+      ENDIF.
+    ENDIF.
+
+*======================================================================
+  WHEN 'DELETE_SUB'.
+*======================================================================
+* Hapus 1 device (tombol "Matikan Notifikasi").
+    DATA: lv_del_dev TYPE zpush_log-device_id.
+
+    IF lv_is_approver = abap_false.
+      lv_output = '{"status":"E","message":"Not authorized"}'.
+    ELSE.
+      lv_del_dev = request->get_form_field( 'device_id' ).
+      IF lv_del_dev IS INITIAL.
+        lv_output = '{"status":"E","message":"device_id kosong"}'.
+      ELSE.
+        DELETE FROM zpush_log
+          WHERE rec_type  = 'D'
+            AND device_id = lv_del_dev.
+        lv_output = '{"status":"S"}'.
+      ENDIF.
+    ENDIF.
+
   WHEN OTHERS.
     lv_output = '{"status":"E",' &
       '"message":"Action tidak dikenal"}'.
