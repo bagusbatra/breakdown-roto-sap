@@ -7,8 +7,6 @@ var curMode        = '';
 var curCategory    = '';
 var curBsart       = '';
 var isApprover     = false;
-var openSections   = {};
-var openCategories = {};
 var curEstkzFilter = '';
 var curSort      = 'newest';
 var curPlantSub  = '';  // filter sub-plant (werks asli) dlm grup sidebar
@@ -25,59 +23,41 @@ var filteredData = [];
 /* Daftar kategori PR per plant. bsart bisa berisi lebih dari satu
    doc type dipisah koma (contoh 'RSBR,PRK9') — backend akan
    menjumlahkan/menggabungkan filter-nya jadi satu kategori. Daftar
-   ini HARUS selalu sinkron dengan lt_cat_def di main.htm. */
+   ini HARUS selalu sinkron dengan lt_cat_def di main.htm.
+   Field `icon` merujuk id <symbol> di sprite SVG (index.htm). */
 var CATEGORY_DEF = {
   '1200':[
-    {code:'MTN',label:'PR Maintenance',bsart:'ROTO',
-     icon:'&#128203;'},
-    {code:'RND',label:'PR RND',bsart:'RSBR,PRK9',
-     icon:'&#128300;'},
-    {code:'SVC',label:'PR Service',bsart:'PRKS',
-     icon:'&#128736;'}
+    {code:'MTN',label:'PR Maintenance',bsart:'ROTO',      icon:'i-clipboard'},
+    {code:'RND',label:'PR RND',        bsart:'RSBR,PRK9', icon:'i-flask'},
+    {code:'SVC',label:'PR Service',    bsart:'PRKS',      icon:'i-tool'}
   ],
   '1300':[
-    {code:'MTN',label:'PR Maintenance',bsart:'ROTO',
-     icon:'&#128203;'},
-    {code:'SVC',label:'PR Service',bsart:'PRKS',
-     icon:'&#128736;'}
+    {code:'MTN',label:'PR Maintenance',bsart:'ROTO',      icon:'i-clipboard'},
+    {code:'SVC',label:'PR Service',    bsart:'PRKS',      icon:'i-tool'}
   ],
   '2000':[
-    {code:'MTN',label:'PR Maintenance',bsart:'ROTO',
-     icon:'&#128203;'},
-    {code:'RND',label:'PR RND',bsart:'RSBR,PRK9',
-     icon:'&#128300;'},
-    {code:'SVC',label:'PR Service',bsart:'PRKS',
-     icon:'&#128736;'}
+    {code:'MTN',label:'PR Maintenance',bsart:'ROTO',      icon:'i-clipboard'},
+    {code:'RND',label:'PR RND',        bsart:'RSBR,PRK9', icon:'i-flask'},
+    {code:'SVC',label:'PR Service',    bsart:'PRKS',      icon:'i-tool'}
   ],
   '1000':[
-    {code:'MTN',label:'PR Maintenance',bsart:'ROTO',
-     icon:'&#128203;'},
-    {code:'RND',label:'PR RND',bsart:'RSBR,PRK9',
-     icon:'&#128300;'},
-    {code:'SVC',label:'PR Service',bsart:'PRKS',
-     icon:'&#128736;'}
+    {code:'MTN',label:'PR Maintenance',bsart:'ROTO',      icon:'i-clipboard'},
+    {code:'RND',label:'PR RND',        bsart:'RSBR,PRK9', icon:'i-flask'},
+    {code:'SVC',label:'PR Service',    bsart:'PRKS',      icon:'i-tool'}
   ],
   '1001':[
-    {code:'MTN',label:'PR Maintenance',bsart:'ROTO',
-     icon:'&#128203;'},
-    {code:'RND',label:'PR RND',bsart:'RSBR,PRK9',
-     icon:'&#128300;'},
-    {code:'SVC',label:'PR Service',bsart:'PRKS',
-     icon:'&#128736;'}
+    {code:'MTN',label:'PR Maintenance',bsart:'ROTO',      icon:'i-clipboard'},
+    {code:'RND',label:'PR RND',        bsart:'RSBR,PRK9', icon:'i-flask'},
+    {code:'SVC',label:'PR Service',    bsart:'PRKS',      icon:'i-tool'}
   ],
   '1100':[
-    {code:'MTN',label:'PR Maintenance',bsart:'ROTO',
-     icon:'&#128203;'},
-    {code:'RND',label:'PR RND',bsart:'RSBR,PRK9',
-     icon:'&#128300;'},
-    {code:'SVC',label:'PR Service',bsart:'PRKS',
-     icon:'&#128736;'}
+    {code:'MTN',label:'PR Maintenance',bsart:'ROTO',      icon:'i-clipboard'},
+    {code:'RND',label:'PR RND',        bsart:'RSBR,PRK9', icon:'i-flask'},
+    {code:'SVC',label:'PR Service',    bsart:'PRKS',      icon:'i-tool'}
   ],
   '3000':[
-    {code:'MTN',label:'PR Maintenance',bsart:'ROTO',
-     icon:'&#128203;'},
-    {code:'SVC',label:'PR Service',bsart:'PRKS',
-     icon:'&#128736;'}
+    {code:'MTN',label:'PR Maintenance',bsart:'ROTO',      icon:'i-clipboard'},
+    {code:'SVC',label:'PR Service',    bsart:'PRKS',      icon:'i-tool'}
   ]
 };
 
@@ -117,6 +97,14 @@ function escHtml(s) {
     .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
+/* Ikon dari sprite <symbol> di index.htm. Selalu aria-hidden: ikon
+   di aplikasi ini hanya dekoratif — teks di sebelahnya yang dibaca
+   screen reader. Tombol tanpa teks wajib punya aria-label sendiri. */
+function svgIcon(id,cls) {
+  return '<svg class="ico'+(cls?' '+cls:'')+'" aria-hidden="true">'+
+         '<use href="#'+id+'"></use></svg>';
+}
+
 function parseNum(s) {
   if (!s || s==='') return NaN;
   var str = s.toString().trim();
@@ -142,21 +130,22 @@ function fmtAmt(raw, waers) {
 }
 
 /* Render blok total di card-top. totals = [{waers,total},...] —
-   1 currency = tampilan lama (1 baris besar), >1 currency = ditumpuk
-   per baris supaya tidak salah jumlah lintas mata uang. */
+   1 currency = satu angka besar, >1 currency = ditumpuk per baris
+   supaya tidak salah jumlah lintas mata uang. */
 function renderCardAmount(totals) {
   if (!totals || !totals.length) totals = [{waers:'IDR', total:0}];
   if (totals.length === 1) {
     var t = totals[0];
-    return '<div class="card-amount">'+fmtAmt(t.total,t.waers)+
-           '<span class="card-amount-lbl">'+escHtml(t.waers||'IDR')+
-           ' Total</span></div>';
+    return '<div class="card-amount">'+
+           '<span class="card-amount-val">'+fmtAmt(t.total,t.waers)+'</span>'+
+           '<span class="card-amount-cur">'+escHtml(t.waers||'IDR')+' Total</span>'+
+           '</div>';
   }
   var html = '<div class="card-amount card-amount-multi">';
   totals.forEach(function(t){
     html += '<div class="card-amount-row">'+
             '<span class="card-amount-row-val">'+fmtAmt(t.total,t.waers)+'</span>'+
-            '<span class="card-amount-row-lbl">'+escHtml(t.waers||'IDR')+'</span></div>';
+            '<span class="card-amount-row-cur">'+escHtml(t.waers||'IDR')+'</span></div>';
   });
   html += '</div>';
   return html;
@@ -184,4 +173,3 @@ function postOpts(body) {
     body:body
   };
 }
-

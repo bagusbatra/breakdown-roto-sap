@@ -90,42 +90,113 @@ function getPlantTotalPending(werks) {
 function showEmpty(msg) {
   document.getElementById('mainContent').innerHTML =
     '<div class="empty">' +
-    '<div class="empty-ico">&#128203;</div>' +
-    '<div class="empty-txt">' +
-    escHtml(msg)+'</div></div>';
+    '<div class="empty-ico">'+svgIcon('i-inbox','ico-xl')+'</div>' +
+    '<div class="empty-txt">'+escHtml(msg)+'</div></div>';
   document.getElementById('fab').className='fab';
 }
 
-function showLoading() {
+/* ================================================================
+   SKELETON — placeholder saat fetch list/history. Geometrinya
+   sengaja meniru kartu asli supaya tidak ada pergeseran layout
+   ketika data tiba (menggantikan spinner "Loading..." lama).
+   ================================================================ */
+function skeletonCard() {
+  var meta='';
+  for (var i=0;i<4;i++){
+    meta+='<div><div class="skel skel-lbl"></div>'+
+          '<div class="skel skel-line"></div></div>';
+  }
+  return '<div class="po-card no-cb skel-card">'+
+    '<div class="card-top card-top--nocb">'+
+      '<div class="card-main">'+
+        '<div class="card-head">'+
+          '<div class="skel skel-num"></div>'+
+          '<div class="skel skel-pill skel-pill-b"></div>'+
+        '</div>'+
+        '<div class="card-badges">'+
+          '<div class="skel skel-pill skel-pill-a"></div>'+
+          '<div class="skel skel-pill skel-pill-b"></div>'+
+          '<div class="skel skel-pill skel-pill-c"></div>'+
+        '</div>'+
+      '</div>'+
+      '<div class="card-amount">'+
+        '<div class="skel skel-amt"></div>'+
+        '<div class="skel skel-amt-sub"></div>'+
+      '</div>'+
+    '</div>'+
+    '<div class="card-meta">'+meta+'</div>'+
+  '</div>';
+}
+
+function showSkeleton(count) {
   var el=document.getElementById('mainContent');
-  if (el) el.innerHTML =
-    '<div style="text-align:center;padding:60px;' +
-    'color:var(--muted);">' +
-    '<div class="lo-spin"' +
-    ' style="margin:0 auto 12px;"></div>' +
-    'Loading...</div>';
+  if (!el) return;
+  var n=count||5, cards='';
+  for (var i=0;i<n;i++) cards+=skeletonCard();
+
+  el.innerHTML =
+    '<div class="page-sticky" aria-hidden="true">'+
+      '<div class="pg-hdr">'+
+        '<div class="skel skel-title"></div>'+
+        '<div class="skel skel-sub"></div>'+
+      '</div>'+
+    '</div>'+
+    '<div role="status" class="visually-hidden">Memuat data...</div>'+
+    cards;
 }
 
 /* ================================================================
    HEADER / SIDEBAR TOGGLE
    ================================================================ */
-function toggleSidebar() {
-  document.body.classList.toggle('sb-collapsed');
-  document.getElementById('sidebar')
-    .classList.toggle('open');
+function isMobileView() {
+  return window.matchMedia('(max-width:1024px)').matches;
 }
 
-function toggleUserMenu() {
+/* Di desktop sidebar di-collapse (konten melebar); di mobile ia
+   menjadi drawer di atas konten dengan backdrop. Dulu kedua kelas
+   di-toggle sekaligus sehingga perilakunya tumpang tindih. */
+function toggleSidebar() {
+  if (isMobileView())
+    document.body.classList.toggle('sb-mobile-open');
+  else
+    document.body.classList.toggle('sb-collapsed');
+  updateSidebarAria();
+}
+
+function closeSidebarMobile() {
+  document.body.classList.remove('sb-mobile-open');
+  updateSidebarAria();
+}
+
+function updateSidebarAria() {
+  var btn=document.getElementById('btnToggleSb');
+  if (!btn) return;
+  var open = isMobileView()
+    ? document.body.classList.contains('sb-mobile-open')
+    : !document.body.classList.contains('sb-collapsed');
+  btn.setAttribute('aria-expanded', open?'true':'false');
+}
+
+window.addEventListener('resize', updateSidebarAria);
+
+function toggleUserMenu(e) {
+  if (e) e.stopPropagation();
   var m=document.getElementById('userMenu');
-  m.style.display=
-    m.style.display==='none'?'block':'none';
+  var b=document.getElementById('btnUserMenu');
+  var open=m.classList.toggle('open');
+  if (b) b.setAttribute('aria-expanded', open?'true':'false');
+}
+
+function closeUserMenu() {
+  var m=document.getElementById('userMenu');
+  var b=document.getElementById('btnUserMenu');
+  if (m) m.classList.remove('open');
+  if (b) b.setAttribute('aria-expanded','false');
 }
 
 document.addEventListener('click',function(e){
-  var m=document.getElementById('userMenu');
   var u=document.querySelector('.hdr-user');
-  if (m&&u&&!u.contains(e.target))
-    m.style.display='none';
+  if (u && !u.contains(e.target)) closeUserMenu();
 });
 
 /* ================================================================
@@ -165,13 +236,14 @@ window.addEventListener('pageshow',function(e){
 function showToast(type,msg) {
   var old=document.getElementById('toastMsg');
   if (old) old.remove();
+  var ok=(type==='S');
   var el=document.createElement('div');
   el.id='toastMsg';
-  el.className='toast toast-'+
-    (type==='S'?'s':'e');
-  el.innerHTML=
-    (type==='S'?'&#10003; ':'&#10007; ')+
-    escHtml(msg);
+  el.className='toast toast-'+(ok?'s':'e');
+  /* status = diumumkan tanpa menyela; alert = menyela, untuk error. */
+  el.setAttribute('role', ok?'status':'alert');
+  el.innerHTML=svgIcon(ok?'i-check-circle':'i-alert-circle')+
+    '<span>'+escHtml(msg)+'</span>';
   document.body.appendChild(el);
   setTimeout(function(){
     if (el.parentNode) el.remove();
@@ -179,29 +251,82 @@ function showToast(type,msg) {
 }
 
 /* ================================================================
-   MODAL
+   MODAL — dengan focus trap, Esc untuk menutup, dan fokus yang
+   dikembalikan ke elemen pemicu setelah ditutup.
    ================================================================ */
-function closeModal(id) {
-  document.getElementById(id)
-    .classList.remove('show');
+var modalStack = [];
+
+function focusableIn(root) {
+  var sel='button,[href],input,select,textarea,'+
+          '[tabindex]:not([tabindex="-1"])';
+  return Array.prototype.slice.call(root.querySelectorAll(sel))
+    .filter(function(el){
+      return !el.disabled && el.offsetParent!==null;
+    });
 }
+
+function openModal(id) {
+  var m=document.getElementById(id);
+  if (!m) return;
+  modalStack.push({ id:id, opener:document.activeElement });
+  m.classList.add('show');
+  var f=focusableIn(m);
+  if (f.length) f[0].focus();
+}
+
+function closeModal(id) {
+  var m=document.getElementById(id);
+  if (!m) return;
+  m.classList.remove('show');
+  for (var i=modalStack.length-1;i>=0;i--){
+    if (modalStack[i].id===id){
+      var opener=modalStack[i].opener;
+      modalStack.splice(i,1);
+      if (opener && opener.focus) opener.focus();
+      break;
+    }
+  }
+}
+
+document.addEventListener('keydown',function(e){
+  if (!modalStack.length) return;
+  var top=modalStack[modalStack.length-1];
+  var m=document.getElementById(top.id);
+  if (!m) return;
+
+  if (e.key==='Escape'){
+    e.preventDefault();
+    closeModal(top.id);
+    return;
+  }
+  if (e.key!=='Tab') return;
+
+  var f=focusableIn(m);
+  if (!f.length) return;
+  var first=f[0], last=f[f.length-1];
+  if (e.shiftKey && document.activeElement===first){
+    e.preventDefault(); last.focus();
+  } else if (!e.shiftKey && document.activeElement===last){
+    e.preventDefault(); first.focus();
+  }
+});
 
 /* Modal Item Text — ambil long-text item pertama (BNFPO terkecil)
    dari PR &1 via action GET_ITEM_TEXT, lalu tampilkan di modal. */
 function showItemTextModal(banfn) {
-  var modal = document.getElementById('modalItemText');
-  var meta  = document.getElementById('itemTextMeta');
-  var body  = document.getElementById('itemTextBody');
+  var meta = document.getElementById('itemTextMeta');
+  var body = document.getElementById('itemTextBody');
 
   meta.innerHTML = 'PR <b>'+escHtml(banfn)+'</b>';
-  body.innerHTML = '<div class="lo-spin" style="width:20px;height:20px;border-width:2.5px;margin:0 auto;"></div>';
-  modal.classList.add('show');
+  body.innerHTML = '<div class="lo-spin lo-spin-sm"></div>';
+  openModal('modalItemText');
 
   fetch(API_URL+'?action=GET_ITEM_TEXT&banfn='+encodeURIComponent(banfn))
     .then(function(r){return r.json();})
     .then(function(res){
       if (res.status!=='S'){
-        body.innerHTML='<div class="item-text-empty">'+escHtml(res.message||'Gagal memuat teks.')+'</div>';
+        body.innerHTML='<div class="item-text-empty">'+
+          escHtml(res.message||'Gagal memuat teks.')+'</div>';
         return;
       }
       // PR SVC_MAINT: selalu tampilkan Work Order (abaikan long-text).
@@ -220,13 +345,15 @@ function showItemTextModal(banfn) {
           h += '</tbody></table>';
           body.innerHTML = h;
         } else {
-          body.innerHTML = '<div class="item-text-empty">Item ini tidak memiliki data Work Order.</div>';
+          body.innerHTML = '<div class="item-text-empty">'+
+            'Item ini tidak memiliki data Work Order.</div>';
         }
         return;
       }
       // Creator lain: perilaku long-text seperti biasa.
       if (!res.has_text){
-        body.innerHTML = '<div class="item-text-empty">Item ini tidak memiliki teks.</div>';
+        body.innerHTML = '<div class="item-text-empty">'+
+          'Item ini tidak memiliki teks.</div>';
         return;
       }
       meta.innerHTML = 'PR <b>'+escHtml(banfn)+'</b> &middot; Item '+escHtml(res.item);
@@ -241,6 +368,7 @@ function showItemTextModal(banfn) {
    INIT
    ================================================================ */
 function init() {
+  updateSidebarAria();
   readDeepLink();
   loadSidebarData();
   initPush();
@@ -286,124 +414,96 @@ function normalizeCatCounts(group,werks) {
 }
 
 /* ================================================================
-   RENDER SIDEBAR (Flat Doc Types & Global History per Plant)
+   RENDER SIDEBAR — datar. Nama plant adalah label seksi (bukan
+   tombol), dan seluruh menu selalu tampil tanpa accordion.
    ================================================================ */
+function sumCounts(group,plantCode) {
+  var codes=getSidebarWerks(plantCode);
+  var total=0;
+  codes.forEach(function(w){
+    var cats=CATEGORY_DEF[w]||[];
+    cats.forEach(function(c){
+      total+=parseInt((sbCounts[group][w]||{})[c.code])||0;
+    });
+  });
+  return total;
+}
+
+function sbBadge(cls,count) {
+  if (!count) return '';
+  return '<span class="sb-badge '+cls+'">'+count+'</span>';
+}
+
+function sbLink(opts) {
+  return '<button type="button" class="sb-link"'+
+    (opts.tone?' data-tone="'+opts.tone+'"':'')+
+    (opts.active?' aria-current="page"':'')+
+    ' onclick="switchView(\''+opts.werks+'\',\''+opts.category+'\',\''+opts.mode+'\')">'+
+    '<span class="sb-link-label">'+svgIcon(opts.icon)+
+    '<span>'+escHtml(opts.label)+'</span></span>'+
+    sbBadge(opts.badgeCls,opts.count)+
+    '</button>';
+}
+
 function renderSidebar() {
   var plants=[
-    {code:'1200',name:'Surabaya',
-     img:'surabaya.png'},
-    {code:'1300',name:'Semarang',
-     img:'semarang.png'}
+    {code:'1200',name:'Surabaya',img:'surabaya.png'},
+    {code:'1300',name:'Semarang',img:'semarang.png'}
   ];
+  var primary=curPlant.split(',')[0];
   var html='';
 
-  plants.forEach(function(p,pi){
-    if (pi>0)
-      html+='<div class="sb-divider"></div>';
+  plants.forEach(function(p){
+    var cats     =CATEGORY_DEF[p.code]||[];
+    var effWerks =getEffectiveWerks(p.code);
+    var pendTot  =getPlantTotalPending(p.code);
+    var isPlant  =(primary===p.code);
 
-    var cats    =CATEGORY_DEF[p.code]||[];
-    var primary = curPlant.split(',')[0];
-    var isOpen  =(primary===p.code)||
-                 (openSections[p.code]===true);
-    var pendTot =getPlantTotalPending(p.code);
-    var effWerks = getEffectiveWerks(p.code);
+    html+='<div class="sb-section">';
 
-    html+='<div class="sb-section'+
-          (isOpen?' open':'')+
-          '" id="sbSec_'+p.code+'">';
+    html+='<div class="sb-plant-hdr">'+
+          '<span class="sb-plant-left">'+
+          '<img src="'+p.img+'" alt="">'+
+          escHtml(p.name)+'</span>'+
+          sbBadge('sb-badge-total',pendTot)+
+          '</div>';
 
-    /* Plant header */
-    html+='<div class="sb-plant"'+
-          ' onclick="toggleSection(\''+
-          p.code+'\')">';
-    html+='<span class="sb-plant-left">';
-    html+='<img src="'+p.img+'"'+
-          ' alt="'+p.name+'"'+
-          ' style="width:18px;height:18px;'+
-          'object-fit:cover;border-radius:3px;">';
-    html+=p.name+'</span>';
-    html+='<span style="display:flex;'+
-          'align-items:center;gap:6px;">';
-    if (pendTot>0)
-      html+='<span class="sb-badge sb-badge-total">'+
-            pendTot+'</span>';
-    html+='<span class="sb-plant-chevron">'+
-          '&#9660;</span>';
-    html+='</span></div>';
-
-    /* Submenu internal Plant */
-    html+='<div class="sb-submenu">';
-
-    /* A. TOMBOL PENDING SESUAI DOC TYPE */
+    /* A. PR pending per kategori */
     cats.forEach(function(cat){
-      var codes = getSidebarWerks(p.code);
-      var pend = 0;
-      codes.forEach(function(w){
-        pend += parseInt((sbCounts.pending[w]||{})[cat.code])||0;
+      var pend=0;
+      getSidebarWerks(p.code).forEach(function(w){
+        pend+=parseInt((sbCounts.pending[w]||{})[cat.code])||0;
       });
-      var isPendActive=(primary===p.code && curCategory===cat.code && curMode==='pending');
-
-      html+='<a class="sb-link'+(isPendActive?' active':'')+'" style="padding-left:20px;" '+
-            'onclick="switchView(\''+effWerks+'\',\''+cat.code+'\',\'pending\')">';
-      html+='<span style="display:flex;align-items:center;gap:7px;">'+cat.icon+' '+cat.label+'</span>';
-      if (pend>0) html+='<span class="sb-badge sb-badge-pending">'+pend+'</span>';
-      html+='</a>';
-    });
-
-    /* B. TOMBOL HISTORY APPROVE */
-    var codes = getSidebarWerks(p.code);
-    var happTot=0;
-    cats.forEach(function(c){
-      codes.forEach(function(w){
-        happTot+=parseInt((sbCounts.hist_app[w]||{})[c.code])||0;
+      html+=sbLink({
+        werks:effWerks, category:cat.code, mode:'pending',
+        icon:cat.icon, label:cat.label,
+        badgeCls:'sb-badge-pending', count:pend,
+        active:(isPlant && curCategory===cat.code && curMode==='pending')
       });
     });
-    var isAppActive=(primary===p.code && curMode==='hist_app');
 
-    html+='<a class="sb-link'+(isAppActive?' active-app':'')+'" style="padding-left:20px; border-top:1px dashed #e5e7eb;" '+
-          'onclick="switchView(\''+effWerks+'\',\'ALL\',\'hist_app\')">';
-    html+='<span style="display:flex;align-items:center;gap:7px;">&#10003; History Approve</span>';
-    if (happTot>0) html+='<span class="sb-badge sb-badge-app">'+happTot+'</span>';
-    html+='</a>';
+    html+='<div class="sb-hist-sep"></div>';
 
-    /* C. TOMBOL HISTORY REJECT */
-    var hrejTot=0;
-    cats.forEach(function(c){
-      codes.forEach(function(w){
-        hrejTot+=parseInt((sbCounts.hist_rej[w]||{})[c.code])||0;
-      });
+    /* B. History approve */
+    html+=sbLink({
+      werks:effWerks, category:'ALL', mode:'hist_app', tone:'app',
+      icon:'i-check', label:'History Approve',
+      badgeCls:'sb-badge-app', count:sumCounts('hist_app',p.code),
+      active:(isPlant && curMode==='hist_app')
     });
-    var isRejActive=(primary===p.code && curMode==='hist_rej');
 
-    html+='<a class="sb-link'+(isRejActive?' active-rej':'')+'" style="padding-left:20px;" '+
-          'onclick="switchView(\''+effWerks+'\',\'ALL\',\'hist_rej\')">';
-    html+='<span style="display:flex;align-items:center;gap:7px;">&#128465; History Reject</span>';
-    if (hrejTot>0) html+='<span class="sb-badge sb-badge-rej">'+hrejTot+'</span>';
-    html+='</a>';
+    /* C. History reject */
+    html+=sbLink({
+      werks:effWerks, category:'ALL', mode:'hist_rej', tone:'rej',
+      icon:'i-trash', label:'History Reject',
+      badgeCls:'sb-badge-rej', count:sumCounts('hist_rej',p.code),
+      active:(isPlant && curMode==='hist_rej')
+    });
 
-    html+='</div>'; /* sb-submenu */
-    html+='</div>'; /* sb-section */
+    html+='</div>';
   });
 
   document.getElementById('sidebar').innerHTML=html;
-}
-
-function toggleSection(plantCode) {
-  var sec=document.getElementById(
-    'sbSec_'+plantCode);
-  if (!sec) return;
-  sec.classList.toggle('open');
-  openSections[plantCode]=
-    sec.classList.contains('open');
-}
-
-function toggleCategory(catKey) {
-  var sec=document.getElementById(
-    'sbCat_'+catKey);
-  if (!sec) return;
-  sec.classList.toggle('open');
-  openCategories[catKey]=
-    sec.classList.contains('open');
 }
 
 /* ================================================================
@@ -432,10 +532,10 @@ function switchView(plant,category,mode) {
 
   document.getElementById('fab').className='fab';
   renderSidebar();
-  showLoading();
+  closeSidebarMobile();
+  showSkeleton();
 
   if      (mode==='pending')  fetchList('');
   else if (mode==='hist_app') fetchHistApp();
   else if (mode==='hist_rej') fetchHistRej();
 }
-

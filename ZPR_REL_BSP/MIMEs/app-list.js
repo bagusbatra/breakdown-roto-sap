@@ -30,10 +30,7 @@ function fetchHistApp() {
         '&bsart='+encodeURIComponent(curBsart))
     .then(function(r){return r.json();})
     .then(function(res){
-      renderHistTable(
-        res.data||[],
-        'approve'
-      );
+      renderHistTable(res.data||[],'approve');
     })
     .catch(function(e){
       showEmpty('Error: '+e.message);
@@ -49,10 +46,7 @@ function fetchHistRej() {
         '&bsart='+encodeURIComponent(curBsart))
     .then(function(r){return r.json();})
     .then(function(res){
-      renderHistTable(
-        res.data||[],
-        'reject'
-      );
+      renderHistTable(res.data||[],'reject');
     })
     .catch(function(e){
       showEmpty('Error: '+e.message);
@@ -65,7 +59,7 @@ function fetchHistRej() {
 function onEstkzFilter(val) {
   curEstkzFilter=val;
   selBanfns={};
-  showLoading();
+  showSkeleton();
   fetchList(val);
 }
 
@@ -86,22 +80,32 @@ function onHistPlantSubFilter(val) {
    membungkus filter sekunder (ESTKZ + plant) jadi satu dropdown
    supaya toolbar tetap ringkas.
    ================================================================ */
-function toggleFilterPanel(e) {
-  if (e) e.stopPropagation();
-  filterPanelOpen=!filterPanelOpen;
+function setFilterPanel(open) {
+  filterPanelOpen=open;
   var panel=document.getElementById('filterPanel');
   var btn  =document.getElementById('btnFilter');
-  if (panel) panel.classList.toggle('open',filterPanelOpen);
-  if (btn)   btn.classList.toggle('active',filterPanelOpen);
+  if (panel) panel.classList.toggle('open',open);
+  if (btn)   btn.setAttribute('aria-expanded',open?'true':'false');
+}
+
+function toggleFilterPanel(e) {
+  if (e) e.stopPropagation();
+  setFilterPanel(!filterPanelOpen);
 }
 
 document.addEventListener('click', function(e){
   var panel=document.getElementById('filterPanel');
   var btn  =document.getElementById('btnFilter');
   if (panel && btn && !btn.contains(e.target) && !panel.contains(e.target)){
-    panel.classList.remove('open');
-    btn.classList.remove('active');
-    filterPanelOpen=false;
+    setFilterPanel(false);
+  }
+});
+
+document.addEventListener('keydown', function(e){
+  if (e.key==='Escape' && filterPanelOpen && !modalStack.length){
+    setFilterPanel(false);
+    var btn=document.getElementById('btnFilter');
+    if (btn) btn.focus();
   }
 });
 
@@ -111,7 +115,7 @@ function resetPrFilters() {
   if (curEstkzFilter){
     curEstkzFilter='';
     selBanfns={};
-    showLoading();
+    showSkeleton();
     fetchList('');
   } else {
     renderList();
@@ -129,6 +133,58 @@ function onHistDateFilter(val) {
   histDateFilter=val;
   histCurPage=1;
   renderHistContent();
+}
+
+/* ================================================================
+   TOOLBAR — potongan yang dipakai bersama oleh list & history.
+   ================================================================ */
+function buildSearchBox(id,handler,value,placeholder) {
+  return '<div class="search-wrap">'+
+    svgIcon('i-search')+
+    '<input type="text" id="'+id+'"'+
+    ' aria-label="'+escHtml(placeholder)+'"'+
+    ' placeholder="'+escHtml(placeholder)+'"'+
+    ' value="'+escHtml(value)+'"'+
+    ' onkeydown="if(event.key===\'Enter\')'+handler+'(this.value)"'+
+    ' onblur="'+handler+'(this.value)">'+
+    '</div>';
+}
+
+function buildPageSizeSelect(sizes,current,handler) {
+  var html='<select class="select" aria-label="Jumlah baris per halaman"'+
+    ' onchange="'+handler+'(parseInt(this.value))">';
+  sizes.forEach(function(s){
+    html+='<option value="'+s+'"'+(current===s?' selected':'')+'>'+
+      (s===0?'Semua':s+' per halaman')+'</option>';
+  });
+  return html+'</select>';
+}
+
+function buildFilterButton(count) {
+  return '<button type="button" class="btn btn-outline btn-filter"'+
+    ' id="btnFilter" aria-expanded="'+(filterPanelOpen?'true':'false')+'"'+
+    ' aria-controls="filterPanel" onclick="toggleFilterPanel(event)">'+
+    svgIcon('i-filter')+' Filter'+
+    (count>0?'<span class="filter-badge">'+count+'</span>':'')+
+    '</button>';
+}
+
+function buildExpandButton(id,expanded,handler) {
+  return '<button type="button" class="btn btn-ghost" id="'+id+'"'+
+    ' onclick="'+handler+'()">'+
+    svgIcon('i-chevron-down')+' '+
+    (expanded?'Tutup Semua':'Buka Semua')+
+    '</button>';
+}
+
+function buildPlantSubSelect(primaryPlant,current,handler) {
+  var html='<select class="select select--accent select--block"'+
+    ' aria-label="Filter plant" onchange="'+handler+'(this.value)">';
+  html+='<option value=""'+(current===''?' selected':'')+'>Semua Plant</option>';
+  getSidebarWerks(primaryPlant).forEach(function(w){
+    html+='<option value="'+w+'"'+(current===w?' selected':'')+'>Plant '+w+'</option>';
+  });
+  return html+'</select>';
 }
 
 /* ================================================================
@@ -188,222 +244,172 @@ function renderList() {
 
   var primaryPlant=curPlant.split(',')[0];
   var catDef =getCategoryDef(curPlant,curCategory);
-  var catIcon=catDef?catDef.icon:'&#128203;';
+  var catIcon=catDef?catDef.icon:'i-clipboard';
   var catLbl =catDef?catDef.label:'PR';
 
   var html='';
 
-  /* Sticky header */
-  html+='<div class="sticky-top">'+
-        '<div class="pg-hdr">'+
-        '<div class="pg-title">'+
-        catIcon+' '+catLbl+' &mdash; '+
-        getPlantLabel(curPlant)+'</div>'+
-        '<div class="pg-sub">'+
-        total+' PR menunggu approval';
+  /* Header + toolbar sebagai satu blok sticky */
+  html+='<div class="page-sticky">';
+
+  html+='<div class="pg-hdr">'+
+        '<h1 class="pg-title">'+svgIcon(catIcon,'ico-lg')+
+        escHtml(catLbl)+' &mdash; '+escHtml(getPlantLabel(curPlant))+'</h1>'+
+        '<div class="pg-sub">'+total+' PR menunggu approval';
   if (curEstkzFilter==='MRP')
-    html+=' &mdash; <span style="color:#1d4ed8;'+
-          'font-weight:600;">MRP only</span>';
+    html+=' &mdash; <span class="pg-sub-mrp">Hanya MRP</span>';
   else if (curEstkzFilter==='NONMRP')
-    html+=' &mdash; <span style="color:#b45309;'+
-          'font-weight:600;">Non-MRP only</span>';
-  html+='</div></div></div>';
+    html+=' &mdash; <span class="pg-sub-nonmrp">Hanya Non-MRP</span>';
+  html+='</div></div>';
 
-
-  /* Sticky toolbar */
-  html+='<div class="sticky-toolbar">'+
-        '<div class="toolbar">';
+  html+='<div class="toolbar">';
 
   if (isApprover)
-    html+='<button class="btn-selall"'+
-          ' id="btnSelAll"'+
+    html+='<button type="button" class="btn btn-outline" id="btnSelAll"'+
           ' onclick="toggleSelectAll()">'+
-          '&#9744; Select All</button>';
+          svgIcon('i-check')+' Pilih Semua</button>';
 
-  html+='<div class="search-wrap">'+
-        '<span>&#128269;</span>'+
-        '<input type="text" id="searchInp"'+
-        ' placeholder="Cari No PR, Pembuat..."'+
-        ' value="'+escHtml(searchKw)+'"'+
-        ' onkeydown="if(event.key===\'Enter\')'+
-        'onSearchTrigger(this.value)"'+
-        ' onblur="onSearchTrigger(this.value)">'+
-        '</div>';
+  html+=buildSearchBox('searchInp','onSearchTrigger',searchKw,
+        'Cari No PR, Pembuat...');
+  html+=buildPageSizeSelect([10,20,50,0],pageSize,'changePageSize');
 
-  html+='<select class="page-size-select"'+
-        ' onchange="changePageSize('+
-        'parseInt(this.value))">';
-  [10,20,50,0].forEach(function(s){
-    html+='<option value="'+s+'"'+
-          (pageSize===s?' selected':'')+'>'+
-          (s===0?'All':s+' per page')+
-          '</option>';
-  });
-  html+='</select>';
-
-  html+='<select class="sort-select"'+
-        ' onchange="onSortChange(this.value)">';
-  html+='<option value="newest"'+
-        (curSort==='newest'?' selected':'')+
-        '>&#8595; Terbaru</option>';
-  html+='<option value="oldest"'+
-        (curSort==='oldest'?' selected':'')+
-        '>&#8593; Terlama</option>';
-  html+='</select>';
+  html+='<select class="select" aria-label="Urutkan"'+
+        ' onchange="onSortChange(this.value)">'+
+        '<option value="newest"'+(curSort==='newest'?' selected':'')+
+        '>&#8595; Terbaru</option>'+
+        '<option value="oldest"'+(curSort==='oldest'?' selected':'')+
+        '>&#8593; Terlama</option></select>';
 
   var prFiltCnt=(curEstkzFilter?1:0)+(curPlantSub?1:0);
   html+='<div class="filter-wrap">';
-  html+='<button class="btn-filter'+(filterPanelOpen?' active':'')+'"'+
-        ' id="btnFilter" onclick="toggleFilterPanel(event)">'+
-        '&#9881; Filter'+(prFiltCnt>0?'<span class="filter-badge">'+prFiltCnt+'</span>':'')+
-        '</button>';
+  html+=buildFilterButton(prFiltCnt);
   html+='<div class="filter-panel'+(filterPanelOpen?' open':'')+'" id="filterPanel">';
-  html+='<div class="filter-panel-row"><span class="filter-panel-lbl">Jenis PR</span>';
-  html+='<select class="estkz-select"'+
-        ' onchange="onEstkzFilter(this.value)">';
-  html+='<option value=""'+
-        (curEstkzFilter===''?' selected':'')+
-        '>Semua PR</option>';
-  html+='<option value="MRP"'+
-        (curEstkzFilter==='MRP'?' selected':'')+
-        '>MRP saja (B)</option>';
-  html+='<option value="NONMRP"'+
-        (curEstkzFilter==='NONMRP'
-          ?' selected':'')+
-        '>Non-MRP saja</option>';
-  html+='</select></div>';
-  html+='<div class="filter-panel-row"><span class="filter-panel-lbl">Plant</span>';
-  html+='<select class="estkz-select" onchange="onPlantSubFilter(this.value)">';
-  html+='<option value=""'+(curPlantSub===''?' selected':'')+'>Semua Plant</option>';
-  getSidebarWerks(primaryPlant).forEach(function(w){
-    html+='<option value="'+w+'"'+(curPlantSub===w?' selected':'')+'>Plant '+w+'</option>';
-  });
-  html+='</select></div>';
-  if (prFiltCnt>0) html+='<div class="filter-panel-reset" onclick="resetPrFilters()">Reset Filter</div>';
+
+  html+='<div class="filter-panel-row">'+
+        '<span class="filter-panel-lbl">Jenis PR</span>'+
+        '<select class="select select--accent select--block"'+
+        ' aria-label="Filter jenis PR" onchange="onEstkzFilter(this.value)">'+
+        '<option value=""'+(curEstkzFilter===''?' selected':'')+'>Semua PR</option>'+
+        '<option value="MRP"'+(curEstkzFilter==='MRP'?' selected':'')+'>MRP saja (B)</option>'+
+        '<option value="NONMRP"'+(curEstkzFilter==='NONMRP'?' selected':'')+'>Non-MRP saja</option>'+
+        '</select></div>';
+
+  html+='<div class="filter-panel-row">'+
+        '<span class="filter-panel-lbl">Plant</span>'+
+        buildPlantSubSelect(primaryPlant,curPlantSub,'onPlantSubFilter')+
+        '</div>';
+
+  if (prFiltCnt>0)
+    html+='<button type="button" class="filter-panel-reset"'+
+          ' onclick="resetPrFilters()">Reset Filter</button>';
   html+='</div></div>';
 
-  html+='<div class="expand-bar">'+
-        '<button class="btn-exp"'+
-        ' id="btnToggleExpand"'+
-        ' onclick="toggleExpandAll()">'+
-        (allExpanded?'&#9650; Collapse':'&#9660; Expand')+
-        '</button></div>';
+  html+=buildExpandButton('btnToggleExpand',allExpanded,'toggleExpandAll');
 
   html+='<div class="pg-count">'+
         (total!==allData.length
-          ?total+' of '+allData.length:total)+
+          ?total+' dari '+allData.length:total)+
         ' PR</div>';
 
-  html+='</div></div>';
+  html+='</div></div>'; /* toolbar + page-sticky */
 
-  /* Cards */
+  /* Kartu */
   html+='<div id="cardContainer">';
 
   if (total===0) {
-    html+='<div class="empty"'+
-          ' style="padding:40px 20px;">'+
-          '<div class="empty-ico">&#128270;</div>'+
+    html+='<div class="empty empty--inline">'+
+          '<div class="empty-ico">'+svgIcon('i-search','ico-xl')+'</div>'+
           '<div class="empty-txt">'+
           (curEstkzFilter
             ?'Tidak ada PR '+
-              (curEstkzFilter==='MRP'
-                ?'MRP':'Non-MRP')+' pending'
-            :'Tidak ada '+catLbl+' pending')+
+              (curEstkzFilter==='MRP'?'MRP':'Non-MRP')+' pending'
+            :'Tidak ada '+escHtml(catLbl)+' pending')+
           '</div></div>';
   } else {
     pageData.forEach(function(pr){
-      var isMRP  =(pr.estkz==='B');
-      var ecls   =isMRP?'b-mrp':'b-nonmrp';
-      var elbl   =getEstkzLabel(pr.estkz);
-      var itCnt  =parseInt(pr.item_count)||0;
+      var isMRP =(pr.estkz==='B');
+      var ecls  =isMRP?'b-mrp':'b-nonmrp';
+      var elbl  =getEstkzLabel(pr.estkz);
+      var itCnt =parseInt(pr.item_count)||0;
+      var sel   =!!selBanfns[pr.banfn];
 
       html+='<div class="po-card'+
             (allExpanded?' expanded':'')+
+            (sel?' selected':'')+
+            (isApprover?'':' no-cb')+
             '" id="card_'+pr.banfn+'"'+
-            ' onclick="toggleExpand(\''+
-            pr.banfn+'\')">';
+            ' onclick="toggleExpand(\''+pr.banfn+'\')">';
 
-      html+='<div class="card-top">';
+      html+='<div class="card-top'+(isApprover?'':' card-top--nocb')+'">';
+
       if (isApprover)
-        html+='<input type="checkbox"'+
-              ' class="card-cb"'+
+        html+='<input type="checkbox" class="card-cb"'+
               ' data-banfn="'+pr.banfn+'"'+
-              (selBanfns[pr.banfn]?' checked':'')+
+              ' aria-label="Pilih PR '+pr.banfn+'"'+
+              (sel?' checked':'')+
               ' onclick="event.stopPropagation();'+
               'toggleSelect(\''+pr.banfn+'\')">';
 
-      html+='<span class="card-num">'+
-            pr.banfn+'</span>';
-      html+='<button class="btn-exp" style="height:28px;padding:0 10px;font-size:11.5px;"'+
+      html+='<div class="card-main">';
+      html+='<div class="card-head">'+
+            '<span class="card-num">'+escHtml(pr.banfn)+'</span>'+
+            '<button type="button" class="btn btn-ghost btn-xs"'+
             ' onclick="event.stopPropagation();showItemTextModal(\''+pr.banfn+'\')">'+
-            '&#128196; Lihat Teks</button>';
-      html+='<span class="badge b-pending">'+
-            '&#9679; Pending</span>';
-      html+='<span class="badge b-plant">'+
-            escHtml(pr.werks)+' '+
-            escHtml(PLANT_LABELS[pr.werks]||'')+
-            '</span>';
-      html+='<span class="badge '+ecls+'">'+
-            escHtml(elbl)+'</span>';
+            svgIcon('i-file-text','ico-sm')+' Lihat Teks</button>'+
+            '</div>';
+
+      html+='<div class="card-badges">';
+      html+='<span class="badge b-pending">Pending</span>';
+      html+='<span class="badge b-plant">'+escHtml(pr.werks)+' '+
+            escHtml(PLANT_LABELS[pr.werks]||'')+'</span>';
+      html+='<span class="badge '+ecls+'">'+escHtml(elbl)+'</span>';
       if (itCnt>0)
-        html+='<span class="badge b-items">'+
-              itCnt+' item</span>';
+        html+='<span class="badge b-items">'+itCnt+' item</span>';
+      html+='</div>'; /* card-badges */
+      html+='</div>'; /* card-main */
 
       html+=renderCardAmount(pr.totals);
+
+      html+='<button type="button" class="card-expand"'+
+            ' aria-expanded="'+(allExpanded?'true':'false')+'"'+
+            ' aria-controls="det_'+pr.banfn+'"'+
+            ' aria-label="Tampilkan detail item PR '+pr.banfn+'"'+
+            ' onclick="event.stopPropagation();toggleExpand(\''+pr.banfn+'\')">'+
+            svgIcon('i-chevron-down')+'</button>';
 
       html+='</div>'; /* card-top */
 
       html+='<div class="card-meta">';
-      html+='<div><div class="meta-lbl">'+
-            'Dibuat Oleh</div>'+
+      html+='<div><div class="meta-lbl">Dibuat Oleh</div>'+
             '<div class="meta-val">'+
-            escHtml(pr.ernam_full||pr.ernam)+
-            '</div></div>';
-      html+='<div><div class="meta-lbl">'+
-            'Deskripsi</div>'+
-            '<div class="meta-val"'+
-            ' style="font-size:12px;">'+
-            escHtml(pr.txz01||'-')+
-            '</div></div>';
-      html+='<div><div class="meta-lbl">'+
-            'Purch. Group</div>'+
-            '<div class="meta-val">'+
-            escHtml(pr.ekgrp||'-')+
-            '</div></div>';
-      html+='<div><div class="meta-lbl">'+
-            'Tgl PR</div>'+
-            '<div class="meta-val">'+
-            escHtml(pr.badat||'-')+
-            '</div></div>';
+            escHtml(pr.ernam_full||pr.ernam)+'</div></div>';
+      html+='<div><div class="meta-lbl">Deskripsi</div>'+
+            '<div class="meta-val meta-val--sm">'+
+            escHtml(pr.txz01||'-')+'</div></div>';
+      html+='<div><div class="meta-lbl">Purch. Group</div>'+
+            '<div class="meta-val">'+escHtml(pr.ekgrp||'-')+'</div></div>';
+      html+='<div><div class="meta-lbl">Tgl PR</div>'+
+            '<div class="meta-val">'+escHtml(pr.badat||'-')+'</div></div>';
       html+='</div>'; /* card-meta */
 
-      html+='<div class="card-detail"'+
-            ' id="det_'+pr.banfn+'"'+
+      html+='<div class="card-detail" id="det_'+pr.banfn+'"'+
             ' onclick="event.stopPropagation()">';
-      html+='<div id="detContent_'+pr.banfn+'">';
-      html+='<div style="padding:16px;'+
-            'text-align:center;'+
-            'color:var(--muted);font-size:13px;">'+
-            '<div class="lo-spin"'+
-            ' style="width:16px;height:16px;'+
-            'border-width:2px;'+
-            'margin:0 auto 8px;"></div>'+
-            'Expand untuk memuat detail...</div>';
+      html+='<div id="detContent_'+pr.banfn+'">'+
+            '<div class="card-detail-msg">'+
+            '<div class="lo-spin lo-spin-sm"></div>'+
+            'Memuat detail item...</div>';
       html+='</div></div>';
       html+='</div>'; /* po-card */
     });
   }
 
   html+='</div>'; /* cardContainer */
-  html+=renderPagination(
-    total,totalPages,start,end);
+  html+=renderPagination(total,totalPages,start,end);
 
-  document.getElementById('mainContent')
-    .innerHTML=html;
+  document.getElementById('mainContent').innerHTML=html;
 
   if (isApprover&&total>0){
-    document.getElementById('fab').className=
-      'fab show';
+    document.getElementById('fab').className='fab show';
     updateFabInfo();
   } else {
     document.getElementById('fab').className='fab';
@@ -417,4 +423,3 @@ function renderList() {
 
   if (deepLink) applyDeepLink();
 }
-

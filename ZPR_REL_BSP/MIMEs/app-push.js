@@ -31,29 +31,31 @@ function urlB64ToUint8Array(base64String){
   return out;
 }
 
+/* Hanya teksnya — ikon lonceng adalah <svg> terpisah di index.htm
+   dan tidak ikut ditimpa. */
 function setNotifLabel(txt){
   var el=document.getElementById('notifMenuLabel');
-  if (el) el.innerHTML=txt;
+  if (el) el.textContent=txt;
 }
 
 /* Cek status saat load, set label tombol. */
 function initPush(){
   if (!document.getElementById('notifMenuItem')) return; /* bukan KMI-BOD */
   if (!pushSupported){
-    setNotifLabel('&#128277; Notifikasi tak didukung');
+    setNotifLabel('Notifikasi tak didukung');
     return;
   }
   navigator.serviceWorker.register(PUSH_SW_URL)
     .then(function(reg){ return reg.pushManager.getSubscription(); })
     .then(function(sub){
       if (sub && Notification.permission==='granted'){
-        setNotifLabel('&#128277; Matikan Notifikasi');
+        setNotifLabel('Matikan Notifikasi');
       } else {
-        setNotifLabel('&#128276; Aktifkan Notifikasi');
+        setNotifLabel('Aktifkan Notifikasi');
       }
     })
     .catch(function(){
-      setNotifLabel('&#128276; Aktifkan Notifikasi');
+      setNotifLabel('Aktifkan Notifikasi');
     });
 }
 
@@ -106,7 +108,7 @@ function enableNotif(reg){
       })
       .then(function(res){
         if (res && res.status==='S'){
-          setNotifLabel('&#128277; Matikan Notifikasi');
+          setNotifLabel('Matikan Notifikasi');
           alert('Notifikasi aktif di perangkat ini.');
         } else {
           alert('Gagal menyimpan: '+((res&&res.message)||'unknown'));
@@ -123,7 +125,7 @@ function disableNotif(sub){
     return fetch(API_URL,postOpts(body))
       .then(function(r){return r.json();});
   }).then(function(){
-    setNotifLabel('&#128276; Aktifkan Notifikasi');
+    setNotifLabel('Aktifkan Notifikasi');
     alert('Notifikasi dimatikan di perangkat ini.');
   });
 }
@@ -201,7 +203,8 @@ function openDeepLinkView(){
   var cat  =deepLinkCategory(group,deepLink.bsart);
   if (!cat){ deepLink=null; return; }
 
-  openSections[group]=true;
+  /* Sidebar sekarang datar (semua menu selalu tampil), jadi tidak
+     ada seksi yang perlu dibuka lebih dulu. */
   switchView(getEffectiveWerks(group),cat,'pending');
 }
 
@@ -222,11 +225,11 @@ function applyDeepLink(){
   if (!card) return;
 
   if (!card.classList.contains('expanded')){
-    card.classList.add('expanded');
+    setCardExpanded(card,true);
     loadDetail(banfn);
   }
   card.scrollIntoView({behavior:'smooth',block:'center'});
-  card.style.boxShadow='0 0 0 3px var(--brand,#0a4d8c)';
-  setTimeout(function(){ card.style.boxShadow=''; },2500);
+  card.classList.add('highlight');
+  setTimeout(function(){ card.classList.remove('highlight'); },2500);
 }
 
