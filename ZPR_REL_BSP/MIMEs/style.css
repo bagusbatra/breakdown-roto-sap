@@ -333,7 +333,7 @@ td.num, th.num { font-variant-numeric:tabular-nums; }
 .main {
   margin-left:var(--sidebar-w); margin-top:var(--header-h);
   background-color: #e8e8e8;
-  padding:0 var(--sp-6) 120px;
+  padding:0;
   transition:margin-left var(--dur) var(--ease);
 }
 
@@ -342,7 +342,10 @@ td.num, th.num { font-variant-numeric:tabular-nums; }
    patah begitu judulnya wrap ke dua baris. */
 .page-sticky {
   position:sticky; top:var(--header-h); z-index:var(--z-sticky);
-  background: #e8e8e8; padding:var(--sp-5) 0 var(--sp-3);
+  background: #e8e8e8; padding:20px;
+}
+#cardContainer{
+  margin: 20px;
 }
 .pg-hdr { margin-bottom:var(--sp-4); }
 .pg-title {
