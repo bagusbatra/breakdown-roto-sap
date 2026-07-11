@@ -9,7 +9,7 @@ DATA: lv_uname2    TYPE syuname,
 * Versi aset statis. Naikkan nilainya setiap kali style.css atau
 * salah satu app-*.js diubah, supaya browser klien tidak menyajikan
 * file lama dari cache. Cukup diubah di SATU tempat ini.
-DATA: lv_ver TYPE string VALUE '20260710b'.
+DATA: lv_ver TYPE string VALUE '20260711a'.
 
 lv_uname2    = sy-uname.
 lv_username2 = sy-uname.
@@ -145,13 +145,16 @@ ENDIF.
           onclick="toggleSidebar()">
     <svg class="ico ico-lg" aria-hidden="true"><use href="#i-menu"></use></svg>
   </button>
-  <div class="hdr-logo">
-    <img src="logo.png" alt="Logo PT. Kayu Mebel Indonesia">
-  </div>
-  <div>
-    <div class="hdr-brand">Release Purchasing Requisition</div>
-    <div class="hdr-corp">PT. Kayu Mebel Indonesia</div>
-  </div>
+  <button type="button" class="hdr-home" onclick="showDashboard()"
+          aria-label="Kembali ke dashboard">
+    <span class="hdr-logo">
+      <img src="logo.png" alt="Logo PT. Kayu Mebel Indonesia">
+    </span>
+    <span class="hdr-home-text">
+      <span class="hdr-brand">Release Purchasing Requisition</span>
+      <span class="hdr-corp">PT. Kayu Mebel Indonesia</span>
+    </span>
+  </button>
 
   <div class="hdr-user">
     <button type="button" class="hdr-user-btn" id="btnUserMenu"
@@ -187,13 +190,14 @@ ENDIF.
 <aside class="sidebar" id="sidebar" aria-label="Navigasi plant dan kategori PR"></aside>
 <div class="sb-backdrop" id="sbBackdrop" onclick="closeSidebarMobile()"></div>
 
-<!-- MAIN -->
+<!-- MAIN — dashboard dirender oleh renderDashboard() setelah
+     GET_SIDEBAR selesai; placeholder di bawah tampil sekejap. -->
 <main class="main" id="mainContent">
   <div class="empty">
     <div class="empty-ico">
       <svg class="ico ico-xl" aria-hidden="true"><use href="#i-inbox"></use></svg>
     </div>
-    <div class="empty-txt">Pilih plant dari menu samping</div>
+    <div class="empty-txt">Memuat dashboard&hellip;</div>
   </div>
 </main>
 
@@ -311,6 +315,7 @@ ENDIF.
 <script src="app-core.js?v=<%=lv_ver%>"></script>
 <script src="app-push.js?v=<%=lv_ver%>"></script>
 <script src="app-ui.js?v=<%=lv_ver%>"></script>
+<script src="app-dashboard.js?v=<%=lv_ver%>"></script>
 <script src="app-list.js?v=<%=lv_ver%>"></script>
 <script src="app-history.js?v=<%=lv_ver%>"></script>
 <script src="app-detail.js?v=<%=lv_ver%>"></script>

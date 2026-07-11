@@ -93,6 +93,7 @@
   --fs-md:   15px;
   --fs-lg:   17px;
   --fs-xl:   22px;
+  --fs-2xl:  28px;
   --lh-tight:   1.25;
   --lh-base:    1.5;
   --lh-relaxed: 1.7;
@@ -190,6 +191,17 @@ td.num, th.num { font-variant-numeric:tabular-nums; }
 .hdr-logo img { width:26px; height:26px; object-fit:contain; }
 .hdr-brand { font-size:var(--fs-md); font-weight:700; line-height:var(--lh-tight); }
 .hdr-corp  { font-size:var(--fs-xs); color:var(--muted); }
+
+/* Logo + judul jadi satu tombol: klik untuk kembali ke dashboard. */
+.hdr-home {
+  display:flex; align-items:center; gap:var(--sp-3);
+  background:transparent; border:none; cursor:pointer;
+  font-family:inherit; text-align:left;
+  padding:4px 10px 4px 4px; border-radius:var(--r-md);
+  transition:background var(--dur-fast) var(--ease);
+}
+.hdr-home:hover { background:var(--surface-2); }
+.hdr-home-text { display:flex; flex-direction:column; }
 
 .btn-toggle-sb {
   width:36px; height:36px; border:none;
@@ -849,6 +861,109 @@ body.sb-collapsed .actionbar { left:0; }
 .wo-tbl th { background:var(--surface); font-weight:600; color:var(--text-2); }
 
 /* ================================================================
+   DASHBOARD — halaman awal monitoring. Dua kolom sejajar
+   (Surabaya | Semarang), menumpuk di layar sempit.
+   ================================================================ */
+.dash { padding:var(--sp-6); }
+.dash-head { margin-bottom:var(--sp-5); }
+.dash-title {
+  font-size:var(--fs-xl); font-weight:700; line-height:var(--lh-tight);
+  display:flex; align-items:center; gap:var(--sp-2);
+}
+.dash-sub { font-size:var(--fs-base); color:var(--muted); margin-top:var(--sp-1); }
+.dash-sub-em { font-weight:700; color:var(--primary); }
+
+.dash-grid {
+  display:grid; grid-template-columns:1fr 1fr;
+  gap:var(--sp-5); align-items:start;
+}
+
+.dash-plant {
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:var(--r-lg); box-shadow:var(--sh-1);
+  padding:var(--sp-5);
+  display:flex; flex-direction:column; gap:var(--sp-5);
+}
+.dash-plant-hdr { display:flex; align-items:center; gap:var(--sp-3); }
+.dash-plant-img {
+  width:40px; height:40px; border-radius:var(--r-md);
+  object-fit:cover; flex:none; border:1px solid var(--border);
+}
+.dash-plant-id { min-width:0; }
+.dash-plant-name { font-size:var(--fs-lg); font-weight:700; line-height:1.2; }
+.dash-plant-meta {
+  font-size:var(--fs-sm); color:var(--muted);
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+
+/* Tiga tile ringkasan per plant. */
+.dash-stats { display:grid; grid-template-columns:repeat(3,1fr); gap:var(--sp-3); }
+.dash-stat {
+  display:flex; flex-direction:column; gap:var(--sp-1);
+  text-align:left; padding:var(--sp-3) var(--sp-4);
+  background:var(--surface-2); border:1px solid var(--border);
+  border-left:3px solid var(--border-strong); border-radius:var(--r-md);
+  cursor:pointer; font-family:inherit;
+  transition:background var(--dur-fast) var(--ease),
+             border-color var(--dur-fast) var(--ease),
+             transform var(--dur-fast) var(--ease);
+}
+.dash-stat:hover { background:var(--surface-3); transform:translateY(-1px); }
+.dash-stat-val {
+  font-size:var(--fs-2xl); font-weight:700; line-height:1;
+  font-variant-numeric:tabular-nums;
+}
+.dash-stat-lbl {
+  font-size:var(--fs-xs); color:var(--muted); font-weight:600;
+  text-transform:uppercase; letter-spacing:.04em;
+}
+.dash-stat--pending { border-left-color:var(--warning); }
+.dash-stat--pending .dash-stat-val { color:var(--warning); }
+.dash-stat--app { border-left-color:var(--success); }
+.dash-stat--app .dash-stat-val { color:var(--success); }
+.dash-stat--rej { border-left-color:var(--danger); }
+.dash-stat--rej .dash-stat-val { color:var(--danger); }
+
+/* Rincian per kategori (klik = buka daftar pending kategori itu). */
+.dash-cats-lbl {
+  font-size:var(--fs-xs); color:var(--muted); font-weight:700;
+  text-transform:uppercase; letter-spacing:.06em; margin-bottom:var(--sp-2);
+}
+.dash-cats { display:flex; flex-direction:column; gap:var(--sp-2); }
+.dash-cat {
+  display:flex; align-items:center; gap:var(--sp-3);
+  padding:var(--sp-3) var(--sp-4);
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:var(--r-md); cursor:pointer; font-family:inherit;
+  text-align:left; width:100%;
+  transition:background var(--dur-fast) var(--ease),
+             border-color var(--dur-fast) var(--ease);
+}
+.dash-cat:hover { background:var(--surface-2); border-color:var(--border-strong); }
+.dash-cat-ico {
+  width:34px; height:34px; border-radius:var(--r-sm); flex:none;
+  display:flex; align-items:center; justify-content:center;
+  background:var(--info-soft); color:var(--info);
+}
+.dash-cat-name { font-size:var(--fs-base); font-weight:600; flex:1; min-width:0; }
+.dash-cat-metrics { display:flex; align-items:center; gap:var(--sp-3); flex:none; }
+.dash-metric {
+  display:flex; flex-direction:column; align-items:center;
+  min-width:48px; gap:1px;
+}
+.dash-metric-val {
+  font-size:var(--fs-md); font-weight:700; line-height:1.1;
+  font-variant-numeric:tabular-nums;
+}
+.dash-metric-lbl {
+  font-size:10px; color:var(--muted); font-weight:600;
+  text-transform:uppercase; letter-spacing:.03em;
+}
+.dash-metric--pending .dash-metric-val { color:var(--warning); }
+.dash-metric--app .dash-metric-val { color:var(--success); }
+.dash-metric--rej .dash-metric-val { color:var(--danger); }
+
+/* ================================================================
    EMPTY
    ================================================================ */
 .empty { text-align:center; padding:80px var(--sp-5); color:var(--muted); }
@@ -867,6 +982,8 @@ body.sb-collapsed .actionbar { left:0; }
   .actionbar { left:0; }
   .card-meta { grid-template-columns:repeat(2,1fr); }
   .hdr-user-name { display:none; }
+  /* Dashboard menumpuk: Surabaya lalu Semarang. */
+  .dash-grid { grid-template-columns:1fr; }
 }
 @media (min-width:1025px) {
   .sb-backdrop { display:none; }
@@ -894,6 +1011,19 @@ body.sb-collapsed .actionbar { left:0; }
 
   .search-wrap input { width:100%; }
   .search-wrap { flex:1; }
+
+  /* Header di ponsel: sembunyikan judul agar tidak berdesakan;
+     logo tetap jadi tombol kembali ke dashboard. */
+  .hdr-home-text { display:none; }
+
+  /* Dashboard di ponsel: hemat ruang. */
+  .dash { padding:var(--sp-4); }
+  .dash-stat { padding:var(--sp-2) var(--sp-3); }
+  .dash-stat-val { font-size:var(--fs-xl); }
+  .dash-plant-hdr .dash-plant-meta { white-space:normal; }
+  .dash-cat { flex-wrap:wrap; }
+  .dash-cat-metrics { gap:var(--sp-2); width:100%; padding-left:46px; justify-content:flex-start; }
+  .dash-metric { align-items:flex-start; min-width:56px; }
 }
 
 /* ================================================================

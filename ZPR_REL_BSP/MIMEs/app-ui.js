@@ -414,12 +414,19 @@ function loadSidebarData() {
         });
       }
       renderSidebar();
-      openDeepLinkView();
+      landing();
     })
     .catch(function(){
       renderSidebar();
-      openDeepLinkView();
+      landing();
     });
+}
+
+/* Setelah sidebar siap: buka PR tujuan bila datang dari deep-link
+   notifikasi; selain itu tampilkan dashboard sebagai halaman awal. */
+function landing() {
+  if (deepLink) openDeepLinkView();
+  else renderDashboard();
 }
 
 /* Ambil object {MTN:1,RND:2,...} dari response GET_SIDEBAR untuk
