@@ -349,14 +349,23 @@ td.num, th.num { font-variant-numeric:tabular-nums; }
 #cardContainer{
   margin: 20px;
 }
-.pg-hdr { margin-bottom:var(--sp-4); }
+#histTableWrap{
+  margin: 20px;
+}
+/* Judul & subjudul sebaris (baseline), membungkus ke bawah di layar
+   sempit. */
+.pg-hdr {
+  margin-bottom:var(--sp-4);
+  display:flex; align-items:baseline; flex-wrap:wrap;
+  column-gap:var(--sp-3); row-gap:var(--sp-1);
+}
 .pg-title {
   font-size:var(--fs-xl); font-weight:700; line-height:var(--lh-tight);
   display:flex; align-items:center; gap:var(--sp-2);
 }
 .pg-title--app { color:var(--success); }
 .pg-title--rej { color:var(--danger); }
-.pg-sub { font-size:var(--fs-base); color:var(--muted); margin-top:var(--sp-1); }
+.pg-sub { font-size:var(--fs-base); color:var(--muted); }
 .pg-sub-em { font-weight:700; color:var(--primary); }
 .pg-sub-mrp { font-weight:600; color:var(--info); }
 .pg-sub-nonmrp { font-weight:600; color:var(--warning); }
@@ -559,7 +568,12 @@ td.num, th.num { font-variant-numeric:tabular-nums; }
   width:18px; height:18px; margin-top:5px;
   accent-color:var(--primary); cursor:pointer; flex:none;
 }
-.card-main { min-width:0; display:flex; flex-direction:column; gap:var(--sp-2); }
+/* card-head (No PR + Lihat Teks) dan card-badges sebaris; membungkus
+   ke bawah bila tak muat. */
+.card-main {
+  min-width:0; display:flex; align-items:center; flex-wrap:wrap;
+  column-gap:var(--sp-4); row-gap:var(--sp-2);
+}
 .card-head { display:flex; align-items:center; gap:var(--sp-3); flex-wrap:wrap; }
 /* Memakai font teks (DM Sans) seperti elemen lain, bukan monospace.
    tabular-nums (lihat aturan .num di atas) tetap menjaga digitnya
