@@ -98,6 +98,10 @@ function processAction(banfns,action,notes) {
       /* Reset selection */
       selBanfns={};
 
+      /* Data monitoring PO ikut berubah (ada approved baru / PR
+         terhapus) — tandai cache basi agar dimuat ulang. */
+      if (typeof invalidatePoData==='function') invalidatePoData();
+
       /* Reload sidebar counts */
       loadSidebarData();
 

@@ -60,6 +60,8 @@ function dashPlantHtml(p) {
         ' plant &middot; '+escHtml(d.werks.join(', '))+'</div>'+
         '</div></div>';
 
+  /* Tile 'Belum PO' diisi progresif oleh fillPoTiles() setelah
+     dashboard tampil (butuh query EKPO), jadi awalnya placeholder. */
   html+='<div class="dash-stats">'+
         dashStat('dash-stat--pending', d.tot.pending, 'Pending',
                  "switchView('"+eff+"','"+pendCat+"','pending')")+
@@ -67,6 +69,11 @@ function dashPlantHtml(p) {
                  "switchView('"+eff+"','ALL','hist_app')")+
         dashStat('dash-stat--rej', d.tot.rej, 'Rejected',
                  "switchView('"+eff+"','ALL','hist_rej')")+
+        '<button type="button" class="dash-stat dash-stat--po" '+
+        'onclick="openPoView(\''+p.code+'\')">'+
+        '<span class="dash-stat-val" id="dashPoVal_'+p.code+'">'+
+        '<span class="dash-dot"></span></span>'+
+        '<span class="dash-stat-lbl">Belum PO</span></button>'+
         '</div>';
 
   html+='<div class="dash-cats-wrap">'+
@@ -111,6 +118,9 @@ function renderDashboard() {
 
   document.getElementById('mainContent').innerHTML=html;
   hideActionBar();
+
+  /* Isi tile 'Belum PO' setelah dashboard tampil (lihat app-po.js). */
+  if (typeof fillPoTiles==='function') fillPoTiles();
 }
 
 /* Kembali ke dashboard dari header (logo/judul). State view direset

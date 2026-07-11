@@ -9,7 +9,7 @@ DATA: lv_uname2    TYPE syuname,
 * Versi aset statis. Naikkan nilainya setiap kali style.css atau
 * salah satu app-*.js diubah, supaya browser klien tidak menyajikan
 * file lama dari cache. Cukup diubah di SATU tempat ini.
-DATA: lv_ver TYPE string VALUE '20260711a'.
+DATA: lv_ver TYPE string VALUE '20260711c'.
 
 lv_uname2    = sy-uname.
 lv_username2 = sy-uname.
@@ -134,6 +134,13 @@ ENDIF.
   <symbol id="i-alert-circle" viewBox="0 0 24 24">
     <circle cx="12" cy="12" r="10"/>
     <line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+  </symbol>
+  <symbol id="i-cart" viewBox="0 0 24 24">
+    <circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/>
+    <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>
+  </symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24">
+    <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
   </symbol>
 </svg>
 
@@ -318,6 +325,7 @@ ENDIF.
 <script src="app-dashboard.js?v=<%=lv_ver%>"></script>
 <script src="app-list.js?v=<%=lv_ver%>"></script>
 <script src="app-history.js?v=<%=lv_ver%>"></script>
+<script src="app-po.js?v=<%=lv_ver%>"></script>
 <script src="app-detail.js?v=<%=lv_ver%>"></script>
 <script src="app-action.js?v=<%=lv_ver%>"></script>
 </body>

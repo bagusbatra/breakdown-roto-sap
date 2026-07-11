@@ -364,6 +364,9 @@ td.num, th.num { font-variant-numeric:tabular-nums; }
 #histTableWrap{
   margin: 20px;
 }
+#poTableWrap{
+  margin: 20px;
+}
 /* Judul & subjudul sebaris (baseline), membungkus ke bawah di layar
    sempit. */
 .pg-hdr {
@@ -663,6 +666,7 @@ td.num, th.num { font-variant-numeric:tabular-nums; }
 .cell-total { font-weight:700; color:var(--text); }
 .cell-muted { color:var(--muted); }
 .cell-strong { font-weight:500; color:var(--text); }
+.cell-age-crit { color:var(--danger); font-weight:700; }
 .card-detail-msg { padding:var(--sp-3); text-align:center; font-size:var(--fs-base); color:var(--muted); }
 .card-detail-msg--error { color:var(--danger); }
 
@@ -697,6 +701,15 @@ td.num, th.num { font-variant-numeric:tabular-nums; }
 .b-app     { background:var(--success-soft); color:var(--success); }
 .b-rej     { background:var(--danger-soft); color:var(--danger); }
 .b-cat     { background:var(--info-soft); color:var(--info); }
+
+/* Status PO + umur (aging) — monitoring GET_APP_PO. */
+.b-po-open    { background:var(--warning-soft); color:var(--warning); }
+.b-po-partial { background:var(--info-soft); color:var(--info); }
+.b-po-done    { background:var(--success-soft); color:var(--success); }
+.b-po-del     { background:var(--surface-3); color:var(--muted); }
+.b-age      { background:var(--surface-3); color:var(--text-2); }
+.b-age-warn { background:var(--warning-soft); color:var(--warning); }
+.b-age-crit { background:var(--danger-soft); color:var(--danger); }
 
 /* ================================================================
    SKELETON — menggantikan spinner "Loading...". Geometrinya meniru
@@ -896,8 +909,11 @@ body.sb-collapsed .actionbar { left:0; }
   overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
 }
 
-/* Tiga tile ringkasan per plant. */
-.dash-stats { display:grid; grid-template-columns:repeat(3,1fr); gap:var(--sp-3); }
+/* Empat tile ringkasan per plant; membungkus 2x2 di panel sempit. */
+.dash-stats {
+  display:grid; grid-template-columns:repeat(auto-fit,minmax(92px,1fr));
+  gap:var(--sp-3);
+}
 .dash-stat {
   display:flex; flex-direction:column; gap:var(--sp-1);
   text-align:left; padding:var(--sp-3) var(--sp-4);
@@ -923,6 +939,19 @@ body.sb-collapsed .actionbar { left:0; }
 .dash-stat--app .dash-stat-val { color:var(--success); }
 .dash-stat--rej { border-left-color:var(--danger); }
 .dash-stat--rej .dash-stat-val { color:var(--danger); }
+.dash-stat--po { border-left-color:var(--primary); }
+.dash-stat--po .dash-stat-val { color:var(--primary); }
+
+/* Placeholder tile 'Belum PO' selagi angka dimuat progresif. */
+.dash-dot {
+  display:inline-block; width:22px; height:8px; border-radius:var(--r-full);
+  background:var(--surface-3); position:relative; overflow:hidden;
+}
+.dash-dot::after {
+  content:""; position:absolute; inset:0; transform:translateX(-100%);
+  background:linear-gradient(90deg,transparent,rgba(0,0,0,.08),transparent);
+  animation:shimmer 1.4s infinite;
+}
 
 /* Rincian per kategori (klik = buka daftar pending kategori itu). */
 .dash-cats-lbl {
