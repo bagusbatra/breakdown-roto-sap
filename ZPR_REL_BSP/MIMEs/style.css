@@ -330,10 +330,12 @@ td.num, th.num { font-variant-numeric:tabular-nums; }
 /* ================================================================
    MAIN
    ================================================================ */
+/* padding-bottom menyediakan ruang bagi .actionbar yang position:fixed,
+   supaya kartu terakhir tidak tertutup olehnya. */
 .main {
   margin-left:var(--sidebar-w); margin-top:var(--header-h);
   background-color: #e8e8e8;
-  padding:0;
+  padding:0 0 88px;
   transition:margin-left var(--dur) var(--ease);
 }
 
@@ -481,9 +483,10 @@ td.num, th.num { font-variant-numeric:tabular-nums; }
 /* ================================================================
    PAGINATION
    ================================================================ */
+/* Hidup di dalam .actionbar, jadi tanpa padding sendiri dan rata kiri. */
 .pagination-bar {
-  display:flex; align-items:center; justify-content:center;
-  gap:var(--sp-1); padding:var(--sp-4) 0 var(--sp-1); flex-wrap:wrap;
+  display:flex; align-items:center; justify-content:flex-start;
+  gap:var(--sp-1); flex-wrap:wrap;
 }
 .pg-btn {
   height:34px; min-width:34px; padding:0 var(--sp-2);
@@ -558,9 +561,11 @@ td.num, th.num { font-variant-numeric:tabular-nums; }
 }
 .card-main { min-width:0; display:flex; flex-direction:column; gap:var(--sp-2); }
 .card-head { display:flex; align-items:center; gap:var(--sp-3); flex-wrap:wrap; }
+/* Memakai font teks (DM Sans) seperti elemen lain, bukan monospace.
+   tabular-nums (lihat aturan .num di atas) tetap menjaga digitnya
+   selebar sama sehingga nomor PR tetap rapi saat ditumpuk. */
 .card-num {
-  font-family:var(--font-mono);
-  font-size:var(--fs-lg); font-weight:500;
+  font-size:var(--fs-lg); font-weight:700;
   color:var(--primary); white-space:nowrap; letter-spacing:-.01em;
 }
 .card-badges { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
@@ -697,14 +702,30 @@ td.num, th.num { font-variant-numeric:tabular-nums; }
 .skel-line    { height:13px; width:100%; }
 
 /* ================================================================
-   FAB
+   ACTION BAR — pagination dan aksi massal digabung dalam satu bar
+   tetap di bawah, selebar area konten (mengikuti .main). Menggantikan
+   FAB melayang + baris pagination yang terpisah di dalam alur.
    ================================================================ */
+.actionbar {
+  position:fixed; left:var(--sidebar-w); right:0; bottom:0;
+  display:none; z-index:var(--z-fab);
+  background:var(--surface); border-top:1px solid var(--border);
+  box-shadow:var(--sh-3);
+  transition:left var(--dur) var(--ease);
+}
+.actionbar.show { display:block; }
+.actionbar-inner {
+  display:flex; align-items:center; gap:var(--sp-4);
+  padding:var(--sp-3) var(--sp-5); flex-wrap:wrap;
+}
+.actionbar-pager { min-width:0; }
+body.sb-collapsed .actionbar { left:0; }
+
+/* Kelompok aksi massal: hanya muncul untuk approver saat ada PR
+   terpilih. Kelas .fab/.fab.show dipertahankan agar konsisten dgn
+   state yang di-set renderList()/switchView(). */
 .fab {
-  position:fixed; bottom:var(--sp-5); right:var(--sp-5);
-  display:none; align-items:center; gap:var(--sp-3);
-  background:var(--surface); border:1px solid var(--border);
-  border-radius:var(--r-lg); padding:10px var(--sp-3);
-  box-shadow:var(--sh-3); z-index:var(--z-fab);
+  display:none; align-items:center; gap:var(--sp-3); margin-left:auto;
 }
 .fab.show { display:flex; }
 .fab-info {
@@ -828,7 +849,8 @@ td.num, th.num { font-variant-numeric:tabular-nums; }
   .sidebar { transform:translateX(-100%); box-shadow:var(--sh-3); }
   body.sb-mobile-open .sidebar { transform:translateX(0); }
   body.sb-mobile-open .sb-backdrop { opacity:1; pointer-events:auto; }
-  .main { margin-left:0; padding-left:var(--sp-4); padding-right:var(--sp-4); }
+  .main { margin-left:0; }
+  .actionbar { left:0; }
   .card-meta { grid-template-columns:repeat(2,1fr); }
   .hdr-user-name { display:none; }
 }
@@ -845,8 +867,17 @@ td.num, th.num { font-variant-numeric:tabular-nums; }
   .card-amount { grid-column:1 / -1; text-align:left; padding-left:var(--card-indent); }
   .card-amount-multi { align-items:flex-start; }
   .card-top--nocb { grid-template-columns:minmax(0,1fr) auto; }
-  .fab { bottom:var(--sp-3); right:var(--sp-3); left:var(--sp-3); flex-wrap:wrap; }
+
+  /* Bar membungkus jadi dua baris: pagination, lalu aksi selebar layar.
+     padding-bottom .main ikut naik agar kartu terakhir tetap terlihat. */
+  .main { padding-bottom:150px; }
+  .actionbar-inner { padding:var(--sp-2) var(--sp-3); gap:var(--sp-2); }
+  .actionbar-pager { width:100%; }
+  .pagination-bar { justify-content:center; }
+  .fab { width:100%; margin-left:0; }
   .fab .btn { flex:1; }
+  .fab-info { flex:1 0 100%; text-align:center; }
+
   .search-wrap input { width:100%; }
   .search-wrap { flex:1; }
 }

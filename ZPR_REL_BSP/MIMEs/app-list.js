@@ -56,9 +56,14 @@ function fetchHistRej() {
 /* ================================================================
    ESTKZ FILTER
    ================================================================ */
+/* Setiap filter yang diterapkan menutup panelnya. Cukup mematikan
+   flag sebelum render, karena toolbar dibangun ulang dari
+   filterPanelOpen. onEstkzFilter merender skeleton dulu, jadi
+   panelnya pun ikut hilang bersama toolbar lama. */
 function onEstkzFilter(val) {
   curEstkzFilter=val;
   selBanfns={};
+  filterPanelOpen=false;
   showSkeleton();
   fetchList(val);
 }
@@ -66,12 +71,21 @@ function onEstkzFilter(val) {
 function onPlantSubFilter(val) {
   curPlantSub=val;
   curPage=1;
+  filterPanelOpen=false;
+  renderList();
+}
+
+function onSortFilter(val) {
+  curSort=val;
+  curPage=1;
+  filterPanelOpen=false;
   renderList();
 }
 
 function onHistPlantSubFilter(val) {
   histPlantSub=val;
   histCurPage=1;
+  filterPanelOpen=false;
   renderHistContent();
 }
 
@@ -111,7 +125,9 @@ document.addEventListener('keydown', function(e){
 
 function resetPrFilters() {
   curPlantSub='';
+  curSort='newest';
   curPage=1;
+  filterPanelOpen=false;
   if (curEstkzFilter){
     curEstkzFilter='';
     selBanfns={};
@@ -126,12 +142,14 @@ function resetHistFilters() {
   histPlantSub='';
   histDateFilter=currentMonthYM();
   histCurPage=1;
+  filterPanelOpen=false;
   renderHistContent();
 }
 
 function onHistDateFilter(val) {
   histDateFilter=val;
   histCurPage=1;
+  filterPanelOpen=false;
   renderHistContent();
 }
 
@@ -273,17 +291,22 @@ function renderList() {
         'Cari No PR, Pembuat...');
   html+=buildPageSizeSelect([10,20,50,0],pageSize,'changePageSize');
 
-  html+='<select class="select" aria-label="Urutkan"'+
-        ' onchange="onSortChange(this.value)">'+
-        '<option value="newest"'+(curSort==='newest'?' selected':'')+
-        '>&#8595; Terbaru</option>'+
-        '<option value="oldest"'+(curSort==='oldest'?' selected':'')+
-        '>&#8593; Terlama</option></select>';
-
-  var prFiltCnt=(curEstkzFilter?1:0)+(curPlantSub?1:0);
+  /* Urutan ikut dihitung sebagai filter aktif bila bukan default. */
+  var prFiltCnt=(curEstkzFilter?1:0)+(curPlantSub?1:0)+
+                (curSort!=='newest'?1:0);
   html+='<div class="filter-wrap">';
   html+=buildFilterButton(prFiltCnt);
   html+='<div class="filter-panel'+(filterPanelOpen?' open':'')+'" id="filterPanel">';
+
+  html+='<div class="filter-panel-row">'+
+        '<span class="filter-panel-lbl">Urutkan</span>'+
+        '<select class="select select--accent select--block"'+
+        ' aria-label="Urutkan" onchange="onSortFilter(this.value)">'+
+        '<option value="newest"'+(curSort==='newest'?' selected':'')+
+        '>&#8595; Terbaru</option>'+
+        '<option value="oldest"'+(curSort==='oldest'?' selected':'')+
+        '>&#8593; Terlama</option>'+
+        '</select></div>';
 
   html+='<div class="filter-panel-row">'+
         '<span class="filter-panel-lbl">Jenis PR</span>'+
@@ -404,9 +427,12 @@ function renderList() {
   }
 
   html+='</div>'; /* cardContainer */
-  html+=renderPagination(total,totalPages,start,end);
 
   document.getElementById('mainContent').innerHTML=html;
+
+  /* Pagination hidup di action bar, bukan di alur konten. */
+  setPager(total>0?renderPagination(total,totalPages,start,end):'');
+  setActionBar(total>0);
 
   if (isApprover&&total>0){
     document.getElementById('fab').className='fab show';

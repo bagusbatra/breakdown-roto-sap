@@ -9,7 +9,7 @@ DATA: lv_uname2    TYPE syuname,
 * Versi aset statis. Naikkan nilainya setiap kali style.css atau
 * salah satu app-*.js diubah, supaya browser klien tidak menyajikan
 * file lama dari cache. Cukup diubah di SATU tempat ini.
-DATA: lv_ver TYPE string VALUE '20260710a'.
+DATA: lv_ver TYPE string VALUE '20260710b'.
 
 lv_uname2    = sy-uname.
 lv_username2 = sy-uname.
@@ -197,17 +197,23 @@ ENDIF.
   </div>
 </main>
 
-<!-- FAB -->
-<div class="fab" id="fab">
-  <span class="fab-info" id="fabInfo">0 PR dipilih</span>
-  <button type="button" class="btn btn-success fab-app" onclick="showModalApprove()">
-    <svg class="ico" aria-hidden="true"><use href="#i-check"></use></svg>
-    Approve
-  </button>
-  <button type="button" class="btn btn-danger fab-rej" onclick="showModalReject()">
-    <svg class="ico" aria-hidden="true"><use href="#i-trash"></use></svg>
-    Reject
-  </button>
+<!-- ACTION BAR — pagination + aksi massal, satu bar selebar .main.
+     #pagerSlot diisi oleh renderList()/renderHistContent(). -->
+<div class="actionbar" id="actionBar">
+  <div class="actionbar-inner">
+    <div class="actionbar-pager" id="pagerSlot"></div>
+    <div class="fab" id="fab">
+      <span class="fab-info" id="fabInfo">0 PR dipilih</span>
+      <button type="button" class="btn btn-success fab-app" onclick="showModalApprove()">
+        <svg class="ico" aria-hidden="true"><use href="#i-check"></use></svg>
+        Approve
+      </button>
+      <button type="button" class="btn btn-danger fab-rej" onclick="showModalReject()">
+        <svg class="ico" aria-hidden="true"><use href="#i-trash"></use></svg>
+        Reject
+      </button>
+    </div>
+  </div>
 </div>
 
 <!-- MODAL APPROVE -->

@@ -268,14 +268,20 @@ function renderHistContent() {
   html+=buildHistCards(pageGroups,histType);
   html+='</div>';
 
-  if (histPageSize!==0 && totalPages>1){
-    html+=renderHistPagination(total,totalPages,start,end,histCurPage);
-  } else {
-    html+='<div class="pagination-bar">'+
-          '<span class="pg-info">Menampilkan semua '+total+' PR</span></div>';
-  }
-
   document.getElementById('mainContent').innerHTML=html;
+
+  /* Pagination hidup di action bar, bukan di alur konten. */
+  var pager='';
+  if (total>0){
+    pager=(histPageSize!==0 && totalPages>1)
+      ?renderHistPagination(total,totalPages,start,end,histCurPage)
+      :'<div class="pagination-bar"><span class="pg-info">'+
+       'Menampilkan semua '+total+' PR</span></div>';
+  }
+  setPager(pager);
+  setActionBar(total>0);
+
+  /* History tidak punya aksi massal. */
   document.getElementById('fab').className='fab';
 }
 

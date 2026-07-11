@@ -67,11 +67,6 @@ function onSearchTrigger(val) {
   selBanfns={}; renderList();
 }
 
-function onSortChange(val) {
-  curSort=val; curPage=1;
-  renderList();
-}
-
 /* ================================================================
    EXPAND / COLLAPSE
    ================================================================ */

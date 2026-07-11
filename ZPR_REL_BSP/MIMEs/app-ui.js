@@ -87,12 +87,32 @@ function getPlantTotalPending(werks) {
   return total;
 }
 
+/* ================================================================
+   ACTION BAR — bar tetap di bawah berisi pagination + aksi massal.
+   Hanya ditampilkan bila view yang aktif memang punya baris data.
+   ================================================================ */
+function setActionBar(show) {
+  var bar=document.getElementById('actionBar');
+  if (bar) bar.classList.toggle('show',!!show);
+}
+
+function setPager(html) {
+  var slot=document.getElementById('pagerSlot');
+  if (slot) slot.innerHTML=html||'';
+}
+
+function hideActionBar() {
+  setPager('');
+  setActionBar(false);
+  document.getElementById('fab').className='fab';
+}
+
 function showEmpty(msg) {
   document.getElementById('mainContent').innerHTML =
     '<div class="empty">' +
     '<div class="empty-ico">'+svgIcon('i-inbox','ico-xl')+'</div>' +
     '<div class="empty-txt">'+escHtml(msg)+'</div></div>';
-  document.getElementById('fab').className='fab';
+  hideActionBar();
 }
 
 /* ================================================================
@@ -131,6 +151,7 @@ function skeletonCard() {
 function showSkeleton(count) {
   var el=document.getElementById('mainContent');
   if (!el) return;
+  hideActionBar();
   var n=count||5, cards='';
   for (var i=0;i<n;i++) cards+=skeletonCard();
 
@@ -529,8 +550,8 @@ function switchView(plant,category,mode) {
   histAllExpanded= false;
   histPlantSub   = '';
   histDateFilter = currentMonthYM();
+  curSort        = 'newest';
 
-  document.getElementById('fab').className='fab';
   renderSidebar();
   closeSidebarMobile();
   showSkeleton();
