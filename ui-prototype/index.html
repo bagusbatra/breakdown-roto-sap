@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport"
+        content="width=device-width, initial-scale=1.0">
+  <title>Release Purchasing Requisition - PT. Kayu Mebel Indonesia</title>
+  <link rel="icon" type="image/png" href="logo.png">
+  <!-- PWA / Web Push: manifest & apple-touch-icon SENGAJA DIHAPUS di
+       prototype (butuh MIMEs asli + HTTPS). Lihat CATATAN_REINTEGRASI.md. -->
+  <meta name="theme-color" content="#1a56db">
+  <!-- Font DM Sans & DM Mono di-self-host di MIMEs (lihat @font-face
+       di style.css). Tidak ada permintaan ke Google Fonts, supaya
+       tampilan tetap sama di jaringan internal tanpa akses internet. -->
+  <link rel="preload" href="DMSans.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ================================================================
+     SPRITE IKON — semua ikon aplikasi. Bergaya garis, viewBox 24x24,
+     diwarnai lewat currentColor sehingga otomatis mengikuti warna
+     teks elemen induknya. Dipakai dengan <use href="#i-nama">,
+     lihat helper svgIcon() di app-core.js.
+     ================================================================ -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <symbol id="i-menu" viewBox="0 0 24 24">
+    <line x1="3" y1="6" x2="21" y2="6"/>
+    <line x1="3" y1="12" x2="21" y2="12"/>
+    <line x1="3" y1="18" x2="21" y2="18"/>
+  </symbol>
+  <symbol id="i-search" viewBox="0 0 24 24">
+    <circle cx="11" cy="11" r="8"/>
+    <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+  </symbol>
+  <symbol id="i-filter" viewBox="0 0 24 24">
+    <line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/>
+    <line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/>
+    <line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/>
+    <line x1="1" y1="14" x2="7" y2="14"/>
+    <line x1="9" y1="8" x2="15" y2="8"/>
+    <line x1="17" y1="16" x2="23" y2="16"/>
+  </symbol>
+  <symbol id="i-chevron-down" viewBox="0 0 24 24">
+    <polyline points="6 9 12 15 18 9"/>
+  </symbol>
+  <symbol id="i-chevron-left" viewBox="0 0 24 24">
+    <polyline points="15 18 9 12 15 6"/>
+  </symbol>
+  <symbol id="i-chevron-right" viewBox="0 0 24 24">
+    <polyline points="9 18 15 12 9 6"/>
+  </symbol>
+  <symbol id="i-chevrons-left" viewBox="0 0 24 24">
+    <polyline points="11 17 6 12 11 7"/><polyline points="18 17 13 12 18 7"/>
+  </symbol>
+  <symbol id="i-chevrons-right" viewBox="0 0 24 24">
+    <polyline points="13 17 18 12 13 7"/><polyline points="6 17 11 12 6 7"/>
+  </symbol>
+  <symbol id="i-check" viewBox="0 0 24 24">
+    <polyline points="20 6 9 17 4 12"/>
+  </symbol>
+  <symbol id="i-x" viewBox="0 0 24 24">
+    <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+  </symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24">
+    <polyline points="3 6 5 6 21 6"/>
+    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+    <line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/>
+  </symbol>
+  <symbol id="i-file-text" viewBox="0 0 24 24">
+    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+    <polyline points="14 2 14 8 20 8"/>
+    <line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>
+  </symbol>
+  <symbol id="i-clipboard" viewBox="0 0 24 24">
+    <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
+    <rect x="8" y="2" width="8" height="4" rx="1"/>
+  </symbol>
+  <symbol id="i-flask" viewBox="0 0 24 24">
+    <path d="M9 3h6"/>
+    <path d="M10 3v6.5L4.6 18a2 2 0 0 0 1.7 3h11.4a2 2 0 0 0 1.7-3L14 9.5V3"/>
+    <line x1="7" y1="15" x2="17" y2="15"/>
+  </symbol>
+  <symbol id="i-tool" viewBox="0 0 24 24">
+    <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
+  </symbol>
+  <symbol id="i-bell" viewBox="0 0 24 24">
+    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+    <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+  </symbol>
+  <symbol id="i-logout" viewBox="0 0 24 24">
+    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+    <polyline points="16 17 21 12 16 7"/>
+    <line x1="21" y1="12" x2="9" y2="12"/>
+  </symbol>
+  <symbol id="i-inbox" viewBox="0 0 24 24">
+    <polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/>
+    <path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>
+  </symbol>
+  <symbol id="i-check-circle" viewBox="0 0 24 24">
+    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+    <polyline points="22 4 12 14.01 9 11.01"/>
+  </symbol>
+  <symbol id="i-alert-circle" viewBox="0 0 24 24">
+    <circle cx="12" cy="12" r="10"/>
+    <line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+  </symbol>
+  <symbol id="i-cart" viewBox="0 0 24 24">
+    <circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/>
+    <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>
+  </symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24">
+    <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+  </symbol>
+</svg>
+
+<!-- HEADER -->
+<header class="hdr">
+  <button type="button" class="btn-toggle-sb" id="btnToggleSb"
+          aria-controls="sidebar" aria-expanded="true"
+          aria-label="Buka atau tutup menu samping"
+          onclick="toggleSidebar()">
+    <svg class="ico ico-lg" aria-hidden="true"><use href="#i-menu"></use></svg>
+  </button>
+  <button type="button" class="hdr-home" onclick="showDashboard()"
+          aria-label="Kembali ke dashboard">
+    <span class="hdr-logo">
+      <img src="logo.png" alt="Logo PT. Kayu Mebel Indonesia">
+    </span>
+    <span class="hdr-home-text">
+      <span class="hdr-brand">Release Purchasing Requisition</span>
+      <span class="hdr-corp">PT. Kayu Mebel Indonesia</span>
+    </span>
+  </button>
+
+  <div class="hdr-user">
+    <button type="button" class="hdr-user-btn" id="btnUserMenu"
+            aria-controls="userMenu" aria-expanded="false" aria-haspopup="true"
+            onclick="toggleUserMenu(event)">
+      <!-- ASLI: <%=lv_uname2(1)%> = huruf pertama sy-uname -->
+      <span class="hdr-avatar" aria-hidden="true">K</span>
+      <!-- ASLI: <%=lv_fullname2%> = fullname dari BAPI_USER_GET_DETAIL -->
+      <span class="hdr-user-name">Budi Santoso (Dummy)</span>
+      <svg class="ico ico-sm" aria-hidden="true"><use href="#i-chevron-down"></use></svg>
+    </button>
+
+    <div class="usermenu" id="userMenu" role="menu" aria-labelledby="btnUserMenu">
+      <div class="usermenu-head">
+        <div class="usermenu-label">Masuk sebagai</div>
+        <!-- ASLI: <%=lv_uname2%> = sy-uname -->
+        <div class="usermenu-name">KMI-BOD</div>
+      </div>
+      <!-- ASLI dibungkus: <% IF lv_uname2 = 'KMI-BOD'. %> ... <% ENDIF. %>
+           Di prototype selalu tampil supaya bisa di-redesign. -->
+      <button type="button" class="usermenu-item" id="notifMenuItem"
+              role="menuitem" onclick="toggleNotif()">
+        <svg class="ico" aria-hidden="true"><use href="#i-bell"></use></svg>
+        <span id="notifMenuLabel">Aktifkan Notifikasi</span>
+      </button>
+      <button type="button" class="usermenu-item usermenu-item-danger"
+              role="menuitem" onclick="doLogout()">
+        <svg class="ico" aria-hidden="true"><use href="#i-logout"></use></svg>
+        <span>Logout</span>
+      </button>
+    </div>
+  </div>
+</header>
+
+<!-- SIDEBAR -->
+<aside class="sidebar" id="sidebar" aria-label="Navigasi plant dan kategori PR"></aside>
+<div class="sb-backdrop" id="sbBackdrop" onclick="closeSidebarMobile()"></div>
+
+<!-- MAIN — dashboard dirender oleh renderDashboard() setelah
+     GET_SIDEBAR selesai; placeholder di bawah tampil sekejap. -->
+<main class="main" id="mainContent">
+  <div class="empty">
+    <div class="empty-ico">
+      <svg class="ico ico-xl" aria-hidden="true"><use href="#i-inbox"></use></svg>
+    </div>
+    <div class="empty-txt">Memuat dashboard&hellip;</div>
+  </div>
+</main>
+
+<!-- ACTION BAR — pagination + aksi massal, satu bar selebar .main.
+     #pagerSlot diisi oleh renderList()/renderHistContent(). -->
+<div class="actionbar" id="actionBar">
+  <div class="actionbar-inner">
+    <div class="actionbar-pager" id="pagerSlot"></div>
+    <div class="fab" id="fab">
+      <span class="fab-info" id="fabInfo">0 PR dipilih</span>
+      <button type="button" class="btn btn-success fab-app" onclick="showModalApprove()">
+        <svg class="ico" aria-hidden="true"><use href="#i-check"></use></svg>
+        Approve
+      </button>
+      <button type="button" class="btn btn-danger fab-rej" onclick="showModalReject()">
+        <svg class="ico" aria-hidden="true"><use href="#i-trash"></use></svg>
+        Reject
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL APPROVE -->
+<div class="modal" id="modalApprove" role="dialog" aria-modal="true"
+     aria-labelledby="modalApproveTitle"
+     onclick="if(event.target===this) closeModal('modalApprove')">
+  <div class="modal-box">
+    <h2 class="modal-title" id="modalApproveTitle">
+      <svg class="ico ico-lg" aria-hidden="true"><use href="#i-check-circle"></use></svg>
+      Approve PR
+    </h2>
+    <div class="modal-desc" id="modalApproveDesc">Approve PR yang dipilih?</div>
+    <div class="modal-info">
+      &#8226; PR akan di-release via BAPI_REQUISITION_RELEASE<br>
+      &#8226; Release Code: <b>P2 (PR BOD Approval)</b><br>
+      &#8226; History approve tersimpan otomatis<br>
+      &#8226; Proses tidak dapat dibatalkan
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-outline btn-lg"
+              onclick="closeModal('modalApprove')">Batal</button>
+      <button type="button" class="btn btn-success btn-lg" onclick="confirmApprove()">
+        <svg class="ico" aria-hidden="true"><use href="#i-check"></use></svg>
+        Ya, Approve
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL REJECT -->
+<div class="modal" id="modalReject" role="dialog" aria-modal="true"
+     aria-labelledby="modalRejectTitle"
+     onclick="if(event.target===this) closeModal('modalReject')">
+  <div class="modal-box">
+    <h2 class="modal-title" id="modalRejectTitle">
+      <svg class="ico ico-lg" aria-hidden="true"><use href="#i-trash"></use></svg>
+      Reject PR
+    </h2>
+    <div class="modal-desc" id="modalRejectDesc">Reject PR yang dipilih?</div>
+    <div class="modal-info-danger">
+      &#8226; <b>PR akan dihapus (delete) dari SAP</b><br>
+      &#8226; History reject disimpan otomatis<br>
+      &#8226; Tindakan ini tidak dapat dibatalkan
+    </div>
+    <label class="modal-label" for="rejectNotes">
+      Alasan Reject <span class="modal-opt">(opsional)</span>
+    </label>
+    <textarea class="modal-ta" id="rejectNotes"
+              placeholder="Tuliskan alasan reject..."></textarea>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-outline btn-lg"
+              onclick="closeModal('modalReject')">Batal</button>
+      <button type="button" class="btn btn-danger btn-lg" onclick="confirmReject()">
+        <svg class="ico" aria-hidden="true"><use href="#i-trash"></use></svg>
+        Ya, Reject &amp; Delete
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL ITEM TEXT (long-text item pertama PR) -->
+<div class="modal" id="modalItemText" role="dialog" aria-modal="true"
+     aria-labelledby="modalItemTextTitle"
+     onclick="if(event.target===this) closeModal('modalItemText')">
+  <div class="modal-box modal-box-text">
+    <h2 class="modal-title" id="modalItemTextTitle">
+      <svg class="ico ico-lg" aria-hidden="true"><use href="#i-file-text"></use></svg>
+      Teks Item
+    </h2>
+    <div class="item-text-meta" id="itemTextMeta"></div>
+    <div class="item-text-body" id="itemTextBody">
+      <div class="lo-spin lo-spin-sm"></div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-outline btn-lg"
+              onclick="closeModal('modalItemText')">Tutup</button>
+    </div>
+  </div>
+</div>
+
+<!-- LOADING -->
+<div id="lo" role="status" aria-live="polite">
+  <div class="lo-box">
+    Memproses, mohon tunggu...
+    <div class="lo-spin"></div>
+  </div>
+</div>
+
+<!-- ================================================================
+     APP SCRIPTS — URUTAN MUAT WAJIB DIPERTAHANKAN.
+     Script klasik (tanpa defer/async) dieksekusi berurutan, sama
+     persis seperti saat masih inline. app-action.js terakhir karena
+     memanggil init().
+
+     Kesembilan app-*.js di bawah IDENTIK BYTE-PER-BYTE dengan yang
+     ada di ZPR_REL_BSP/MIMEs/. Jangan diubah saat redesign.
+
+     dummy-data.js + mock-api.js HANYA UNTUK PROTOTYPE — keduanya
+     harus DIBUANG saat reintegrasi ke SAP. Lihat CATATAN_REINTEGRASI.md.
+     ================================================================ -->
+<script src="app-core.js"></script>
+<script src="app-push.js"></script>
+<script src="app-ui.js"></script>
+<script src="app-dashboard.js"></script>
+<script src="app-list.js"></script>
+<script src="app-history.js"></script>
+<script src="app-po.js"></script>
+<script src="app-detail.js"></script>
+<!-- ▼▼▼ PROTOTYPE ONLY — HAPUS 2 BARIS INI SAAT REINTEGRASI ▼▼▼ -->
+<script src="dummy-data.js"></script>
+<script src="mock-api.js"></script>
+<!-- ▲▲▲ PROTOTYPE ONLY — HAPUS 2 BARIS INI SAAT REINTEGRASI ▲▲▲ -->
+<script src="app-action.js"></script>
+</body>
+</html>
