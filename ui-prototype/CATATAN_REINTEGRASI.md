@@ -208,15 +208,12 @@ Copy balik **hanya** yang statusnya `BERUBAH`. Jangan copy `dummy-data.js` /
 
 ## 5. Peringatan penting
 
-**Garis status di tepi kiri kartu memakai `:has()`.** Status kartu tidak ada di
-class `.po-card`, melainkan di badge di dalamnya, jadi `style.css` membacanya
-dengan `.po-card:has(.b-pending)::before` dst. `:has()` butuh **Chrome/Edge 105+
-(rilis 2022)**. Kalau ada user yang masih memakai IE11 atau Edge Legacy, garisnya
-akan tetap muncul tapi **abu-abu semua** — desainnya sengaja dibuat begitu
-(warna default netral di `.po-card::before`), jadi tidak ada yang rusak, hanya
-kode warnanya hilang. Aplikasi ini sendiri sudah memakai `fetch`, `Promise`, dan
-`<use href>` yang semuanya menuntut browser modern, jadi ini kemungkinan besar
-aman — tapi ada baiknya dicek dulu browser apa yang dipakai BOD.
+**Garis hijau di tepi kiri kartu** dipasang lewat `.po-card::before`
+(absolut), **bukan** `border-left`. Ini disengaja: `.po-card:hover`,
+`.po-card.selected`, dan `.po-card.highlight` memakai shorthand `border-color`
+yang menimpa keempat sisi sekaligus — kalau garisnya dibuat dengan
+`border-left`, warnanya akan mati begitu kursor lewat di atas kartu. Jangan
+diubah jadi `border-left` saat redesign lanjutan.
 
 **Gambar di repo kosong (0 byte).** `logo.png`, `surabaya.png`, `semarang.png`,
 dan `background.png` di `ZPR_REL_BSP/MIMEs/` **berukuran 0 byte** — file

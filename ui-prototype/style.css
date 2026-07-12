@@ -639,43 +639,20 @@ td.num, th.num { font-variant-numeric:tabular-nums; }
              transform var(--dur) var(--ease);
 }
 
-/* ── Garis status di tepi kiri ──
-   Status kartu tidak tersimpan di class .po-card, melainkan di badge
-   DI DALAMNYA, jadi dibaca lewat :has(). Garis ini mengulang sinyal
-   yang sudah ada di chip status — tapi di tepi kiri, pada posisi yang
-   sama di setiap kartu, sehingga satu kolom vertikal bisa dipindai
-   sekali lihat tanpa membaca chip satu per satu.
+/* ── Garis biru di tepi kiri ──
+   Aksen tetap di setiap kartu PR, di semua view (pending, riwayat,
+   status PO). Sengaja SATU warna, bukan kode status: status sudah
+   disampaikan oleh chip di dalam kartu, dan garis ini bertugas
+   sebagai penanda tepi kartu saja.
 
    Dipasang sebagai ::before absolut, BUKAN border-left, karena
    .po-card:hover/.selected/.highlight memakai shorthand border-color
-   yang akan menimpa keempat sisinya sekaligus.
-
-   Warna default netral: browser tanpa dukungan :has() tetap mendapat
-   garis kiri, hanya tanpa kode warnanya. */
+   yang akan menimpa keempat sisinya sekaligus dan mematikan warnanya
+   begitu kursor lewat. */
 .po-card::before {
   content:""; position:absolute; left:0; top:0; bottom:0;
-  width:3px; background:var(--border-strong);
+  width:3px; background:var(--primary);
 }
-
-/* Daftar pending — semuanya menunggu keputusan. */
-.po-card:has(.b-pending)::before    { background:var(--warning); }
-
-/* Riwayat — sudah selesai. */
-.po-card:has(.b-app)::before        { background:var(--success); }
-.po-card:has(.b-rej)::before        { background:var(--danger); }
-
-/* Monitoring PO — di sinilah garis ini paling berguna: statusnya
-   benar-benar berbeda antar baris. */
-.po-card:has(.b-po-open)::before    { background:var(--warning); }
-.po-card:has(.b-po-partial)::before { background:var(--info); }
-.po-card:has(.b-po-done)::before    { background:var(--success); }
-.po-card:has(.b-po-del)::before     { background:var(--border-strong); }
-
-/* Terakhir, jadi menang atas semua di atas: PR yang sudah menunggu
-   >=14 hari. Di daftar PO, inilah satu-satunya hal yang benar-benar
-   menuntut tindakan hari ini — jadi garisnya yang bicara, bukan cuma
-   chip umurnya. */
-.po-card:has(.b-age-crit)::before   { background:var(--danger); }
 /* Kartu tidak lagi terangkat saat hover. Dalam daftar 10 kartu,
    translateY membuat halaman terasa bergoyang saat kursor lewat;
    perubahan border + bayangan sudah cukup menandai baris aktif. */
