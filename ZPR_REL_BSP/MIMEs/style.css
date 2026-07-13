@@ -1118,7 +1118,7 @@ body.sb-collapsed .actionbar { left:0; }
 /* ── 1. HERO — tesis halaman ── */
 .dash-hero {
   display:flex; align-items:center; gap:var(--sp-5); flex-wrap:wrap;
-  padding:var(--sp-4) 0 var(--sp-6);
+  padding: 0 0 var(--sp-6);
 }
 /* Satu angka besar, DM Mono, seperti nominal di kartu PR: angka yang
    bisa dibandingkan adalah data, bukan kalimat. */
