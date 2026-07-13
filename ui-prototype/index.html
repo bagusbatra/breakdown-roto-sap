@@ -306,6 +306,11 @@
 <script src="app-history.js"></script>
 <script src="app-po.js"></script>
 <script src="app-detail.js"></script>
+<!-- app-reveal.js: konten muncul bertahap. Wajib dimuat SEBELUM
+     app-action.js, karena ia harus memasang MutationObserver-nya
+     sebelum init() memicu render pertama. Ini KODE PRODUKSI —
+     ikut di-copy ke MIMEs, jangan dibuang bersama dua file di bawah. -->
+<script src="app-reveal.js"></script>
 <!-- ▼▼▼ PROTOTYPE ONLY — HAPUS 2 BARIS INI SAAT REINTEGRASI ▼▼▼ -->
 <script src="dummy-data.js"></script>
 <script src="mock-api.js"></script>

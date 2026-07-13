@@ -21,8 +21,10 @@ bawah; selalu verifikasi ulang dengan skrip di bagian 4 sebelum transport.
 | `style.css` | **COPY** → `ZPR_REL_BSP/MIMEs/style.css` | Hasil utama redesign. Timpa langsung. |
 | `app-list.js` | **COPY** → `ZPR_REL_BSP/MIMEs/app-list.js` | **Berubah.** Aksi massal pindah ke toolbar — lihat bagian 2b. |
 | `app-detail.js` | **COPY** → `ZPR_REL_BSP/MIMEs/app-detail.js` | **Berubah.** `updateFabInfo()` kini juga menyalakan grup toolbar. |
+| `app-dashboard.js` | **COPY** → `ZPR_REL_BSP/MIMEs/app-dashboard.js` | **Berubah.** Dashboard dirombak — lihat bagian 2c. |
+| `app-reveal.js` | **FILE BARU** → tambahkan ke `ZPR_REL_BSP/MIMEs/` | Konten muncul bertahap. Ini file BARU, bukan menimpa — dan `index.htm` perlu `<script>` tambahan. Lihat bagian 2d. |
 | `index.html` | **MERGE MANUAL** → `ZPR_REL_BSP/Page with FLow Logic/index.htm` | Jangan ditimpa mentah! Lihat bagian 2. |
-| `app-core.js`, `app-push.js`, `app-ui.js`, `app-dashboard.js`, `app-history.js`, `app-po.js`, `app-action.js` | **JANGAN DI-COPY** | Masih identik byte-per-byte dengan produksi. |
+| `app-core.js`, `app-push.js`, `app-ui.js`, `app-history.js`, `app-po.js`, `app-action.js` | **JANGAN DI-COPY** | Masih identik byte-per-byte dengan produksi. |
 | `dummy-data.js` | **BUANG** | Data palsu. Tidak ada padanannya di SAP. |
 | `mock-api.js` | **BUANG** | Pengganti `fetch`. Di SAP harus kembali ke `main.htm` asli. |
 | `logo.png`, `surabaya.png`, `semarang.png`, `background.png` | **BUANG** | Placeholder buatan. Lihat peringatan di bagian 5. |
@@ -149,6 +151,105 @@ diubah untuk menjaga `null`-nya lebih dulu.
 
 ---
 
+## 2c. Dashboard dirombak
+
+**Dulu:** empat tile berwarna (Pending amber / Approved hijau / Rejected merah /
+Belum PO biru) **di atas** tabel rincian per kategori. Tapi tile itu tak lain
+adalah **jumlah kolom dari tabel di bawahnya** — `17 PENDING` = `12 + 3 + 2`.
+Data yang sama dirender dua kali, dua-duanya berwarna penuh: **26 angka berwarna
+setara dalam satu layar**, dan tiga dari empat tile isinya bukan pekerjaan BOD.
+
+**Sekarang:** disusun menurut **siapa yang harus bertindak**, dan tiap angka
+hanya hidup di satu tempat.
+
+1. **Hero** — satu angka besar (DM Mono): total PR menunggu keputusan.
+2. **Antrean** — satu kartu per plant, satu baris per kategori. Satu-satunya
+   tempat angka pending hidup. Kategori kosong tetap ditampilkan tapi diredupkan.
+3. **Sudah di-approve — menunggu Purchasing** — yang ditonjolkan **umurnya**,
+   bukan jumlahnya (`4 PR belum jadi PO · tertua 30 hari`). Merah menyala di
+   ambang yang sama dengan badge umur di kartu: **≥14 hari**. Field `age` ini
+   sudah lama ada di response `GET_APP_PO` tapi dulu tidak pernah muncul di
+   dashboard.
+4. **Riwayat** — arsip, angka abu, tanpa tile berwarna.
+
+Yang berubah:
+
+| File | Perubahan |
+|---|---|
+| `app-dashboard.js` | Ditulis ulang. `dashStat()`, `dashMetric()`, `dashPlantHtml()` diganti `dashHeroHtml()`, `dashQueueHtml()`, `dashPoHtml()`, `dashArchiveHtml()`, `fillDashPo()`. `dashPlantData()` dan `showDashboard()` tidak berubah. |
+| `style.css` | Blok `.dash*` ditulis ulang. Class lama (`.dash-stat*`, `.dash-metric*`, `.dash-title`, `.dash-head`, `.dash-cats-wrap`) **sudah dihapus semua** — termasuk di media query. |
+
+> **`fillPoTiles()` di `app-po.js` kini tidak dipanggil lagi.** Dashboard baru
+> memanggil `fillDashPo()` (di `app-dashboard.js`) yang memakai `loadPoData()`
+> dan `poData` dari `app-po.js` **apa adanya** — sehingga `app-po.js` tetap
+> identik byte-per-byte dengan produksi dan **tidak perlu di-copy**.
+> `fillPoTiles()` jadi fungsi mati yang tidak berbahaya; boleh dibiarkan, boleh
+> dibersihkan nanti. Id lama `#dashPoVal_1200` / `#dashPoVal_1300` yang ia cari
+> sudah tidak ada, tapi ia menjaga `null`-nya (`if (!el) return;`), jadi
+> seandainya terpanggil pun tidak akan error.
+
+---
+
+## 2d. `app-reveal.js` — FILE BARU (konten muncul bertahap)
+
+Ini satu-satunya **file baru** di seluruh redesign. Dua langkah, jangan sampai
+salah satu terlewat:
+
+**1. Salin filenya** ke `ZPR_REL_BSP/MIMEs/app-reveal.js`.
+
+**2. Daftarkan di `index.htm`**, tepat SEBELUM `app-action.js`:
+
+```html
+<script src="app-detail.js?v=<%=lv_ver%>"></script>
+<script src="app-reveal.js?v=<%=lv_ver%>"></script>   <!-- BARU -->
+<script src="app-action.js?v=<%=lv_ver%>"></script>
+```
+
+> **Urutannya wajib.** `app-reveal.js` harus memasang MutationObserver-nya
+> sebelum `app-action.js` memanggil `init()` — kalau dimuat setelahnya, render
+> pertama sudah terjadi dan tidak akan pernah teranimasi.
+
+**Kenapa tidak menyentuh fungsi render yang ada?**
+Keempat view dirender dengan cara yang sama: menimpa `innerHTML` dari
+`#mainContent`. Jadi alih-alih menyisipkan panggilan animasi ke dalam
+`renderDashboard()`, `renderList()`, `renderHistContent()`, dan
+`renderPoContent()`, file ini memasang **satu MutationObserver** di
+`#mainContent`. Hasilnya: **`app-history.js` dan `app-po.js` tetap identik
+byte-per-byte dengan produksi** dan tidak perlu di-copy.
+
+Observer memakai `{ childList: true }` **tanpa `subtree`** — jadi hanya
+perubahan anak LANGSUNG yang dihitung. `loadDetail()` (menulis ke dalam
+`#detContent_x`) dan `fillDashPo()` (menulis ke dalam `#dashPoMain_x`) menulis
+ke elemen yang bersarang, sehingga **tidak** ikut memicu animasi ulang.
+
+**Yang perlu diketahui:**
+
+- Animasinya memakai **Web Animations API** (`element.animate`), bukan class
+  CSS. Tidak ada class yang perlu dipasang-lepas, tidak ada inline style yang
+  tertinggal, dan tidak bentrok dengan `transition` yang sudah ada di `.po-card`.
+- `fill:'backwards'` menahan opacity 0 selama masa tunggu. Tanpa itu, semua
+  kartu akan berkedip tampil dulu sebelum menghilang lagi untuk dianimasikan.
+- Callback MutationObserver berjalan sebagai **microtask** — sebelum browser
+  sempat melukis. Jadi kartu tidak pernah sempat terlihat sebelum animasinya
+  mulai.
+- **Skeleton dilewati** (`if (root.querySelector('.skel-card')) return;`). Ia
+  sudah punya shimmer sendiri dan memang sedang menunggu data.
+- **`prefers-reduced-motion` dihormati** — dicek lewat `matchMedia` di JS, sebab
+  WAAPI tidak tunduk pada blok `@media` di CSS.
+- **Sidebar hanya dianimasikan sekali**, saat halaman pertama dimuat.
+  `renderSidebar()` dipanggil ulang tiap kali pindah view; kalau ikut
+  dianimasikan terus, sidebar akan berkedip tiap klik menu.
+- Ada **batas antrean (`CAP = 12`)**. Tanpa itu, daftar "Semua" berisi 50 PR
+  butuh 2 detik penuh sebelum kartu terakhir muncul.
+- Kalau browser tidak punya `element.animate` atau `MutationObserver`, file ini
+  **tidak melakukan apa-apa** — konten tampil seketika seperti sebelumnya.
+  Luruh dengan anggun.
+
+Angka yang bisa kamu setel ada di bagian atas file: `STEP` (jeda antar item),
+`DUR` (durasi), `CAP` (batas antrean).
+
+---
+
 ## 3. Aturan yang bikin JS tetap kompatibel
 
 `style.css` bebas kamu ubah total. Tapi JS membangun HTML lewat string dan
@@ -262,16 +363,21 @@ arr.sort(function(a,b){ return ymd(b.badat).localeCompare(ymd(a.badat)); });
 ## 7. Checklist singkat sebelum transport ke SAP
 
 - [ ] `style.css` sudah di-copy ke `MIMEs/`
-- [ ] `app-list.js` dan `app-detail.js` sudah di-copy ke `MIMEs/`
-      (kalau lupa: grup Approve/Reject di toolbar tidak akan pernah muncul)
+- [ ] `app-list.js`, `app-detail.js`, dan `app-dashboard.js` sudah di-copy ke `MIMEs/`
+      (kalau `app-list`/`app-detail` lupa: grup Approve/Reject di toolbar tidak
+      akan pernah muncul. Kalau `app-dashboard` lupa: dashboard tetap versi lama,
+      dan CSS barunya akan membuatnya tampak rusak karena class `.dash-stat*`
+      sudah tidak ada lagi di `style.css`)
 - [ ] Skrip cek hash di bagian 4 sudah dijalankan — tidak ada file `BERUBAH`
       yang tertinggal
 - [ ] `lv_ver` di `index.htm` **sudah dinaikkan**
 - [ ] Blok ABAP, `?v=<%=lv_ver%>`, `<%=lv_uname2%>`, `<%=lv_fullname2%>`,
       `IF lv_uname2 = 'KMI-BOD'`, dan tag PWA sudah kembali di `index.htm`
+- [ ] `app-reveal.js` **sudah disalin** ke `MIMEs/` **dan** `<script>`-nya sudah
+      ditambahkan di `index.htm` tepat sebelum `app-action.js`
 - [ ] `<script src="dummy-data.js">` dan `<script src="mock-api.js">`
       **sudah dihapus** dari `index.htm`
-- [ ] Urutan 9 `<script src="app-*.js">` masih sama, `app-action.js` **terakhir**
+- [ ] Urutan `<script src="app-*.js">` masih sama, `app-action.js` **terakhir**
       (dia yang memanggil `init()`)
 - [ ] Semua `id`/`class` di bagian 3 masih ada
 - [ ] Gambar 0-byte **tidak** ikut ter-copy ke `MIMEs/`
