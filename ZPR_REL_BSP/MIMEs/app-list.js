@@ -282,10 +282,28 @@ function renderList() {
 
   html+='<div class="toolbar">';
 
-  if (isApprover)
+  if (isApprover) {
     html+='<button type="button" class="btn btn-outline" id="btnSelAll"'+
           ' onclick="toggleSelectAll()">'+
           svgIcon('i-check')+' Pilih Semua</button>';
+
+    /* Aksi massal duduk TEPAT DI SEBELAH "Pilih Semua", bukan di
+       pojok kanan bawah — kursor tidak perlu menyeberang layar
+       setelah memilih. Toolbar ini position:sticky, jadi tombolnya
+       tetap terjangkau walau daftarnya di-scroll jauh ke bawah.
+
+       Grup ini HANYA tampil saat ada PR terpilih; yang menyalakan/
+       memadamkannya adalah updateFabInfo() di app-detail.js. */
+    html+='<div class="sel-actions" id="selActions">'+
+          '<span class="sel-count"><b id="selCount">0</b> dipilih</span>'+
+          '<button type="button" class="btn btn-success"'+
+          ' onclick="showModalApprove()">'+
+          svgIcon('i-check')+' Approve</button>'+
+          '<button type="button" class="btn btn-danger"'+
+          ' onclick="showModalReject()">'+
+          svgIcon('i-trash')+' Reject</button>'+
+          '</div>';
+  }
 
   html+=buildSearchBox('searchInp','onSearchTrigger',searchKw,
         'Cari No PR, Pembuat...');
@@ -434,12 +452,13 @@ function renderList() {
   setPager(total>0?renderPagination(total,totalPages,start,end):'');
   setActionBar(total>0);
 
-  if (isApprover&&total>0){
-    document.getElementById('fab').className='fab show';
-    updateFabInfo();
-  } else {
-    document.getElementById('fab').className='fab';
-  }
+  /* Aksi massal sekarang hidup di toolbar (lihat #selActions di atas),
+     jadi #fab di action bar bawah sengaja dibiarkan padam — bar bawah
+     kini hanya memuat pagination. Elemen #fab tetap dipertahankan di
+     index.htm agar markup-nya tidak berubah dan history/PO tetap bisa
+     memadamkannya dengan cara yang sama. */
+  document.getElementById('fab').className='fab';
+  if (isApprover && total>0) updateFabInfo();
 
   if (allExpanded){
     pageData.forEach(function(pr){

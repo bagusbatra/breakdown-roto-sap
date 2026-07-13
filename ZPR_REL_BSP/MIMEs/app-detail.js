@@ -222,8 +222,22 @@ function syncCheckboxes() {
   });
 }
 
+/* Satu-satunya tempat jumlah PR terpilih diterjemahkan jadi UI.
+   Dipanggil dari toggleSelect(), toggleSelectAll(), dan renderList(). */
 function updateFabInfo() {
   var cnt=Object.keys(selBanfns).length;
+
   var el=document.getElementById('fabInfo');
   if (el) el.textContent=cnt+' PR dipilih';
+
+  /* Grup aksi di toolbar hanya ada saat memang ada yang dipilih.
+     Sebelumnya tombol Approve/Reject selalu tampil di action bar
+     bawah — termasuk saat 0 PR dipilih — dan baru menolak lewat
+     toast SETELAH diklik. Tombol yang tidak bisa dipakai sebaiknya
+     memang tidak ada, bukan ada lalu menyalahkan penggunanya. */
+  var sa=document.getElementById('selActions');
+  if (sa) sa.classList.toggle('show', cnt>0);
+
+  var sc=document.getElementById('selCount');
+  if (sc) sc.textContent=cnt;
 }
