@@ -1612,9 +1612,12 @@ body {
 .po-card {
   background:#fff; border:1px solid var(--border);
   border-radius:12px; margin-bottom:10px; overflow:hidden;
-  transition: box-shadow .18s, opacity .3s, max-height .4s;
+  transition: box-shadow .18s, opacity .3s, max-height .4s, transform .18s;
 }
-.po-card:hover { box-shadow:0 3px 14px rgba(0,0,0,.07); }
+.po-card:hover {
+  box-shadow:0 4px 16px rgba(17,24,39,.06);
+  transform:translateY(-1px);
+}
 .po-card.selected { border-color:var(--primary); background:#f8faff; }
 .po-card.removing {
   opacity:0; max-height:0 !important;
@@ -1939,6 +1942,34 @@ select:focus-visible, a:focus-visible {
   outline:2px solid var(--primary);
   outline-offset:2px;
 }
+
+/* ── SKELETON ── */
+.skel-card {
+  background:#fff; border:1px solid var(--border);
+  border-radius:12px; margin-bottom:10px; padding:16px 18px;
+}
+.skel-line {
+  height:12px; border-radius:6px;
+  background:linear-gradient(90deg,#f3f4f6 25%,#e9eaef 37%,#f3f4f6 63%);
+  background-size:400% 100%;
+  animation:skelShimmer 1.2s ease infinite;
+  margin-bottom:10px;
+}
+.skel-line:last-child { margin-bottom:0; }
+@keyframes skelShimmer {
+  from { background-position:100% 0; }
+  to   { background-position:-100% 0; }
+}
+
+/* ── THIN SCROLLBAR ── */
+.sidebar::-webkit-scrollbar, .modal-box::-webkit-scrollbar { width:8px; }
+.sidebar::-webkit-scrollbar-thumb, .modal-box::-webkit-scrollbar-thumb {
+  background:#d1d5db; border-radius:4px;
+}
+.sidebar::-webkit-scrollbar-thumb:hover,
+.modal-box::-webkit-scrollbar-thumb:hover { background:#9ca3af; }
+.sidebar::-webkit-scrollbar-track,
+.modal-box::-webkit-scrollbar-track { background:transparent; }
 </style>
 </head>
 <body>
@@ -2504,6 +2535,19 @@ function switchView(plant, potype) {
 /* ================================================================
    SWITCH VIEW — History
    ================================================================ */
+/* Skeleton shimmer untuk state loading history */
+function renderHistSkeleton() {
+  var html = '';
+  for (var i = 0; i < 3; i++) {
+    html += '<div class="skel-card">' +
+            '<div class="skel-line" style="width:40%;"></div>' +
+            '<div class="skel-line" style="width:70%;"></div>' +
+            '<div class="skel-line" style="width:55%;"></div>' +
+            '</div>';
+  }
+  return html;
+}
+
 function switchHistory(plant, mode) {
   curPlant  = plant;
   curPotype = '';
@@ -2528,9 +2572,8 @@ function switchHistory(plant, mode) {
     '<div class="pg-sub" id="histSubtitle">Loading...</div>' +
     '</div>' +
     '<div id="histContainer">' +
-    '<div style="text-align:center;padding:60px;color:var(--muted);">' +
-    '<div class="lo-spin" style="margin:0 auto 12px;"></div>' +
-    'Loading data...</div></div>';
+    renderHistSkeleton() +
+    '</div>';
 
   loadHistory();
 }
@@ -3704,7 +3747,11 @@ function renderCardListOnly() {
   if (filteredData.length === 0) {
     html += '<div class="empty" style="padding:40px 20px;">';
     html += '<div class="empty-ico">&#128270;</div>';
-    html += '<div class="empty-txt">No results found</div></div>';
+    html += '<div class="empty-txt">No results found</div>';
+    html += '<button type="button" class="btn-exp"' +
+            ' style="margin:14px auto 0;"' +
+            ' onclick="clearSearch()">Bersihkan pencarian</button>';
+    html += '</div>';
   } else {
     pageData.forEach(function(d) {
       var amountDisplay = formatAmount(d.totpr, d.waerk);
@@ -3842,6 +3889,13 @@ function onSearchChange() {
     if (btn) btn.innerHTML = '&#9744; Select All';
     renderCardListOnly();
   }, 200);
+}
+
+function clearSearch() {
+  var el = document.getElementById('searchPO');
+  if (el) el.value = '';
+  currentPage = 1;
+  renderCardListOnly();
 }
 
 /* ── Feedback seleksi ── */
