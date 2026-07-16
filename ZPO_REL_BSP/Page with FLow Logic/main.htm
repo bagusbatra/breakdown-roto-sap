@@ -1846,6 +1846,32 @@ body {
   font-family:'DM Mono',monospace; margin-bottom:18px;
 }
 
+/* ── CONFIRM DIALOG ── */
+.confirm-title { font-size:16px; font-weight:700; margin-bottom:12px; }
+.confirm-body  { font-size:13px; color:#374151; margin-bottom:18px; }
+.confirm-body table { width:100%; border-collapse:collapse; margin-top:8px; }
+.confirm-body td {
+  padding:6px 8px; border-bottom:1px solid #f3f4f6; font-size:13px;
+}
+.confirm-body td.num { text-align:right; font-weight:700; }
+.confirm-actions { display:flex; justify-content:flex-end; gap:8px; }
+.btn-confirm-cancel {
+  height:38px; padding:0 16px; border:1px solid var(--border);
+  background:#fff; border-radius:8px; font-family:inherit;
+  font-size:13px; font-weight:600; color:#374151; cursor:pointer;
+  transition:background .12s;
+}
+.btn-confirm-cancel:hover { background:#f9fafb; }
+.btn-confirm-yes {
+  height:38px; padding:0 18px; border:none; border-radius:8px;
+  font-family:inherit; font-size:13px; font-weight:600;
+  color:#fff; cursor:pointer; background:var(--primary);
+  transition:opacity .15s;
+}
+.btn-confirm-yes.rel { background:var(--success); }
+.btn-confirm-yes.rej { background:var(--danger); }
+.btn-confirm-yes:hover { opacity:.88; }
+
 /* ── STICKY ── */
 .sticky-top {
   position:sticky; top:var(--header-h); z-index:150;
@@ -1951,6 +1977,20 @@ body.sb-collapsed .main    { margin-left:0; }
   <div class="modal-box">
     <button class="modal-close" onclick="closeModal()">&#10005;</button>
     <div id="modalBody"></div>
+  </div>
+</div>
+
+<div class="modal" id="confirmModal"
+     onclick="if(event.target===this)closeConfirm()">
+  <div class="modal-box" style="max-width:420px;">
+    <div class="confirm-title" id="confirmTitle"></div>
+    <div class="confirm-body" id="confirmBody"></div>
+    <div class="confirm-actions">
+      <button type="button" class="btn-confirm-cancel"
+              onclick="closeConfirm()">Batal</button>
+      <button type="button" class="btn-confirm-yes"
+              id="confirmYesBtn" onclick="confirmYes()">Ya</button>
+    </div>
   </div>
 </div>
 
@@ -3979,6 +4019,33 @@ function closeModal() {
   document.getElementById('poModal').classList.remove('show');
 }
 
+/* ── Confirm dialog generik (pengganti window.confirm) ── */
+var confirmCallback = null;
+
+function showConfirm(opts, onYes) {
+  confirmCallback = onYes;
+  document.getElementById('confirmTitle').innerHTML =
+    opts.title || 'Konfirmasi';
+  document.getElementById('confirmBody').innerHTML =
+    opts.bodyHtml || '';
+  var yesBtn = document.getElementById('confirmYesBtn');
+  yesBtn.textContent = opts.yesLabel || 'Ya';
+  yesBtn.className   = 'btn-confirm-yes' +
+                       (opts.yesClass ? ' ' + opts.yesClass : '');
+  document.getElementById('confirmModal').classList.add('show');
+}
+
+function closeConfirm() {
+  confirmCallback = null;
+  document.getElementById('confirmModal').classList.remove('show');
+}
+
+function confirmYes() {
+  var cb = confirmCallback;
+  closeConfirm();
+  if (cb) cb();
+}
+
 /* ================================================================
    TOAST
    ================================================================ */
@@ -3999,25 +4066,42 @@ function showToast(type, message) {
    ================================================================ */
 function submitAction(action) {
   var cbs = document.querySelectorAll('.card-cb:checked');
-  if (cbs.length === 0) { alert('Select at least one PO.'); return; }
+  if (cbs.length === 0) {
+    showToast('E', 'Select at least one PO.');
+    return;
+  }
 
   if (action === 'BULK_REJ') {
     var cm = document.getElementById('commentInput').value.trim();
-    if (!cm) { alert('Please enter a reject reason.'); return; }
+    if (!cm) {
+      showToast('E', 'Please enter a reject reason.');
+      return;
+    }
   }
 
   var totals = computeSelectedTotals().totals;
 
-  var msg = 'Selected: ' + cbs.length + ' PO\nTotal Amount:\n';
+  var body = '<div>Selected: <b>' + cbs.length + ' PO</b></div>' +
+             '<table>';
   for (var c in totals) {
-    msg += c + ' : ' +
-      totals[c].toLocaleString('id-ID',
-        { minimumFractionDigits:0, maximumFractionDigits:0 }) + '\n';
+    body += '<tr><td>' + escHtml(c) + '</td><td class="num">' +
+            totals[c].toLocaleString('id-ID',
+              { minimumFractionDigits:0, maximumFractionDigits:0 }) +
+            '</td></tr>';
   }
-  msg += '\nProceed with ' +
-         (action === 'BULK_REL' ? 'RELEASE' : 'REJECT') + '?';
-  if (!confirm(msg)) return;
+  body += '</table>';
 
+  showConfirm({
+    title:    action === 'BULK_REL'
+              ? 'Release PO terpilih?'
+              : 'Reject PO terpilih?',
+    bodyHtml: body,
+    yesLabel: action === 'BULK_REL' ? 'Ya, Release' : 'Ya, Reject',
+    yesClass: action === 'BULK_REL' ? 'rel' : 'rej'
+  }, function() { doBulkSubmit(action, cbs); });
+}
+
+function doBulkSubmit(action, cbs) {
   var formData = new FormData();
   formData.append('plant',   curPlant);
   formData.append('potype',  curPotype);
@@ -4040,7 +4124,10 @@ function submitAction(action) {
     document.getElementById('lo').classList.remove('show');
     var resp;
     try { resp = JSON.parse(xhr.responseText); }
-    catch(e) { alert('Error parsing server response.'); return; }
+    catch(e) {
+      showToast('E', 'Error parsing server response.');
+      return;
+    }
 
     showToast(resp.status, resp.message);
 
@@ -4100,7 +4187,7 @@ function submitAction(action) {
 
   xhr.onerror = function() {
     document.getElementById('lo').classList.remove('show');
-    alert('Network error. Please try again.');
+    showToast('E', 'Network error. Please try again.');
   };
 
   xhr.send(formData);
@@ -4130,7 +4217,15 @@ document.addEventListener('click', function(e) {
    LOGOUT
    ================================================================ */
 function doLogout() {
-  if (!confirm('Yakin ingin logout?')) return;
+  showConfirm({
+    title:    'Logout',
+    bodyHtml: 'Yakin ingin logout?',
+    yesLabel: 'Ya, Logout',
+    yesClass: 'rej'
+  }, doLogoutNow);
+}
+
+function doLogoutNow() {
   sessionStorage.setItem('logged_out', '1');
   fetch('/sap/public/bc/icf/logoff', { credentials:'include' })
     .finally(function() {
