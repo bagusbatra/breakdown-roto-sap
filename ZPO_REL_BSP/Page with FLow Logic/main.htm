@@ -1615,6 +1615,7 @@ body {
   transition: box-shadow .18s, opacity .3s, max-height .4s;
 }
 .po-card:hover { box-shadow:0 3px 14px rgba(0,0,0,.07); }
+.po-card.selected { border-color:var(--primary); background:#f8faff; }
 .po-card.removing {
   opacity:0; max-height:0 !important;
   margin-bottom:0; padding:0; overflow:hidden;
@@ -1757,6 +1758,17 @@ body {
   box-shadow:0 8px 28px rgba(0,0,0,.14); z-index:400;
 }
 .fab.show { display:flex; }
+.fab-count {
+  display:flex; flex-direction:column; justify-content:center;
+  padding:0 10px; max-width:230px;
+}
+.fab-count-n { font-size:13px; font-weight:700; color:var(--text); white-space:nowrap; }
+.fab-count-t {
+  font-size:11px; color:var(--muted);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.fab.none-selected .fab-count-n { color:var(--muted); }
+.fab.none-selected .fab-btn { opacity:.55; }
 .fab input {
   border:1px solid var(--border); border-radius:8px;
   padding:8px 12px; font-family:inherit;
@@ -1919,6 +1931,10 @@ body.sb-collapsed .main    { margin-left:0; }
 <main class="main" id="mainContent"></main>
 
 <div class="fab" id="fab">
+  <div class="fab-count" id="fabCount">
+    <span class="fab-count-n">0 dipilih</span>
+    <span class="fab-count-t">&nbsp;</span>
+  </div>
   <input type="text" id="commentInput" placeholder="Reject reason...">
   <button type="button" class="fab-btn fab-rel"
           onclick="submitAction('BULK_REL')">
@@ -3625,12 +3641,14 @@ function renderCardListOnly() {
 
       html += '<div class="po-card" id="card_' + d.ebeln +
               '" data-ebeln="' + d.ebeln + '">';
-      html += '<div class="card-top">';
+      html += '<div class="card-top" onclick="cardTopClick(event,\'' +
+              d.ebeln + '\')">';
       html += '<input type="checkbox" class="card-cb"' +
               ' data-ebeln="' + d.ebeln + '"' +
               ' data-amount="' + escHtml(d.totpr) + '"' +
               ' data-curr="' + escHtml(d.waerk) + '"' +
-              ' onclick="event.stopPropagation()">';
+              ' onclick="event.stopPropagation()"' +
+              ' onchange="onCardCbChange(this)">';
       html += '<span class="card-num"' +
               ' onclick="event.stopPropagation();openModal(\'' +
               d.ebeln + '\')">' + d.ebeln + '</span>';
@@ -3638,7 +3656,8 @@ function renderCardListOnly() {
       html += '<div class="card-amount">' + amountDisplay;
       html += '<span class="card-amount-lbl">Total Amount</span></div>';
       html += '<span class="card-chevron"' +
-              ' onclick="toggleCard(\'' + d.ebeln + '\')">&#8964;</span>';
+              ' onclick="event.stopPropagation();toggleCard(\'' +
+              d.ebeln + '\')">&#8964;</span>';
       html += '</div>';
 
       html += '<div class="card-meta">';
@@ -3666,6 +3685,8 @@ function renderCardListOnly() {
       ? filteredData.length + ' of ' + curData.length + ' Purchase Orders'
       : curData.length + ' Purchase Orders';
   }
+
+  updateFabCount();
 }
 
 function renderCards(data, plant, potype) {
@@ -3753,6 +3774,52 @@ function onSearchChange() {
   }, 200);
 }
 
+/* ── Feedback seleksi ── */
+function computeSelectedTotals() {
+  var cbs    = document.querySelectorAll('.card-cb:checked');
+  var totals = {};
+  cbs.forEach(function(cb) {
+    var rawAmt = cb.dataset.amount || '0';
+    var curr   = (cb.dataset.curr || '').toUpperCase();
+    var a      = parseAbapNum(rawAmt) || 0;
+    if (ZERO_DEC_CURRENCIES.indexOf(curr) > -1) a = Math.round(a * 100);
+    if (!totals[curr]) totals[curr] = 0;
+    totals[curr] += a;
+  });
+  return { count: cbs.length, totals: totals };
+}
+
+function updateFabCount() {
+  var fab = document.getElementById('fab');
+  var el  = document.getElementById('fabCount');
+  if (!fab || !el) return;
+  var sel    = computeSelectedTotals();
+  var tParts = [];
+  for (var c in sel.totals) {
+    tParts.push(c + ' ' + sel.totals[c].toLocaleString('id-ID',
+      { minimumFractionDigits:0, maximumFractionDigits:0 }));
+  }
+  el.querySelector('.fab-count-n').textContent = sel.count + ' dipilih';
+  el.querySelector('.fab-count-t').innerHTML =
+    tParts.length ? escHtml(tParts.join(' · ')) : '&nbsp;';
+  fab.classList.toggle('none-selected', sel.count === 0);
+}
+
+function onCardCbChange(cb) {
+  var card = cb.closest('.po-card');
+  if (card) card.classList.toggle('selected', cb.checked);
+  updateFabCount();
+}
+
+function cardTopClick(ev, ebeln) {
+  var card = document.getElementById('card_' + ebeln);
+  if (!card) return;
+  var cb = card.querySelector('.card-cb');
+  if (!cb) return;
+  cb.checked = !cb.checked;
+  onCardCbChange(cb);
+}
+
 /* Lazy render isi detail kartu — markup identik dgn render lama,
    dibuat saat kartu pertama kali di-expand. */
 function buildCardDetailHtml(ebeln) {
@@ -3825,12 +3892,16 @@ function toggleAll() {
   selAll = !selAll;
   document.querySelectorAll('.card-cb').forEach(function(cb) {
     var card = cb.closest('.po-card');
-    if (card && card.style.display !== 'none') cb.checked = selAll;
+    if (card && card.style.display !== 'none') {
+      cb.checked = selAll;
+      card.classList.toggle('selected', selAll);
+    }
   });
   var btn = document.getElementById('btnSelAll');
   if (btn) btn.innerHTML = selAll
     ? '&#9745; Deselect All'
     : '&#9744; Select All';
+  updateFabCount();
 }
 
 /* ================================================================
@@ -3935,15 +4006,7 @@ function submitAction(action) {
     if (!cm) { alert('Please enter a reject reason.'); return; }
   }
 
-  var totals = {};
-  cbs.forEach(function(cb) {
-    var rawAmt = cb.dataset.amount || '0';
-    var curr   = (cb.dataset.curr || '').toUpperCase();
-    var a      = parseAbapNum(rawAmt) || 0;
-    if (ZERO_DEC_CURRENCIES.indexOf(curr) > -1) a = Math.round(a * 100);
-    if (!totals[curr]) totals[curr] = 0;
-    totals[curr] += a;
-  });
+  var totals = computeSelectedTotals().totals;
 
   var msg = 'Selected: ' + cbs.length + ' PO\nTotal Amount:\n';
   for (var c in totals) {
