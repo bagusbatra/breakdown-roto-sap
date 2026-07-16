@@ -302,6 +302,25 @@ Data digabung ke `lt_data1` (header) dan `lt_data2` (item) lalu diserialisasi ke
 | `getItemsForPO(ebeln)` | Ambil item-item dari suatu PO dari ALL_DATA2 |
 | `getRemarkForPO(ebeln)` | Ambil teks remark PO |
 
+#### Optimalisasi & UI (ditambahkan 2026-07-16)
+| Fungsi | Deskripsi |
+|---|---|
+| `buildDataIndexes()` | Bangun `ITEM_INDEX`/`REMARK_INDEX` (ebeln → items/remark) sekali; dipanggil saat init & setelah bulk action |
+| `buildSidebarCounts()` | Bangun cache `SIDEBAR_COUNTS` untuk badge sidebar dari satu loop `ALL_DATA1` |
+| `updateHistBadges(plant)` | Update badge history release/reject in-place tanpa re-render sidebar |
+| `buildCardDetailHtml(ebeln)` | Bangun HTML detail kartu (tabel item + remark) — dipakai lazy render |
+| `ensureCardDetail(card)` | Render isi detail kartu sekali saat pertama di-expand |
+| `computeSelectedTotals()` | Hitung jumlah PO terpilih + total per currency dari checkbox |
+| `updateFabCount()` | Update chip counter seleksi di FAB |
+| `onCardCbChange(cb)` | Handler perubahan checkbox: highlight kartu + update FAB |
+| `cardTopClick(ev, ebeln)` | Klik area atas kartu men-toggle checkbox |
+| `showConfirm(opts, onYes)` | Dialog konfirmasi custom (pengganti `window.confirm`) |
+| `closeConfirm()` / `confirmYes()` | Tutup / eksekusi callback dialog konfirmasi |
+| `doBulkSubmit(action, cbs)` | Kirim bulk release/reject (isi lama `submitAction` setelah konfirmasi) |
+| `doLogoutNow()` | Eksekusi logout (isi lama `doLogout` setelah konfirmasi) |
+| `renderHistSkeleton()` | Skeleton shimmer untuk loading history |
+| `clearSearch()` | Kosongkan input search & render ulang daftar |
+
 ---
 
 ## 6. UI / Komponen Tampilan
@@ -489,3 +508,5 @@ IDR, JPY, KRW, VND, BIF, CLP, GNF, ISK, KMF, MGA, PYG, RWF, UGX, XAF, XOF, XPF
 - Halaman menggunakan font: DM Sans (teks) dan DM Mono (monospace/kode)
 - Responsive design dengan CSS custom properties (variables)
 - Sidebar dapat di-collapse untuk layar sempit
+- Optimalisasi 2026-07-16: lookup item/remark memakai index map (`ITEM_INDEX`/`REMARK_INDEX`), count sidebar memakai cache (`SIDEBAR_COUNTS`) — keduanya di-rebuild setelah bulk action; detail kartu di-render lazy saat pertama kali expand; badge history di-update in-place. Konfirmasi bulk action & logout memakai dialog custom (bukan `confirm()` browser); notifikasi validasi memakai toast (bukan `alert()`).
+- Tool pendukung: `tools/check-js.js` (Node) — validasi sintaks blok `<script>` main.htm sebelum paste ke SE80.
