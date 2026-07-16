@@ -2173,18 +2173,38 @@ function formatNumHist(rawStr, currency) {
 }
 
 /* ================================================================
-   SIDEBAR COUNT HELPERS
+   SIDEBAR COUNT HELPERS — CACHED VERSION
    ================================================================ */
+/* Cache count sidebar — dibangun sekali dari satu loop ALL_DATA1,
+   di-rebuild hanya setelah bulk action. Hasil identik dgn filter lama. */
+var SIDEBAR_COUNTS = { total: {}, byBsart: {} };
+
+function buildSidebarCounts() {
+  SIDEBAR_COUNTS = { total: {}, byBsart: {} };
+  for (var i = 0; i < ALL_DATA1.length; i++) {
+    var d  = ALL_DATA1[i];
+    var pl = d.plant;
+    if (!SIDEBAR_COUNTS.total[pl]) SIDEBAR_COUNTS.total[pl] = 0;
+    SIDEBAR_COUNTS.total[pl]++;
+    if (!SIDEBAR_COUNTS.byBsart[pl]) SIDEBAR_COUNTS.byBsart[pl] = {};
+    if (!SIDEBAR_COUNTS.byBsart[pl][d.bsart]) {
+      SIDEBAR_COUNTS.byBsart[pl][d.bsart] = 0;
+    }
+    SIDEBAR_COUNTS.byBsart[pl][d.bsart]++;
+  }
+}
+
 function countByBsart(bsartList, plant) {
-  return ALL_DATA1.filter(function(d) {
-    return d.plant === plant && bsartList.indexOf(d.bsart) > -1;
-  }).length;
+  var m = SIDEBAR_COUNTS.byBsart[plant] || {};
+  var n = 0;
+  for (var i = 0; i < bsartList.length; i++) {
+    n += m[bsartList[i]] || 0;
+  }
+  return n;
 }
 
 function countTotalByPlant(plantCode) {
-  return ALL_DATA1.filter(function(d) {
-    return d.plant === plantCode;
-  }).length;
+  return SIDEBAR_COUNTS.total[plantCode] || 0;
 }
 
 /* ================================================================
@@ -3949,6 +3969,7 @@ function submitAction(action) {
         });
 
         buildDataIndexes();
+        buildSidebarCounts();
 
         var bsartList = POTYPE_MAP[curPlant][curPotype].bsart;
         curData = ALL_DATA1.filter(function(d) {
@@ -4073,6 +4094,7 @@ window.addEventListener('popstate', function() {
    ================================================================ */
 (function init() {
   buildDataIndexes();
+  buildSidebarCounts();
   renderSidebar();
 
   loadHistoryCounts('1200');
