@@ -3621,11 +3621,10 @@ function renderCardListOnly() {
     html += '<div class="empty-txt">No results found</div></div>';
   } else {
     pageData.forEach(function(d) {
-      var items         = getItemsForPO(d.ebeln);
-      var remark        = getRemarkForPO(d.ebeln);
       var amountDisplay = formatAmount(d.totpr, d.waerk);
 
-      html += '<div class="po-card" id="card_' + d.ebeln + '">';
+      html += '<div class="po-card" id="card_' + d.ebeln +
+              '" data-ebeln="' + d.ebeln + '">';
       html += '<div class="card-top">';
       html += '<input type="checkbox" class="card-cb"' +
               ' data-ebeln="' + d.ebeln + '"' +
@@ -3653,39 +3652,7 @@ function renderCardListOnly() {
               '<div class="meta-val">' + escHtml(d.waerk) + '</div></div>';
       html += '</div>';
 
-      html += '<div class="card-detail">';
-      html += '<table><thead><tr>';
-      html += '<th>Item</th><th>Description</th>';
-      html += '<th>Qty</th><th>Unit</th>';
-      html += '<th class="num-col">Net Price</th>';
-      html += '<th class="num-col">Total</th><th>Curr</th>';
-      html += '</tr></thead><tbody>';
-      items.forEach(function(it) {
-        html += '<tr>';
-        html += '<td>' + escHtml(it.ebelp) + '</td>';
-        html += '<td>' + escHtml(it.maktx) + '</td>';
-        html += '<td class="num-col">' + formatNum(it.menge, '') + '</td>';
-        html += '<td>' + escHtml(it.meins) + '</td>';
-        html += '<td class="num-col">' +
-                formatNum(it.nettt, it.waerk) + '</td>';
-        html += '<td class="num-col">' +
-                formatNum(it.netwr, it.waerk) + '</td>';
-        html += '<td>' + escHtml(it.waerk) + '</td>';
-        html += '</tr>';
-      });
-      html += '</tbody></table>';
-
-      html += '<div class="add-info">';
-      html += '<span class="add-info-icon">&#9432;</span><div>';
-      html += '<div class="add-info-lbl">Additional Information</div>';
-      if (remark) {
-        html += '<div class="add-info-txt">' + escHtml(remark) + '</div>';
-      } else {
-        html += '<div class="add-info-empty">' +
-                '(No description / comment available)</div>';
-      }
-      html += '</div></div>';
-      html += '</div>';
+      html += '<div class="card-detail" data-rendered=""></div>';
       html += '</div>';
     });
   }
@@ -3786,13 +3753,64 @@ function onSearchChange() {
   }, 200);
 }
 
+/* Lazy render isi detail kartu — markup identik dgn render lama,
+   dibuat saat kartu pertama kali di-expand. */
+function buildCardDetailHtml(ebeln) {
+  var items  = getItemsForPO(ebeln);
+  var remark = getRemarkForPO(ebeln);
+  var html   = '';
+  html += '<table><thead><tr>';
+  html += '<th>Item</th><th>Description</th>';
+  html += '<th>Qty</th><th>Unit</th>';
+  html += '<th class="num-col">Net Price</th>';
+  html += '<th class="num-col">Total</th><th>Curr</th>';
+  html += '</tr></thead><tbody>';
+  items.forEach(function(it) {
+    html += '<tr>';
+    html += '<td>' + escHtml(it.ebelp) + '</td>';
+    html += '<td>' + escHtml(it.maktx) + '</td>';
+    html += '<td class="num-col">' + formatNum(it.menge, '') + '</td>';
+    html += '<td>' + escHtml(it.meins) + '</td>';
+    html += '<td class="num-col">' +
+            formatNum(it.nettt, it.waerk) + '</td>';
+    html += '<td class="num-col">' +
+            formatNum(it.netwr, it.waerk) + '</td>';
+    html += '<td>' + escHtml(it.waerk) + '</td>';
+    html += '</tr>';
+  });
+  html += '</tbody></table>';
+
+  html += '<div class="add-info">';
+  html += '<span class="add-info-icon">&#9432;</span><div>';
+  html += '<div class="add-info-lbl">Additional Information</div>';
+  if (remark) {
+    html += '<div class="add-info-txt">' + escHtml(remark) + '</div>';
+  } else {
+    html += '<div class="add-info-empty">' +
+            '(No description / comment available)</div>';
+  }
+  html += '</div></div>';
+  return html;
+}
+
+function ensureCardDetail(card) {
+  if (!card) return;
+  var det = card.querySelector('.card-detail');
+  if (!det || det.getAttribute('data-rendered') === '1') return;
+  det.innerHTML = buildCardDetailHtml(card.getAttribute('data-ebeln'));
+  det.setAttribute('data-rendered', '1');
+}
+
 function toggleCard(ebeln) {
   var c = document.getElementById('card_' + ebeln);
-  if (c) c.classList.toggle('expanded');
+  if (!c) return;
+  ensureCardDetail(c);
+  c.classList.toggle('expanded');
 }
 
 function expandAll() {
   document.querySelectorAll('.po-card').forEach(function(c) {
+    ensureCardDetail(c);
     c.classList.add('expanded');
   });
 }
