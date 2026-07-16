@@ -3488,16 +3488,31 @@ function histGoPage(pg) {
 /* ================================================================
    PO LIST FUNCTIONS
    ================================================================ */
+/* Index ebeln -> items / remark. Dibangun sekali (init) dan
+   di-rebuild setelah bulk action. Output identik dgn filter lama. */
+var ITEM_INDEX   = {};
+var REMARK_INDEX = {};
+
+function buildDataIndexes() {
+  ITEM_INDEX   = {};
+  REMARK_INDEX = {};
+  for (var i = 0; i < ALL_DATA2.length; i++) {
+    var it = ALL_DATA2[i];
+    if (!ITEM_INDEX[it.ebeln]) ITEM_INDEX[it.ebeln] = [];
+    ITEM_INDEX[it.ebeln].push(it);
+    if (!REMARK_INDEX[it.ebeln] &&
+        it.text && it.text.trim() !== '') {
+      REMARK_INDEX[it.ebeln] = it.text;
+    }
+  }
+}
+
 function getItemsForPO(ebeln) {
-  return ALL_DATA2.filter(function(d) { return d.ebeln === ebeln; });
+  return ITEM_INDEX[ebeln] || [];
 }
 
 function getRemarkForPO(ebeln) {
-  var items = getItemsForPO(ebeln);
-  for (var i = 0; i < items.length; i++) {
-    if (items[i].text && items[i].text.trim() !== '') return items[i].text;
-  }
-  return '';
+  return REMARK_INDEX[ebeln] || '';
 }
 
 function getFilteredData() {
@@ -3933,6 +3948,8 @@ function submitAction(action) {
           return processed.indexOf(d.ebeln) === -1;
         });
 
+        buildDataIndexes();
+
         var bsartList = POTYPE_MAP[curPlant][curPotype].bsart;
         curData = ALL_DATA1.filter(function(d) {
           return d.plant === curPlant &&
@@ -4055,6 +4072,7 @@ window.addEventListener('popstate', function() {
    INIT
    ================================================================ */
 (function init() {
+  buildDataIndexes();
   renderSidebar();
 
   loadHistoryCounts('1200');
