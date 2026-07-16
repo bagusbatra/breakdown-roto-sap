@@ -2225,9 +2225,21 @@ function loadHistoryCounts(plantCode) {
         rel: parseInt(res.count_rel) || 0,
         rej: parseInt(res.count_rej) || 0
       };
-      renderSidebar();
+      updateHistBadges(plantCode);
     })
     .catch(function() {});
+}
+
+/* Update badge history di tempat; fallback render penuh bila
+   sidebar belum pernah dirender. */
+function updateHistBadges(plantCode) {
+  var elRel = document.getElementById('sbCntRel_' + plantCode);
+  var elRej = document.getElementById('sbCntRej_' + plantCode);
+  if (!elRel || !elRej) { renderSidebar(); return; }
+  elRel.textContent   = histCounts[plantCode].rel;
+  elRel.style.display = histCounts[plantCode].rel > 0 ? '' : 'none';
+  elRej.textContent   = histCounts[plantCode].rej;
+  elRej.style.display = histCounts[plantCode].rej > 0 ? '' : 'none';
 }
 
 /* ================================================================
@@ -2303,18 +2315,18 @@ function renderSidebar() {
             '" onclick="switchHistory(\'' + p.code + '\',\'REL\')">' +
             '<span style="display:flex;align-items:center;gap:6px;">' +
             '&#10003; History Release</span>';
-    if (cntRel > 0) {
-      html += '<span class="sb-cnt-rel">' + cntRel + '</span>';
-    }
+    html += '<span class="sb-cnt-rel" id="sbCntRel_' + p.code + '"' +
+            (cntRel > 0 ? '' : ' style="display:none;"') + '>' +
+            cntRel + '</span>';
     html += '</a>';
 
     html += '<a class="sb-link' + (isRejActive ? ' active-rej' : '') +
             '" onclick="switchHistory(\'' + p.code + '\',\'REJ\')">' +
             '<span style="display:flex;align-items:center;gap:6px;">' +
             '&#10007; History Reject</span>';
-    if (cntRej > 0) {
-      html += '<span class="sb-cnt-rej">' + cntRej + '</span>';
-    }
+    html += '<span class="sb-cnt-rej" id="sbCntRej_' + p.code + '"' +
+            (cntRej > 0 ? '' : ' style="display:none;"') + '>' +
+            cntRej + '</span>';
     html += '</a>';
 
     html += '</div>'; /* tutup sb-hist-sub */
