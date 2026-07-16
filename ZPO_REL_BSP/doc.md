@@ -108,11 +108,13 @@ Data digabung ke `lt_data1` (header) dan `lt_data2` (item) lalu diserialisasi ke
 
 #### 4.2.5 `GET_OGR` — Outstanding Goods Receipt
 
+> **Status: NONAKTIF.** Menu Outstanding GR disembunyikan lewat feature flag `ENABLE_OGR = false` di `main.htm`. Backend `GET_OGR` dan seluruh fungsi render-nya dibiarkan utuh — set flag ke `true` untuk mengaktifkan kembali.
+
 - **Tujuan**: Menampilkan PO yang sudah full release (`frgke = 'R'`) tapi belum ada penerimaan barang (GR)
 - **Input**: `werks`
 - **Logika**:
   1. Tentukan daftar `bsart` yang relevan per plant:
-     - Plant 1200: `PSB7`, `POK1`, `PSB1`, `PSB3`, `PSB4`, `PSB2`, `PSB8`, `PSB9`, `PSBT`, `PSB5`, `PSB6`, `PSBI`, `POK9`
+     - Plant 1200: `PSB7`, `POK1`, `PSB1`, `PSB3`, `PSB4`, `PSB2`, `PSB8`, `PSB9`, `PSBT`, `PSB5`, `PSB6`, `PSBI`, `POK9`, `KITE`
      - Plant 1300: `PSM7`, `PSM1`, `PSM3`, `PSM4`, `PSM2`, `PSM8`, `PSM9`, `PSMT`, `PSM5`, `PSM6`, `PSMI`, `POK9`
   2. `SELECT` dari `ekko` JOIN `ekpo` dengan kondisi:
      - `frgke = 'R'` (sudah release penuh)
@@ -192,6 +194,7 @@ Data digabung ke `lt_data1` (header) dan `lt_data2` (item) lalu diserialisasi ke
 | `SPAREPART` | PO Sparepart & Tools | `PSB8`, `PSB9`, `PSBT` |
 | `UTILITY` | PO Bahan Penunjang & Utility | `PSB5`, `PSB6` |
 | `EXIM` | PO Exim | `PSBI`, `POK9` |
+| `IT` | PO IT | `KITE` |
 
 #### Plant 1300 — Semarang
 
@@ -214,6 +217,7 @@ Data digabung ke `lt_data1` (header) dan `lt_data2` (item) lalu diserialisasi ke
 | Sparepart & Tools | `#b45309` | `#fef3c7` |
 | Utility | `#0891b2` | `#cffafe` |
 | Exim | `#c81e1e` | `#fde8e8` |
+| IT | `#4f46e5` | `#e0e7ff` |
 
 ### 5.4 Fungsi JavaScript Utama
 

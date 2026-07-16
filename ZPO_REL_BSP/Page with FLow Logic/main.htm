@@ -766,6 +766,7 @@ IF lv_action = 'GET_OGR'.
       ( `PSB8` ) ( `PSB9` ) ( `PSBT` )
       ( `PSB5` ) ( `PSB6` )
       ( `PSBI` ) ( `POK9` )
+      ( `KITE` )
     ).
   ELSE.
     lv_bsarts_ogr = VALUE string_table(
@@ -809,6 +810,7 @@ IF lv_action = 'GET_OGR'.
            menge   TYPE ekpo-menge,
            meins   TYPE ekpo-meins,
            netpr   TYPE ekpo-netpr,
+           netwr   TYPE ekpo-netwr,
          END OF ty_ogr_kmi.
 
   DATA: lt_ogr_kmi   TYPE STANDARD TABLE OF ty_ogr_kmi,
@@ -817,7 +819,7 @@ IF lv_action = 'GET_OGR'.
   " Select PO yang sudah full release tapi belum GR
   SELECT a~ebeln a~bsart a~bedat a~lifnr a~waers
          b~ebelp b~matnr b~txz01 b~werks
-         b~menge b~meins b~netpr
+         b~menge b~meins b~netpr b~netwr
     FROM ekko AS a
     INNER JOIN ekpo AS b ON b~ebeln = a~ebeln
     INTO CORRESPONDING FIELDS OF TABLE lt_ogr_kmi
@@ -964,6 +966,7 @@ IF lv_action = 'GET_OGR'.
         lv_ogr_txz01  TYPE string,
         lv_ogr_menge  TYPE string,
         lv_ogr_netpr  TYPE string,
+        lv_ogr_netwr  TYPE string,
         lv_ogr_line   TYPE string,
         lv_ogr_bedat  TYPE string.
 
@@ -995,8 +998,10 @@ IF lv_action = 'GET_OGR'.
     lv_ogr_txz01 = ls_ogr_kmi-txz01.
     lv_ogr_menge = ls_ogr_kmi-menge.
     lv_ogr_netpr = ls_ogr_kmi-netpr.
+    lv_ogr_netwr = ls_ogr_kmi-netwr.
     CONDENSE lv_ogr_menge NO-GAPS.
     CONDENSE lv_ogr_netpr NO-GAPS.
+    CONDENSE lv_ogr_netwr NO-GAPS.
 
     " Escape karakter berbahaya
     REPLACE ALL OCCURRENCES OF '"' IN lv_ogr_n1    WITH ''.
@@ -1025,6 +1030,7 @@ IF lv_action = 'GET_OGR'.
       '"menge":"'   lv_ogr_menge        '",'
       '"meins":"'   ls_ogr_kmi-meins   '",'
       '"netpr":"'   lv_ogr_netpr        '",'
+      '"netwr":"'   lv_ogr_netwr        '",'
       '"waers":"'   ls_ogr_kmi-waers   '"}'
     INTO lv_ogr_line.
 
@@ -1948,6 +1954,10 @@ var ALL_DATA2 = <%= lv_json2 %>;
 /* ================================================================
    CONSTANTS & MAPS
    ================================================================ */
+/* Feature flag: set true untuk mengaktifkan kembali menu Outstanding GR.
+   Backend GET_OGR & fungsi render-nya sengaja dibiarkan utuh. */
+var ENABLE_OGR = false;
+
 var POTYPE_MAP = {
   '1200': {
     'JASA':      { label: 'PO Jasa',                          bsart: ['PSB7'] },
@@ -1956,7 +1966,8 @@ var POTYPE_MAP = {
     'PENUNJANG': { label: 'PO Bahan Baku Penunjang',          bsart: ['PSB2'] },
     'SPAREPART': { label: 'PO Sparepart &amp; Tools',         bsart: ['PSB8','PSB9','PSBT'] },
     'UTILITY':   { label: 'PO Bahan Penunjang &amp; Utility', bsart: ['PSB5','PSB6'] },
-    'EXIM':      { label: 'PO Exim',                          bsart: ['PSBI','POK9'] }
+    'EXIM':      { label: 'PO Exim',                          bsart: ['PSBI','POK9'] },
+    'KITE':        { label: 'PO KITE',                            bsart: ['KITE'] }
   },
   '1300': {
     'JASA':      { label: 'PO Jasa',                          bsart: ['PSM7'] },
@@ -1979,7 +1990,8 @@ var BSART_POTYPE_MAP = {};
     'PENUNJANG': { label: 'PO Bahan Penunjang',   color: '#0369a1', bg: '#e0f2fe' },
     'SPAREPART': { label: 'PO Sparepart & Tools', color: '#b45309', bg: '#fef3c7' },
     'UTILITY':   { label: 'PO Utility',           color: '#0891b2', bg: '#cffafe' },
-    'EXIM':      { label: 'PO Exim',              color: '#c81e1e', bg: '#fde8e8' }
+    'EXIM':      { label: 'PO Exim',              color: '#c81e1e', bg: '#fde8e8' },
+    'KITE':        { label: 'PO KITE',                color: '#4f46e5', bg: '#e0e7ff' }
   };
   ['1200','1300'].forEach(function(plant) {
     var map = POTYPE_MAP[plant];
@@ -2289,18 +2301,20 @@ function renderSidebar() {
     html += '</div>'; /* tutup sb-hist-parent */
 
     /* ── Outstanding GR ── */
-    var isOgrActive = (curPlant === p.code && ogrMode === 'OGR');
-    var ogrCnt      = ogrCounts[p.code] || 0;
+    if (ENABLE_OGR) {
+      var isOgrActive = (curPlant === p.code && ogrMode === 'OGR');
+      var ogrCnt      = ogrCounts[p.code] || 0;
 
-    html += '<div class="sb-divider" style="margin:4px 0;"></div>';
-    html += '<a class="sb-link' + (isOgrActive ? ' active-ogr' : '') +
-            '" onclick="switchOGR(\'' + p.code + '\')">';
-    html += '<span style="display:flex;align-items:center;gap:6px;">' +
-            '&#128230; Outstanding GR</span>';
-    if (ogrCnt > 0) {
-      html += '<span class="sb-cnt-ogr">' + ogrCnt + '</span>';
+      html += '<div class="sb-divider" style="margin:4px 0;"></div>';
+      html += '<a class="sb-link' + (isOgrActive ? ' active-ogr' : '') +
+              '" onclick="switchOGR(\'' + p.code + '\')">';
+      html += '<span style="display:flex;align-items:center;gap:6px;">' +
+              '&#128230; Outstanding GR</span>';
+      if (ogrCnt > 0) {
+        html += '<span class="sb-cnt-ogr">' + ogrCnt + '</span>';
+      }
+      html += '</a>';
     }
-    html += '</a>';
 
     html += '</div>'; /* tutup sb-submenu */
     html += '</div>'; /* tutup sb-section */
@@ -2407,6 +2421,8 @@ function switchHistory(plant, mode) {
    SWITCH VIEW — Outstanding GR
    ================================================================ */
 function switchOGR(plant) {
+  if (!ENABLE_OGR) return;
+
   curPlant  = plant;
   curPotype = '';
   histMode  = '';
@@ -2506,7 +2522,8 @@ function renderOGRPage(plant, data) {
       txz01: r.txz01,
       menge: r.menge,
       meins: r.meins,
-      netpr: r.netpr
+      netpr: r.netpr,
+      netwr: r.netwr
     });
   });
 
@@ -2550,10 +2567,8 @@ function renderOGRPage(plant, data) {
   /* Hitung estimasi total amount per currency */
   var amtByCurr = {};
   data.forEach(function(r) {
-    var curr  = r.waers || '';
-    var netpr = parseAbapNum(r.netpr) || 0;
-    var menge = parseAbapNum(r.menge) || 0;
-    var amt   = netpr * menge;
+    var curr = r.waers || '';
+    var amt  = parseAbapNum(r.netwr) || 0;
     if (!amtByCurr[curr]) amtByCurr[curr] = 0;
     amtByCurr[curr] += amt;
   });
@@ -2694,7 +2709,8 @@ function ogrGetFiltered() {
       txz01: r.txz01,
       menge: r.menge,
       meins: r.meins,
-      netpr: r.netpr
+      netpr: r.netpr,
+      netwr: r.netwr
     });
   });
 
@@ -2745,9 +2761,7 @@ function ogrRenderCards(order, grouped) {
     /* Hitung total amount */
     var totalAmt = 0;
     po.items.forEach(function(it) {
-      var netpr = parseAbapNum(it.netpr) || 0;
-      var menge = parseAbapNum(it.menge) || 0;
-      totalAmt += netpr * menge;
+      totalAmt += parseAbapNum(it.netwr) || 0;
     });
 
     var isZero   = ZERO_DEC_CURRENCIES.indexOf(
@@ -2832,7 +2846,7 @@ function ogrRenderCards(order, grouped) {
     po.items.forEach(function(it) {
       var netpr    = parseAbapNum(it.netpr) || 0;
       var menge    = parseAbapNum(it.menge) || 0;
-      var itemAmt  = netpr * menge;
+      var itemAmt  = parseAbapNum(it.netwr) || 0;
       var curr     = po.waers || '';
       var isZeroCu = ZERO_DEC_CURRENCIES.indexOf(
                        curr.toUpperCase()) > -1;
