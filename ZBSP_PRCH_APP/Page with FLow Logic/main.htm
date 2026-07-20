@@ -1423,6 +1423,352 @@ CASE lv_action.
       lv_json ']}' INTO lv_output.
 
 *======================================================================
+  WHEN 'GET_APP_PO'.
+*======================================================================
+* Monitoring status PO dari PR yang di-approve LEWAT SISTEM INI
+* (sumber = ZROTO_APP_HIST). Untuk tiap item approved ditentukan
+* apakah sudah dijadikan PO, dengan menautkan EKPO (EKPO-BANFN/BNFPO
+* menunjuk balik ke PR). Status per item:
+*   OPEN    = belum ada PO aktif
+*   PARTIAL = qty PO < qty approved
+*   DONE    = qty PO >= qty approved (sudah jadi PO penuh)
+*   DEL     = item PR sudah dihapus (EBAN-LOEKZ = 'L')
+* Query tetap ringan karena himpunan approved sudah terbatas per
+* plant (dan hanya PR yang pernah lewat aplikasi ini).
+*
+* CATATAN: berbeda dengan ZPR_REL_BSP yang menerima werks sebagai
+* daftar comma-separated, di sini werks adalah SATU grup plant
+* ('1200' atau '1300') supaya check_werks_allowed dapat diterapkan
+* dan user tidak bisa membaca plant di luar haknya.
+    IF lv_werks IS INITIAL.
+      lv_output = '{"status":"E",' &
+        '"message":"werks kosong","data":[]}'.
+      response->append_cdata( lv_output ).
+      _m_navigation->response_complete( ).
+      EXIT.
+    ENDIF.
+
+    check_werks_allowed lv_werks.
+    IF lv_plant_ok = abap_false.
+      lv_output = '{"status":"E",' &
+        '"message":"Anda tidak memiliki akses ke plant ini","data":[]}'.
+      response->append_cdata( lv_output ).
+      _m_navigation->response_complete( ).
+      EXIT.
+    ENDIF.
+
+    CLEAR lt_bsart_rng.
+    IF lv_bsart IS NOT INITIAL AND lv_bsart NE 'ALL'.
+      parse_bsart_range lv_bsart lt_bsart_rng.
+    ENDIF.
+
+    " Saat pilih Surabaya (1200), tampilkan juga data dari plant
+    " 2000, 1000, 1001, 1100. Saat pilih Semarang (1300), tampilkan
+    " juga data dari plant 3000.
+    CLEAR lt_werks_rng.
+    lv_werks_line-sign = 'I'.
+    lv_werks_line-option = 'EQ'.
+    lv_werks_line-low = lv_werks.
+    APPEND lv_werks_line TO lt_werks_rng.
+    IF lv_werks = '1200'.
+      lv_werks_line-low = '2000'.
+      APPEND lv_werks_line TO lt_werks_rng.
+      lv_werks_line-low = '1000'.
+      APPEND lv_werks_line TO lt_werks_rng.
+      lv_werks_line-low = '1001'.
+      APPEND lv_werks_line TO lt_werks_rng.
+      lv_werks_line-low = '1100'.
+      APPEND lv_werks_line TO lt_werks_rng.
+    ELSEIF lv_werks = '1300'.
+      lv_werks_line-low = '3000'.
+      APPEND lv_werks_line TO lt_werks_rng.
+    ENDIF.
+
+    CLEAR lt_hist_app.
+    SELECT banfn bnfpo werks bsart txz01 ernam erdat
+           menge meins preis peinh waers ekgrp
+           app_by app_at app_tm
+      FROM zroto_app_hist
+      INTO CORRESPONDING FIELDS OF TABLE lt_hist_app
+      WHERE werks IN lt_werks_rng
+        AND bsart IN lt_bsart_rng
+      ORDER BY app_at DESCENDING app_tm DESCENDING.
+
+    IF lt_hist_app IS INITIAL.
+      lv_output = '{"status":"S",' &
+        '"message":"OK","data":[]}'.
+      response->append_cdata( lv_output ).
+      _m_navigation->response_complete( ).
+      EXIT.
+    ENDIF.
+
+    " Range banfn unik untuk lookup EKPO & EBAN.
+    DATA: lt_po_bn_rng TYPE RANGE OF ekpo-banfn,
+          ls_po_bn_rng LIKE LINE OF lt_po_bn_rng.
+    CLEAR lt_po_bn_rng.
+    LOOP AT lt_hist_app INTO ls_hist_app.
+      READ TABLE lt_po_bn_rng WITH KEY low = ls_hist_app-banfn
+        TRANSPORTING NO FIELDS.
+      IF sy-subrc NE 0.
+        CLEAR ls_po_bn_rng.
+        ls_po_bn_rng-sign   = 'I'.
+        ls_po_bn_rng-option = 'EQ'.
+        ls_po_bn_rng-low    = ls_hist_app-banfn.
+        APPEND ls_po_bn_rng TO lt_po_bn_rng.
+      ENDIF.
+    ENDLOOP.
+
+    " Item PO (aktif) yang bersumber dari PR-PR ini.
+    TYPES: BEGIN OF ty_ekpo_po,
+             ebeln TYPE ekpo-ebeln,
+             ebelp TYPE ekpo-ebelp,
+             banfn TYPE ekpo-banfn,
+             bnfpo TYPE ekpo-bnfpo,
+             menge TYPE ekpo-menge,
+           END OF ty_ekpo_po.
+    DATA: lt_ekpo_po TYPE STANDARD TABLE OF ty_ekpo_po,
+          ls_ekpo_po TYPE ty_ekpo_po.
+
+    CLEAR lt_ekpo_po.
+    SELECT ebeln ebelp banfn bnfpo menge
+      FROM ekpo
+      INTO TABLE lt_ekpo_po
+      WHERE banfn IN lt_po_bn_rng
+        AND loekz = ' '.
+
+    " Agregasi qty dipesan + nomor PO pertama per item PR.
+    TYPES: BEGIN OF ty_po_agg,
+             banfn  TYPE ekpo-banfn,
+             bnfpo  TYPE ekpo-bnfpo,
+             ebeln  TYPE ekpo-ebeln,
+             ordqty TYPE ekpo-menge,
+           END OF ty_po_agg.
+    DATA: lt_po_agg TYPE STANDARD TABLE OF ty_po_agg,
+          ls_po_agg TYPE ty_po_agg.
+
+    CLEAR lt_po_agg.
+    SORT lt_ekpo_po BY banfn bnfpo ebeln ebelp.
+    LOOP AT lt_ekpo_po INTO ls_ekpo_po.
+      READ TABLE lt_po_agg INTO ls_po_agg
+        WITH KEY banfn = ls_ekpo_po-banfn
+                 bnfpo = ls_ekpo_po-bnfpo.
+      IF sy-subrc = 0.
+        ls_po_agg-ordqty = ls_po_agg-ordqty + ls_ekpo_po-menge.
+        MODIFY lt_po_agg FROM ls_po_agg INDEX sy-tabix.
+      ELSE.
+        CLEAR ls_po_agg.
+        ls_po_agg-banfn  = ls_ekpo_po-banfn.
+        ls_po_agg-bnfpo  = ls_ekpo_po-bnfpo.
+        ls_po_agg-ebeln  = ls_ekpo_po-ebeln.
+        ls_po_agg-ordqty = ls_ekpo_po-menge.
+        APPEND ls_po_agg TO lt_po_agg.
+      ENDIF.
+    ENDLOOP.
+
+    " Header PO: vendor & tanggal buat.
+    TYPES: BEGIN OF ty_ekko_po,
+             ebeln TYPE ekko-ebeln,
+             lifnr TYPE ekko-lifnr,
+             aedat TYPE ekko-aedat,
+           END OF ty_ekko_po.
+    DATA: lt_ekko_po TYPE STANDARD TABLE OF ty_ekko_po,
+          ls_ekko_po TYPE ty_ekko_po.
+    CLEAR lt_ekko_po.
+    IF lt_po_agg IS NOT INITIAL.
+      SELECT ebeln lifnr aedat FROM ekko
+        INTO TABLE lt_ekko_po
+        FOR ALL ENTRIES IN lt_po_agg
+        WHERE ebeln = lt_po_agg-ebeln.
+    ENDIF.
+
+    " Nama vendor.
+    TYPES: BEGIN OF ty_lfa1_po,
+             lifnr TYPE lfa1-lifnr,
+             name1 TYPE lfa1-name1,
+           END OF ty_lfa1_po.
+    DATA: lt_lfa1_po TYPE STANDARD TABLE OF ty_lfa1_po,
+          ls_lfa1_po TYPE ty_lfa1_po.
+    CLEAR lt_lfa1_po.
+    IF lt_ekko_po IS NOT INITIAL.
+      SELECT lifnr name1 FROM lfa1
+        INTO TABLE lt_lfa1_po
+        FOR ALL ENTRIES IN lt_ekko_po
+        WHERE lifnr = lt_ekko_po-lifnr.
+    ENDIF.
+
+    " Status EBAN saat ini (deteksi item PR yang sudah dihapus).
+    TYPES: BEGIN OF ty_eban_st,
+             banfn TYPE eban-banfn,
+             bnfpo TYPE eban-bnfpo,
+             loekz TYPE eban-loekz,
+           END OF ty_eban_st.
+    DATA: lt_eban_st TYPE STANDARD TABLE OF ty_eban_st,
+          ls_eban_st TYPE ty_eban_st.
+    CLEAR lt_eban_st.
+    SELECT banfn bnfpo loekz FROM eban
+      INTO TABLE lt_eban_st
+      WHERE banfn IN lt_po_bn_rng.
+
+    " Lookup fullname pembuat (ERNAM) — sama seperti GET_HIST_APP.
+    CLEAR: lt_bnames, lt_u21, lt_adp, lt_uname_nm.
+    LOOP AT lt_hist_app INTO ls_hist_app.
+      IF ls_hist_app-ernam IS NOT INITIAL.
+        CLEAR ls_bname.
+        ls_bname-bname = ls_hist_app-ernam.
+        COLLECT ls_bname INTO lt_bnames.
+      ENDIF.
+    ENDLOOP.
+
+    IF lt_bnames IS NOT INITIAL.
+      SELECT * FROM usr21 INTO TABLE lt_u21
+        FOR ALL ENTRIES IN lt_bnames
+        WHERE bname = lt_bnames-bname.
+      IF lt_u21 IS NOT INITIAL.
+        SELECT * FROM adrp INTO TABLE lt_adp
+          FOR ALL ENTRIES IN lt_u21
+          WHERE persnumber = lt_u21-persnumber
+            AND date_from <= sy-datum.
+        SORT lt_adp BY persnumber date_from DESCENDING.
+        LOOP AT lt_u21 INTO ls_u21.
+          READ TABLE lt_adp INTO ls_adp
+            WITH KEY persnumber = ls_u21-persnumber.
+          IF sy-subrc = 0.
+            ls_uname_nm-bname    = ls_u21-bname.
+            ls_uname_nm-fullname = ls_adp-name_text.
+            APPEND ls_uname_nm TO lt_uname_nm.
+          ENDIF.
+        ENDLOOP.
+      ENDIF.
+    ENDIF.
+
+    DATA: lv_po_status TYPE string,
+          lv_po_ebeln  TYPE string,
+          lv_po_lifnr  TYPE string,
+          lv_po_vendor TYPE string,
+          lv_po_podate TYPE string,
+          lv_po_ordqty TYPE string,
+          lv_po_age    TYPE i,
+          lv_po_age_s  TYPE string.
+
+    CLEAR: lv_json, lv_sep.
+
+    LOOP AT lt_hist_app INTO ls_hist_app.
+      CLEAR: lv_po_status, lv_po_ebeln, lv_po_lifnr,
+             lv_po_vendor, lv_po_podate, lv_po_ordqty.
+
+      " 1) item PR sudah dihapus?
+      READ TABLE lt_eban_st INTO ls_eban_st
+        WITH KEY banfn = ls_hist_app-banfn
+                 bnfpo = ls_hist_app-bnfpo.
+      IF sy-subrc = 0 AND ls_eban_st-loekz = 'L'.
+        lv_po_status = 'DEL'.
+      ELSE.
+        " 2) ada PO?
+        READ TABLE lt_po_agg INTO ls_po_agg
+          WITH KEY banfn = ls_hist_app-banfn
+                   bnfpo = ls_hist_app-bnfpo.
+        IF sy-subrc NE 0.
+          lv_po_status = 'OPEN'.
+        ELSE.
+          lv_po_ebeln = ls_po_agg-ebeln.
+          SHIFT lv_po_ebeln LEFT DELETING LEADING '0'.
+          lv_po_ordqty = ls_po_agg-ordqty.
+          CONDENSE lv_po_ordqty NO-GAPS.
+
+          READ TABLE lt_ekko_po INTO ls_ekko_po
+            WITH KEY ebeln = ls_po_agg-ebeln.
+          IF sy-subrc = 0.
+            lv_po_lifnr = ls_ekko_po-lifnr.
+            SHIFT lv_po_lifnr LEFT DELETING LEADING '0'.
+            fmt_date ls_ekko_po-aedat lv_po_podate.
+            READ TABLE lt_lfa1_po INTO ls_lfa1_po
+              WITH KEY lifnr = ls_ekko_po-lifnr.
+            IF sy-subrc = 0.
+              lv_po_vendor = ls_lfa1_po-name1.
+            ENDIF.
+          ENDIF.
+
+          IF ls_po_agg-ordqty >= ls_hist_app-menge.
+            lv_po_status = 'DONE'.
+          ELSE.
+            lv_po_status = 'PARTIAL'.
+          ENDIF.
+        ENDIF.
+      ENDIF.
+
+      " Umur (hari sejak approve) — dipakai untuk OPEN/PARTIAL.
+      lv_po_age = sy-datum - ls_hist_app-app_at.
+      IF lv_po_age < 0.
+        lv_po_age = 0.
+      ENDIF.
+      lv_po_age_s = lv_po_age.
+      CONDENSE lv_po_age_s NO-GAPS.
+
+      CLEAR lv_a_full.
+      READ TABLE lt_uname_nm INTO ls_uname_nm
+        WITH KEY bname = ls_hist_app-ernam.
+      IF sy-subrc = 0.
+        lv_a_full = ls_uname_nm-fullname.
+      ELSE.
+        lv_a_full = ls_hist_app-ernam.
+      ENDIF.
+      escape_json lv_a_full.
+
+      lv_a_menge = ls_hist_app-menge.
+      CONDENSE lv_a_menge NO-GAPS.
+      lv_a_preis = ls_hist_app-preis.
+      CONDENSE lv_a_preis NO-GAPS.
+      lv_a_peinh = ls_hist_app-peinh.
+      CONDENSE lv_a_peinh NO-GAPS.
+      lv_a_total = ls_hist_app-menge * ls_hist_app-preis.
+      lv_a_tstr  = lv_a_total.
+      CONDENSE lv_a_tstr NO-GAPS.
+      lv_a_txz01 = ls_hist_app-txz01.
+
+      CONCATENATE ls_hist_app-app_tm+0(2) ':'
+                  ls_hist_app-app_tm+2(2) ':'
+                  ls_hist_app-app_tm+4(2)
+        INTO lv_a_apptm.
+
+      fmt_date ls_hist_app-erdat  lv_a_erdat.
+      fmt_date ls_hist_app-app_at lv_a_appat.
+      escape_json lv_a_txz01.
+      escape_json lv_po_vendor.
+
+      CONCATENATE lv_json lv_sep
+        '{"banfn":"'    ls_hist_app-banfn  '",'
+        '"bnfpo":"'     ls_hist_app-bnfpo  '",'
+        '"werks":"'     ls_hist_app-werks  '",'
+        '"bsart":"'     ls_hist_app-bsart  '",'
+        '"txz01":"'     lv_a_txz01         '",'
+        '"ernam":"'     ls_hist_app-ernam  '",'
+        '"ernam_full":"' lv_a_full         '",'
+        '"erdat":"'     lv_a_erdat         '",'
+        '"menge":"'     lv_a_menge         '",'
+        '"meins":"'     ls_hist_app-meins  '",'
+        '"preis":"'     lv_a_preis         '",'
+        '"peinh":"'     lv_a_peinh         '",'
+        '"waers":"'     ls_hist_app-waers  '",'
+        '"total":"'     lv_a_tstr          '",'
+        '"ekgrp":"'     ls_hist_app-ekgrp  '",'
+        '"app_by":"'    ls_hist_app-app_by '",'
+        '"app_at":"'    lv_a_appat         '",'
+        '"app_tm":"'    lv_a_apptm         '",'
+        '"po_status":"' lv_po_status       '",'
+        '"ebeln":"'     lv_po_ebeln        '",'
+        '"lifnr":"'     lv_po_lifnr        '",'
+        '"vendor":"'    lv_po_vendor       '",'
+        '"po_date":"'   lv_po_podate       '",'
+        '"ordqty":"'    lv_po_ordqty       '",'
+        '"age":"'       lv_po_age_s        '"}'
+        INTO lv_json.
+      lv_sep = ','.
+    ENDLOOP.
+
+    CONCATENATE '{"status":"S","message":"OK","data":['
+      lv_json ']}' INTO lv_output.
+
+*======================================================================
   WHEN 'PROCESS'.
 *======================================================================
     IF lv_is_approver = abap_false.

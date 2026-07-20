@@ -350,6 +350,10 @@ body.sb-collapsed .main     { margin-left:0; }
   background:var(--danger-lt); color:var(--danger-d); font-weight:700;
 }
 .sb-link.active-rej::before { background:var(--danger); }
+.sb-link.active-po {
+  background:var(--danger-lt); color:var(--danger-d); font-weight:700;
+}
+.sb-link.active-po::before { background:var(--danger); }
 
 .sb-badge {
   font-size:11px; font-weight:700;
@@ -361,10 +365,12 @@ body.sb-collapsed .main     { margin-left:0; }
 .sb-badge-total   { background:var(--navy-900);   color:#fff; }
 .sb-badge-app     { background:var(--success-lt); color:var(--success-d); }
 .sb-badge-rej     { background:var(--danger-lt);  color:var(--danger-d); }
+.sb-badge-po      { background:var(--danger-lt);  color:var(--danger-d); }
 
 .sb-link.active     .sb-badge-pending { background:var(--primary);  color:#fff; }
 .sb-link.active-app .sb-badge-app     { background:var(--success); color:#fff; }
 .sb-link.active-rej .sb-badge-rej     { background:var(--danger);  color:#fff; }
+.sb-link.active-po  .sb-badge-po      { background:var(--danger);  color:#fff; }
 
 .sb-divider { height:1px; background:var(--border-soft); margin:10px 14px; }
 
@@ -682,6 +688,22 @@ body.sb-collapsed .main     { margin-left:0; }
 .b-nonmrp  { background:var(--warning-lt); color:var(--warning); }
 .b-items   { background:var(--success-lt); color:var(--success-d); }
 
+/* Status PO — dipakai view "Belum PO" (lihat §PO di script).
+   OPEN sengaja memakai warna danger: bagi tim Purchasing item ini
+   adalah pekerjaan yang belum dikerjakan, bukan sekadar info. */
+.b-po-open    { background:var(--danger-lt);  color:var(--danger-d); }
+.b-po-partial { background:var(--warning-lt); color:var(--warning); }
+.b-po-done    { background:var(--success-lt); color:var(--success-d); }
+.b-po-del     { background:var(--bg-soft);    color:var(--muted); }
+
+/* Umur PR yang belum jadi PO. Bertingkat: makin lama menganggur,
+   makin keras warnanya. */
+.b-age      { background:var(--bg-soft);    color:var(--text-soft); }
+.b-age-warn { background:var(--warning-lt); color:var(--warning); }
+.b-age-crit { background:var(--danger-lt);  color:var(--danger-d); }
+
+.cell-age-crit { color:var(--danger-d); font-weight:700; }
+
 .chip {
   display:inline-flex; align-items:center;
   padding:3px 8px; border-radius:6px;
@@ -982,6 +1004,53 @@ body.sb-collapsed .main     { margin-left:0; }
 .dash-plant-lbl {
   font-size:10.5px; color:var(--muted); font-weight:600;
   text-transform:uppercase; letter-spacing:.03em; margin-top:2px;
+}
+
+/* ── Kartu "Belum PO" ──
+   Diisi belakangan oleh fillDashPo() karena butuh query EKPO. Bagi
+   tim Purchasing ini adalah worklist mereka sendiri, jadi ditandai
+   merah secara seragam; satu-satunya keadaan yang melepas merahnya
+   adalah tidak ada sisa sama sekali (.is-clear). Yang ditonjolkan
+   UMURNYA — PR menganggur berminggu-minggu adalah kegagalan proses,
+   bukan sekadar angka. */
+.dash-po-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:14px; }
+.dash-po {
+  display:flex; align-items:center; gap:13px; width:100%; text-align:left;
+  background:var(--surface); border:1px solid var(--danger-lt);
+  border-left:3px solid var(--danger);
+  border-radius:var(--radius-md); box-shadow:var(--shadow-sm);
+  padding:16px 18px; cursor:pointer; font:inherit;
+  transition:box-shadow var(--dur-base) var(--ease),
+             border-color var(--dur-base) var(--ease),
+             transform var(--dur-base) var(--ease-out);
+}
+.dash-po:hover {
+  box-shadow:var(--shadow-md); transform:translateY(-1px);
+}
+.dash-po.is-clear {
+  border-color:var(--border); border-left-color:var(--success);
+}
+.dash-po-ico {
+  width:38px; height:38px; flex:none;
+  display:flex; align-items:center; justify-content:center;
+  border-radius:var(--radius-sm); font-size:17px;
+  background:var(--danger-lt); color:var(--danger-d);
+}
+.dash-po.is-clear .dash-po-ico { background:var(--success-lt); color:var(--success-d); }
+.dash-po-txt { flex:1; min-width:0; }
+.dash-po-main { display:block; font-size:14px; color:var(--text); font-weight:600; }
+.dash-po-main b { font-size:19px; font-weight:800; color:var(--navy-900); }
+.dash-po-sub {
+  display:block; font-size:11.5px; color:var(--muted);
+  font-weight:600; margin-top:3px;
+}
+.dash-po-age { color:var(--danger-d); font-weight:700; }
+.dash-po-go { color:var(--muted-lt); font-size:15px; flex:none; }
+.dash-dot {
+  display:inline-block; width:120px; height:13px; border-radius:6px;
+  background:linear-gradient(90deg,#eef0f6 25%,#f7f8fb 50%,#eef0f6 75%);
+  background-size:200% 100%;
+  animation:shimmer 1.4s ease infinite;
 }
 
 .dash-donut-wrap { display:flex; align-items:center; gap:28px; flex-wrap:wrap; }
@@ -1863,6 +1932,19 @@ function renderSidebar() {
       html+='</a>';
     });
 
+    /* Belum PO — badge hanya muncul kalau data sudah dimuat
+       (poLoaded); sebelum itu menu tetap bisa diklik. */
+    var isPo=(curPlant===p.code && curMode==='po');
+    html+='<a class="sb-link'+(isPo?' active-po':'')+'"'+
+          ' onclick="openPoView(\''+p.code+'\')">';
+    html+='<span style="display:flex;align-items:center;gap:7px;">'+
+          '&#128722; Belum PO</span>';
+    if (poLoaded){
+      var poCnt=poOpenStat(p.code).count;
+      if (poCnt>0) html+='<span class="sb-badge sb-badge-po">'+poCnt+'</span>';
+    }
+    html+='</a>';
+
     var isApp=(curPlant===p.code && curMode==='hist_app');
     html+='<a class="sb-link'+(isApp?' active-app':'')+'"'+
           ' onclick="switchView(\''+p.code+'\',\'hist_app\')">';
@@ -1937,6 +2019,28 @@ function renderDashboard() {
   html+=dashKpiCard('purple', '&#128200;', appRate+'%', 'Approval Rate');
   html+='</div>';
 
+  /* Sudah di-approve BOD, kini menunggu Purchasing — yaitu pengguna
+     aplikasi ini sendiri. Ditaruh tepat di bawah KPI karena inilah
+     satu-satunya blok di dashboard yang menuntut tindakan mereka.
+     Diisi belakangan oleh fillDashPo() (butuh query EKPO), jadi
+     render dashboard tidak menunggu. */
+  html+='<div class="dash-section-title">&#128722; Belum di-PO-kan &mdash; menunggu Anda</div>';
+  html+='<div class="dash-po-grid">';
+  plants.forEach(function(p){
+    html+='<button type="button" class="dash-po" id="dashPo_'+p.code+'"'+
+          ' onclick="openPoView(\''+p.code+'\')">'+
+          '<span class="dash-po-ico">&#128722;</span>'+
+          '<span class="dash-po-txt">'+
+            '<span class="dash-po-main" id="dashPoMain_'+p.code+'">'+
+              '<span class="dash-dot"></span></span>'+
+            '<span class="dash-po-sub" id="dashPoSub_'+p.code+'">'+
+              escHtml(p.name)+'</span>'+
+          '</span>'+
+          '<span class="dash-po-go">&#9654;</span>'+
+          '</button>';
+  });
+  html+='</div>';
+
   html+='<div class="dash-section-title">&#128202; Pending per Kategori</div>';
   html+='<div class="dash-card">';
   var maxCat = Math.max(1, catTotals.ROTO, catTotals.PRK9, catTotals.PRKS);
@@ -1992,6 +2096,45 @@ function renderDashboard() {
 
   document.getElementById('mainContent').innerHTML=html;
   observeToolbarOffset();
+
+  fillDashPo();
+}
+
+/* Isi kartu "Belum PO" setelah GET_APP_PO selesai. Kartu ditandai
+   merah SERAGAM; satu-satunya keadaan yang melepas merahnya adalah
+   tidak ada sisa sama sekali — tidak ada yang perlu ditandai.
+   Yang ditonjolkan UMUR-nya, bukan sekadar jumlahnya: PR yang
+   menganggur berminggu-minggu adalah kegagalan proses. */
+function fillDashPo() {
+  loadPoData(function(){
+    /* Pengguna bisa sudah pindah view sebelum fetch selesai —
+       elemen tidak ada lagi, jadi diam saja. */
+    getVisiblePlants().forEach(function(p){
+      var st = poOpenStat(p.code);
+
+      var main=document.getElementById('dashPoMain_'+p.code);
+      if (main) main.innerHTML='<b>'+st.count+'</b> PR belum jadi PO';
+
+      var sub=document.getElementById('dashPoSub_'+p.code);
+      if (sub){
+        if (st.count===0){
+          sub.innerHTML=escHtml(p.name)+' &middot; semua sudah jadi PO';
+        } else {
+          sub.innerHTML=escHtml(p.name)+' &middot; '+
+            '<span class="dash-po-age">tertua '+st.maxAge+' hari</span>';
+        }
+      }
+
+      var card=document.getElementById('dashPo_'+p.code);
+      if (card) {
+        if (st.count===0) card.classList.add('is-clear');
+        else card.classList.remove('is-clear');
+      }
+    });
+
+    /* Badge sidebar ikut terisi begitu data siap. */
+    renderSidebar();
+  });
 }
 
 /* ════════════════════════════════════════════════════════════════
@@ -2777,6 +2920,474 @@ function loadDetail(banfn) {
       el.innerHTML='<div style="padding:12px;font-size:13px;color:var(--danger);text-align:center;">'+
         'Gagal memuat detail.</div>';
     });
+}
+
+/* ════════════════════════════════════════════════════════════════
+   §PO  MONITORING STATUS PO — "PR yang belum di-PO-kan"
+
+   PR yang di-approve lewat sistem ini dilacak apakah sudah dijadikan
+   PO (action GET_APP_PO di main.htm). Di ZPR_REL_BSP fitur ini adalah
+   info pasif untuk BOD ("saya sudah approve, Purchasing belum jalan").
+   Di sini penggunanya ADALAH Purchasing, jadi daftar ini adalah
+   worklist mereka sendiri — karena itu status OPEN diwarnai merah.
+
+   Data di-fetch sekali (lazy, setelah dashboard tampil) lalu di-cache
+   di poData. Kartu dashboard dan view daftar keduanya membaca dari
+   cache ini, jadi klik kartu tidak memicu query ulang.
+
+   Berbeda dengan ZPR yang mengirim werks sebagai daftar
+   comma-separated, di sini fetch dilakukan PER GRUP PLANT dari
+   getVisiblePlants(). Backend memakai check_werks_allowed, sehingga
+   user yang hanya berhak atas satu plant tidak bisa menarik data
+   plant lain.
+   ════════════════════════════════════════════════════════════════ */
+var poData     = [];     // seluruh item approved + status PO
+var poLoaded   = false;
+var poFetching = false;
+var poCbs      = [];     // callback menunggu data selesai dimuat
+
+/* State view daftar PO */
+var poCurGroup     = '';   // grup plant aktif: '1200' atau '1300'
+var poSearchKw     = '';
+var poPageSize     = 10;
+var poCurPage      = 1;
+var poAllExpanded  = false;
+var poPlantSub     = '';
+var poStatusFilter = '';   // '', 'OPEN', 'PARTIAL', 'DONE', 'DEL'
+
+function loadPoData(cb) {
+  if (poLoaded) { if (cb) cb(); return; }
+  if (cb) poCbs.push(cb);
+  if (poFetching) return;
+  poFetching = true;
+
+  var plants = getVisiblePlants();
+  var pending = plants.length;
+  var acc = [];
+
+  /* Tidak ada plant yang boleh diakses -> selesai dengan data kosong,
+     jangan menggantung callback. */
+  if (pending === 0) { finishPoLoad(acc); return; }
+
+  plants.forEach(function(p){
+    fetch(API_URL+'?action=GET_APP_PO'+
+          '&werks='+encodeURIComponent(p.code)+'&bsart=ALL')
+      .then(function(r){ return r.json(); })
+      .then(function(res){
+        if (res && res.status==='S' && res.data) acc = acc.concat(res.data);
+      })
+      .catch(function(){ /* satu plant gagal, plant lain tetap tampil */ })
+      .then(function(){
+        pending--;
+        if (pending===0) finishPoLoad(acc);
+      });
+  });
+}
+
+function finishPoLoad(rows) {
+  poData     = rows;
+  poLoaded   = true;
+  poFetching = false;
+  var cbs = poCbs; poCbs = [];
+  cbs.forEach(function(f){ f(); });
+}
+
+/* Status PO berubah di luar aplikasi ini (Purchasing membuat PO lewat
+   SAP), sedangkan poData di-cache seumur sesi. Tombol refresh di
+   toolbar memakai ini supaya pengguna tidak perlu reload halaman. */
+function invalidatePoData() {
+  poLoaded = false; poData = [];
+}
+
+function poRefresh() {
+  invalidatePoData();
+  showLoading();
+  loadPoData(function(){ renderPoContent(); });
+}
+
+/* ── Hitung PR (banfn unik) yang punya >=1 item OPEN untuk satu grup
+   plant, sekaligus umur tertua. Dipakai kartu dashboard & sidebar. ── */
+function poOpenStat(primary) {
+  var werks = getSubPlants(primary);
+  var seen = {}, maxAge = 0, cnt = 0, k;
+  poData.forEach(function(h){
+    if (werks.indexOf(h.werks)===-1) return;
+    if (h.po_status!=='OPEN') return;
+    seen[h.banfn] = true;
+    var age = parseInt(h.age)||0;
+    if (age>maxAge) maxAge = age;
+  });
+  for (k in seen) { if (seen.hasOwnProperty(k)) cnt++; }
+  return { count:cnt, maxAge:maxAge };
+}
+
+/* ════════════════════════════════════════════════════════════════
+   BUKA VIEW DAFTAR
+   ════════════════════════════════════════════════════════════════ */
+function openPoView(primary) {
+  curMode        = 'po';
+  curPlant       = primary;
+  poCurGroup     = primary;
+  poSearchKw     = '';
+  poCurPage      = 1;
+  poAllExpanded  = false;
+  poPlantSub     = '';
+  /* Dibuka dari kartu "Belum PO" -> tampilkan hanya yang OPEN.
+     Pengguna tetap bisa melihat status lain lewat panel filter. */
+  poStatusFilter = 'OPEN';
+  filterPanelOpen= false;
+
+  document.title = 'Release PR - Belum PO - PT. Kayu Mebel Indonesia';
+  renderSidebar();
+
+  if (poLoaded) {
+    renderPoContent();
+  } else {
+    showLoading();
+    loadPoData(function(){ renderPoContent(); });
+  }
+}
+
+/* ════════════════════════════════════════════════════════════════
+   FILTER & GROUPING
+   ════════════════════════════════════════════════════════════════ */
+function getFilteredPo() {
+  var werks = getSubPlants(poCurGroup);
+  var kw    = poSearchKw.toLowerCase();
+  return poData.filter(function(h){
+    if (werks.indexOf(h.werks)===-1) return false;
+    if (poPlantSub && h.werks!==poPlantSub) return false;
+    if (poStatusFilter && h.po_status!==poStatusFilter) return false;
+    if (!kw) return true;
+    return h.banfn.toLowerCase().indexOf(kw)>-1||
+      (h.txz01&&h.txz01.toLowerCase().indexOf(kw)>-1)||
+      (h.ernam&&h.ernam.toLowerCase().indexOf(kw)>-1)||
+      (h.ekgrp&&h.ekgrp.toLowerCase().indexOf(kw)>-1)||
+      (h.ebeln&&h.ebeln.toLowerCase().indexOf(kw)>-1)||
+      (h.vendor&&h.vendor.toLowerCase().indexOf(kw)>-1);
+  });
+}
+
+function groupPo(rows) {
+  var map={}, order=[];
+  rows.forEach(function(h){
+    if (!map[h.banfn]){
+      map[h.banfn]={
+        banfn:h.banfn, werks:h.werks, bsart:h.bsart,
+        ernam:h.ernam, ernam_full:h.ernam_full, erdat:h.erdat,
+        app_by:h.app_by, app_at:h.app_at, app_tm:h.app_tm,
+        ekgrp:h.ekgrp, waers:h.waers,
+        items:[], totals:[],
+        nopen:0, npartial:0, ndone:0, ndel:0, maxage:0
+      };
+      order.push(h.banfn);
+    }
+    var g=map[h.banfn];
+    g.items.push(h);
+    var w=h.waers||'IDR';
+    var t=g.totals.filter(function(x){ return x.waers===w; })[0];
+    if (!t){ t={waers:w, total:0}; g.totals.push(t); }
+    t.total += parseNum(h.total)||0;
+
+    if      (h.po_status==='OPEN')    g.nopen++;
+    else if (h.po_status==='PARTIAL') g.npartial++;
+    else if (h.po_status==='DONE')    g.ndone++;
+    else if (h.po_status==='DEL')     g.ndel++;
+
+    var age=parseInt(h.age)||0;
+    if ((h.po_status==='OPEN'||h.po_status==='PARTIAL') && age>g.maxage)
+      g.maxage=age;
+  });
+  return order.map(function(b){ return map[b]; });
+}
+
+/* Status "paling perlu tindakan" untuk badge ringkasan kartu. */
+function poWorstStatus(g) {
+  if (g.nopen>0)    return 'OPEN';
+  if (g.npartial>0) return 'PARTIAL';
+  if (g.ndone>0)    return 'DONE';
+  return 'DEL';
+}
+
+var PO_STATUS_LABEL = {
+  OPEN:'Belum PO', PARTIAL:'Sebagian', DONE:'Sudah PO', DEL:'PR dihapus'
+};
+var PO_STATUS_CLASS = {
+  OPEN:'b-po-open', PARTIAL:'b-po-partial', DONE:'b-po-done', DEL:'b-po-del'
+};
+
+function poStatusBadge(st) {
+  return '<span class="badge '+(PO_STATUS_CLASS[st]||'b-po-del')+'">'+
+         escHtml(PO_STATUS_LABEL[st]||st)+'</span>';
+}
+
+function poAgeBadge(days) {
+  if (!days) return '';
+  var cls = days>=14 ? 'b-age-crit' : (days>=7 ? 'b-age-warn' : 'b-age');
+  return '<span class="badge '+cls+'">&#9201; '+days+' hari</span>';
+}
+
+/* Teks ringkas komposisi status item PR untuk kolom meta. */
+function poSummaryText(pr) {
+  var parts=[];
+  if (pr.nopen>0)    parts.push(pr.nopen+' belum PO');
+  if (pr.npartial>0) parts.push(pr.npartial+' sebagian');
+  if (pr.ndone>0)    parts.push(pr.ndone+' sudah PO');
+  if (pr.ndel>0)     parts.push(pr.ndel+' dihapus');
+  return escHtml(parts.join(' · ')||'-');
+}
+
+/* ════════════════════════════════════════════════════════════════
+   RENDER KARTU
+   ════════════════════════════════════════════════════════════════ */
+function buildPoCards(groups) {
+  if (groups.length===0){
+    return '<div class="empty" style="padding:50px 20px;">'+
+           '<div class="empty-ico">&#128722;</div>'+
+           '<div class="empty-txt">Tidak ada data untuk filter ini</div></div>';
+  }
+
+  var html='';
+  groups.forEach(function(pr,idx){
+    var worst=poWorstStatus(pr);
+    var bcls =(pr.bsart==='PRK9'||pr.bsart==='RSBR')?'cat-prk9':'cat-roto';
+    var delay=Math.min(idx,8)*28;
+
+    html+='<div class="po-card'+(poAllExpanded?' expanded':'')+'"'+
+          ' id="poCard_'+pr.banfn+'" style="animation-delay:'+delay+'ms;"'+
+          ' onclick="togglePoExpand(\''+pr.banfn+'\')">';
+
+    html+='<div class="card-top">';
+    html+='<span class="card-num">'+escHtml(pr.banfn)+'</span>';
+    html+='<button class="btn-exp" style="height:28px;padding:0 10px;font-size:11.5px;"'+
+          ' onclick="event.stopPropagation();showItemTextModal(\''+pr.banfn+'\')">'+
+          '&#128196; Lihat Teks</button>';
+    html+=poStatusBadge(worst);
+    if (worst==='OPEN' && pr.nopen>0 && pr.items.length>pr.nopen)
+      html+='<span class="badge b-po-open">'+pr.nopen+' dari '+
+            pr.items.length+' item</span>';
+    html+=poAgeBadge(pr.maxage);
+    html+='<span class="badge b-plant">'+escHtml(pr.werks)+' '+
+          escHtml(getPlantLabel(pr.werks))+'</span>';
+    html+='<span class="chip '+bcls+'">'+escHtml(getBsartLabel(pr.bsart))+'</span>';
+
+    html+=renderCardAmount(pr.totals);
+    html+='</div>'; /* card-top */
+
+    html+='<div class="card-meta">';
+    html+='<div><div class="meta-lbl">Dibuat Oleh</div><div class="meta-val">'+
+          escHtml(pr.ernam_full||pr.ernam)+'</div></div>';
+    html+='<div><div class="meta-lbl">Diapprove Oleh</div>'+
+          '<div class="meta-val" style="color:var(--success-d);">'+
+          escHtml(pr.app_by||'-')+'</div></div>';
+    html+='<div><div class="meta-lbl">Tgl Approve</div><div class="meta-val">'+
+          escHtml(pr.app_at||'-')+'</div></div>';
+    html+='<div><div class="meta-lbl">Ringkasan</div>'+
+          '<div class="meta-val" style="font-size:12px;">'+
+          poSummaryText(pr)+'</div></div>';
+    html+='</div>'; /* card-meta */
+
+    html+='<div class="card-detail" id="poDet_'+pr.banfn+'" onclick="event.stopPropagation()">'+
+          '<div class="card-detail-inner"><div class="card-detail-scroll">'+
+          '<table class="detail-tbl"><thead><tr>'+
+          '<th>Item</th><th>Deskripsi</th><th class="num">Qty</th><th>UoM</th>'+
+          '<th>Status</th><th>No. PO</th><th>Vendor</th><th>Tgl PO</th>'+
+          '<th class="num">Umur</th>'+
+          '</tr></thead><tbody>';
+    pr.items.forEach(function(h){
+      var age=parseInt(h.age)||0;
+      var showAge=(h.po_status==='OPEN'||h.po_status==='PARTIAL');
+      html+='<tr>';
+      html+='<td style="font-family:\'DM Mono\',monospace;font-size:12px;">'+
+            escHtml(h.bnfpo)+'</td>';
+      html+='<td>'+escHtml(h.txz01||'-')+'</td>';
+      html+='<td class="num">'+fmtQty(h.menge)+'</td>';
+      html+='<td><span class="chip">'+escHtml(h.meins||'-')+'</span></td>';
+      html+='<td>'+poStatusBadge(h.po_status)+'</td>';
+      html+='<td style="font-family:\'DM Mono\',monospace;font-size:12px;">'+
+            (h.ebeln?escHtml(h.ebeln):'-')+'</td>';
+      html+='<td>'+(h.vendor?escHtml(h.vendor):'-')+'</td>';
+      html+='<td style="color:var(--muted);">'+escHtml(h.po_date||'-')+'</td>';
+      html+='<td class="num'+(showAge&&age>=14?' cell-age-crit':'')+'">'+
+            (showAge?age+' hr':'-')+'</td>';
+      html+='</tr>';
+    });
+    html+='</tbody></table></div></div></div>'; /* detail-scroll/inner/detail */
+
+    html+='</div>'; /* po-card */
+  });
+
+  return html;
+}
+
+/* ════════════════════════════════════════════════════════════════
+   RENDER VIEW
+   ════════════════════════════════════════════════════════════════ */
+function renderPoContent() {
+  var filtered=getFilteredPo();
+  var groups  =groupPo(filtered);
+
+  var total=groups.length;
+  var totalPages=poPageSize===0?1:Math.ceil(total/poPageSize)||1;
+  if (poCurPage>totalPages) poCurPage=1;
+  var start=poPageSize===0?0:(poCurPage-1)*poPageSize;
+  var end  =poPageSize===0?total:Math.min(start+poPageSize,total);
+  var pageGroups=groups.slice(start,end);
+
+  /* Subjudul menyesuaikan filter status yang aktif. Tanpa filter:
+     ringkasan berapa yang belum jadi PO. */
+  var subHtml;
+  if (poStatusFilter) {
+    subHtml='Status: <span style="font-weight:700;">'+
+            escHtml(PO_STATUS_LABEL[poStatusFilter]||poStatusFilter)+
+            '</span> &mdash; '+total+' PR';
+  } else {
+    var openPr=0;
+    groups.forEach(function(g){ if (g.nopen>0) openPr++; });
+    subHtml=total+' PR approved &mdash; '+
+            '<span style="color:var(--danger-d);font-weight:700;">'+
+            openPr+' belum jadi PO</span>';
+  }
+
+  var html='';
+  html+='<div class="sticky-top"><div class="pg-hdr">';
+  html+='<div class="pg-title">&#128722; Status PO &mdash; '+
+        escHtml(getPlantLabel(poCurGroup))+'</div>';
+  html+='<div class="pg-sub">'+subHtml+'</div>';
+  html+='</div></div>';
+
+  html+='<div class="sticky-toolbar"><div class="toolbar">';
+
+  html+='<div class="search-wrap"><span>&#128269;</span>'+
+        '<input type="text" id="poSearchInp" placeholder="Cari No PR, No PO, Vendor... (Enter)"'+
+        ' value="'+escHtml(poSearchKw)+'" onkeydown="onPoSearchKey(event)"'+
+        ' onblur="onPoSearchBlur()"></div>';
+
+  html+='<select class="page-size-select" onchange="poChangePageSize(parseInt(this.value))">';
+  [10,20,50,0].forEach(function(s){
+    html+='<option value="'+s+'"'+(poPageSize===s?' selected':'')+'>'+
+          (s===0?'All':s+' per page')+'</option>';
+  });
+  html+='</select>';
+
+  var poFiltCnt=(poStatusFilter?1:0)+(poPlantSub?1:0);
+  html+='<div class="filter-wrap">';
+  html+='<button class="btn-filter'+(filterPanelOpen?' active':'')+'" id="btnFilter"'+
+        ' onclick="toggleFilterPanel(event)">&#9881; Filter'+
+        (poFiltCnt>0?'<span class="filter-badge">'+poFiltCnt+'</span>':'')+'</button>';
+  html+='<div class="filter-panel'+(filterPanelOpen?' open':'')+'" id="filterPanel">';
+
+  html+='<div class="filter-panel-row"><span class="filter-panel-lbl">Status</span>';
+  html+='<select class="estkz-select" onchange="onPoStatusFilter(this.value)">';
+  html+='<option value=""'+(poStatusFilter===''?' selected':'')+'>Semua Status</option>';
+  html+='<option value="OPEN"'+(poStatusFilter==='OPEN'?' selected':'')+'>Belum PO</option>';
+  html+='<option value="PARTIAL"'+(poStatusFilter==='PARTIAL'?' selected':'')+'>Sebagian</option>';
+  html+='<option value="DONE"'+(poStatusFilter==='DONE'?' selected':'')+'>Sudah PO</option>';
+  html+='<option value="DEL"'+(poStatusFilter==='DEL'?' selected':'')+'>PR dihapus</option>';
+  html+='</select></div>';
+
+  html+='<div class="filter-panel-row"><span class="filter-panel-lbl">Plant</span>';
+  html+='<select class="estkz-select" onchange="onPoPlantSubFilter(this.value)">';
+  html+='<option value=""'+(poPlantSub===''?' selected':'')+'>Semua Plant</option>';
+  getSubPlants(poCurGroup).forEach(function(p){
+    html+='<option value="'+p+'"'+(poPlantSub===p?' selected':'')+'>Plant '+p+'</option>';
+  });
+  html+='</select></div>';
+
+  if (poFiltCnt>0)
+    html+='<div class="filter-panel-reset" onclick="resetPoFilters()">Reset Filter</div>';
+  html+='</div></div>'; /* filter-panel + filter-wrap */
+
+  html+='<div class="expand-bar">'+
+        '<button class="btn-exp" id="poBtnAll" onclick="togglePoAll()">'+
+        (poAllExpanded?'&#9650; Collapse':'&#9660; Expand')+'</button></div>';
+
+  /* Status PO berubah di SAP di luar aplikasi ini, sementara poData
+     di-cache seumur sesi — tanpa tombol ini pengguna harus reload. */
+  html+='<div class="expand-bar">'+
+        '<button class="btn-exp" onclick="poRefresh()" title="Muat ulang status PO">'+
+        '&#8635; Refresh</button></div>';
+
+  html+='<div class="pg-count">'+total+' PR</div>';
+  html+='</div></div>'; /* toolbar + sticky-toolbar */
+
+  html+='<div id="poTableWrap">';
+  html+=buildPoCards(pageGroups);
+  html+='</div>';
+
+  html+=buildPagination({
+    total:total, totalPages:totalPages, start:start, end:end,
+    curPage:poCurPage, pageSize:poPageSize,
+    goFn:'poGoPage', label:'PR'
+  });
+
+  document.getElementById('mainContent').innerHTML=html;
+  observeToolbarOffset();
+}
+
+/* ════════════════════════════════════════════════════════════════
+   HANDLER
+   ════════════════════════════════════════════════════════════════ */
+/* Search di-commit hanya saat Enter atau blur (bukan tiap keystroke)
+   supaya input tidak kehilangan fokus akibat re-render penuh —
+   pola yang sama dengan search pending & history. */
+function applyPoSearchCommit(val) {
+  poSearchKw=val.trim(); poCurPage=1;
+  renderPoContent();
+  var inp=document.getElementById('poSearchInp');
+  if (inp){ inp.focus(); inp.setSelectionRange(inp.value.length,inp.value.length); }
+}
+function onPoSearchKey(e) {
+  if (e.key==='Enter'){ e.preventDefault(); applyPoSearchCommit(e.target.value); }
+}
+function onPoSearchBlur() {
+  var inp=document.getElementById('poSearchInp');
+  if (!inp) return;
+  if (inp.value.trim()!==poSearchKw){ poSearchKw=inp.value.trim(); poCurPage=1; renderPoContent(); }
+}
+function onPoStatusFilter(val) {
+  poStatusFilter=val; poCurPage=1; filterPanelOpen=false;
+  renderPoContent();
+}
+function onPoPlantSubFilter(val) {
+  poPlantSub=val; poCurPage=1; filterPanelOpen=false;
+  renderPoContent();
+}
+function resetPoFilters() {
+  poStatusFilter=''; poPlantSub=''; poCurPage=1; filterPanelOpen=false;
+  renderPoContent();
+}
+function poGoPage(pg) {
+  var total=groupPo(getFilteredPo()).length;
+  var tp=poPageSize===0?1:Math.ceil(total/poPageSize)||1;
+  if (pg<1) pg=1;
+  if (pg>tp) pg=tp;
+  poCurPage=pg;
+  renderPoContent(); window.scrollTo(0,0);
+}
+function poChangePageSize(val) {
+  poPageSize=val; poCurPage=1;
+  renderPoContent();
+}
+function togglePoExpand(banfn) {
+  var card=document.getElementById('poCard_'+banfn);
+  if (!card) return;
+  card.classList.toggle('expanded');
+}
+function togglePoAll() {
+  if (poAllExpanded) poCollapseAll(); else poExpandAll();
+  var btn=document.getElementById('poBtnAll');
+  if (btn) btn.innerHTML=poAllExpanded?'&#9650; Collapse':'&#9660; Expand';
+}
+function poExpandAll() {
+  poAllExpanded=true;
+  document.querySelectorAll('#poTableWrap .po-card')
+    .forEach(function(c){ c.classList.add('expanded'); });
+}
+function poCollapseAll() {
+  poAllExpanded=false;
+  document.querySelectorAll('#poTableWrap .po-card')
+    .forEach(function(c){ c.classList.remove('expanded'); });
 }
 
 /* ════════════════════════════════════════════════════════════════

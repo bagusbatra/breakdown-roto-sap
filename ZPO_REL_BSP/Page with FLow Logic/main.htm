@@ -766,7 +766,7 @@ IF lv_action = 'GET_OGR'.
       ( `PSB8` ) ( `PSB9` ) ( `PSBT` )
       ( `PSB5` ) ( `PSB6` )
       ( `PSBI` ) ( `POK9` )
-      ( `KITE` )
+      ( `PKIT` )
     ).
   ELSE.
     lv_bsarts_ogr = VALUE string_table(
@@ -2084,7 +2084,7 @@ var POTYPE_MAP = {
     'SPAREPART': { label: 'PO Sparepart &amp; Tools',         bsart: ['PSB8','PSB9','PSBT'] },
     'UTILITY':   { label: 'PO Bahan Penunjang &amp; Utility', bsart: ['PSB5','PSB6'] },
     'EXIM':      { label: 'PO Exim',                          bsart: ['PSBI','POK9'] },
-    'KITE':        { label: 'PO KITE',                            bsart: ['KITE'] }
+    'PKIT':        { label: 'PO KITE',                            bsart: ['PKIT'] }
   },
   '1300': {
     'JASA':      { label: 'PO Jasa',                          bsart: ['PSM7'] },
@@ -2108,7 +2108,7 @@ var BSART_POTYPE_MAP = {};
     'SPAREPART': { label: 'PO Sparepart & Tools', color: '#b45309', bg: '#fef3c7' },
     'UTILITY':   { label: 'PO Utility',           color: '#0891b2', bg: '#cffafe' },
     'EXIM':      { label: 'PO Exim',              color: '#c81e1e', bg: '#fde8e8' },
-    'KITE':        { label: 'PO KITE',                color: '#4f46e5', bg: '#e0e7ff' }
+    'PKIT':        { label: 'PO KITE',                color: '#4f46e5', bg: '#e0e7ff' }
   };
   ['1200','1300'].forEach(function(plant) {
     var map = POTYPE_MAP[plant];
