@@ -207,9 +207,9 @@ ENDIF.
     <div class="actionbar-pager" id="pagerSlot"></div>
     <div class="fab" id="fab">
       <span class="fab-info" id="fabInfo">0 PO dipilih</span>
-      <button type="button" class="btn btn-success fab-app" onclick="showModalApprove()">
+      <button type="button" class="btn btn-success fab-app" onclick="showModalRelease()">
         <svg class="ico" aria-hidden="true"><use href="#i-check"></use></svg>
-        Approve
+        Release
       </button>
       <button type="button" class="btn btn-danger fab-rej" onclick="showModalReject()">
         <svg class="ico" aria-hidden="true"><use href="#i-trash"></use></svg>
@@ -238,7 +238,7 @@ ENDIF.
     <div class="modal-footer">
       <button type="button" class="btn btn-outline btn-lg"
               onclick="closeModal('modalRelease')">Batal</button>
-      <button type="button" class="btn btn-success btn-lg" onclick="confirmApprove()">
+      <button type="button" class="btn btn-success btn-lg" onclick="confirmRelease()">
         <svg class="ico" aria-hidden="true"><use href="#i-check"></use></svg>
         Ya, Release
       </button>
