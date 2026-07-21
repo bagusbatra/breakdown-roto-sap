@@ -21,17 +21,21 @@
      tersedia lewat endpoint terpisah GET_HISTORY_ITEMS (ebelns),
      dipanggil lazy saat kartu di-expand — bukan dihitung dari data
      GET_HISTORY_REL/REJ. Karena itu:
-       * groupHistByEbeln() di sini TIDAK menggabungkan item seperti
-         ZPR (tidak ada item di row header) — fungsinya jadi dedup
-         defensif per ebeln (ambil event TERBARU; aman krn backend
-         SELALU ORDER BY udate/utime DESCENDING, jadi "first wins"
-         di forEach = event terbaru). Kartu TIDAK menampilkan total
-         nilai (field `total`/`status` yg disebut di draft skema
-         zpo-data-schema.md TIDAK ADA di response asli main.htm —
-         dicek langsung ke kode ABAP, bukan diasumsikan); nilai per
-         item (netpr/netwr) baru muncul di tabel detail setelah expand
-         (via GET_HISTORY_ITEMS), formatnya formatNumHist seperti
-         history ZPR.
+       * TIDAK ADA fungsi group/dedup di sini (beda dari ZPR yang
+         group by banfn krn 1 row ZPR = 1 item). buildHistCards()
+         me-render SATU KARTU PER ROW histData langsung (persis
+         legacy main.htm renderHistoryPage/histData.forEach — lihat
+         catatan detail di dekat buildHistCards() di bawah), krn
+         satu PO dgn release bertingkat bisa punya BEBERAPA row
+         (=BEBERAPA event, ebeln sama) dalam satu halaman; dedup by
+         ebeln akan MENGHILANGKAN event lama dari tampilan (regresi
+         audit-trail) walau histTotal/paginasi tetap benar. Kartu
+         TIDAK menampilkan total nilai (field `total`/`status` yg
+         disebut di draft skema zpo-data-schema.md TIDAK ADA di
+         response asli main.htm — dicek langsung ke kode ABAP, bukan
+         diasumsikan); nilai per item (netpr/netwr) baru muncul di
+         tabel detail setelah expand (via GET_HISTORY_ITEMS),
+         formatnya formatNumHist seperti history ZPR.
    - Search & filter tanggal SUDAH dilakukan backend (param search/
      date_from/date_to dibaca & diproses di main.htm) — beda dari
      ZPR yang fetch semua lalu filter di klien. Jadi getFilteredHist()
@@ -67,15 +71,24 @@
      di SATU kode potype pertama (getPoTypeCodes(werks)[0]) supaya
      sumCounts() tetap menjumlahkan dgn benar tanpa perlu breakdown
      asli yang memang tidak ada. Lihat setHistCountBadge().
-   - groupHistByEbeln BISA menggabungkan >1 event release/reject utk
-     ebeln yang sama dalam satu periode (mis. PO direlease, dikoreksi,
-     direlease ulang) jadi SATU kartu (menampilkan event terbaru saja,
-     krn backend ORDER BY DESCENDING) — ini konsekuensi langsung dari
-     instruksi "group by ebeln" (task-8-brief.md interfaces). Event
-     lama pada ebeln yang sama tidak hilang dari `histTotal`/paginasi
-     server (itu tetap dihitung dari row mentah), hanya tidak masing-
-     masing dapat kartu terpisah jika berbeda ebeln yg sama muncul di
-     halaman yang sama. Diketahui & didokumentasikan, bukan bug diam-diam.
+   - SATU KARTU PER ROW (bukan per ebeln): GET_HISTORY_REL/REJ
+     mengembalikan SATU ROW PER CHANGE DOCUMENT (cdhdr) — PO dgn
+     release bertingkat (multi-level) menghasilkan BEBERAPA row
+     dgn ebeln yang SAMA dalam satu halaman (mis. direlease level 1,
+     lalu level 2 -> 2 row terpisah, masing2 event release-nya
+     sendiri). Legacy main.htm (renderHistoryPage,
+     `histData.forEach(function(d, idx){...})`) me-render SATU KARTU
+     PER ROW, DOM id `hcard_<idx>` (index array, bukan ebeln) —
+     TIDAK pernah dedup/group by ebeln. Port di sini MENGIKUTI
+     semantik itu persis: histData di-iterate langsung (tanpa
+     grouping), id kartu `histCard_<idx>`, supaya audit trail
+     (setiap event release/reject) tetap utuh & terlihat semua,
+     bukan hanya event terakhir per PO. Item PO (utk tabel expand)
+     tetap HANYA tersedia lewat GET_HISTORY_ITEMS (ebelns), lazy per
+     kartu — cache-nya boleh tetap per ebeln (isi item sama utk ebeln
+     yg sama terlepas dari event mana), tapi target DOM update-nya
+     SELALU per-idx (`histItemsBody_<idx>`) supaya kartu2 dgn ebeln
+     sama tetap expand independen satu sama lain.
    ================================================================ */
 'use strict';
 
@@ -109,25 +122,6 @@ function histDateRangeParams() {
 }
 
 /* ================================================================
-   GROUP BY EBELN — lihat catatan header file: di ZPO ini dedup
-   defensif (first-wins = event terbaru, krn backend ORDER BY
-   udate/utime DESCENDING), bukan penggabungan item seperti ZPR.
-   ================================================================ */
-function groupHistByEbeln(rows) {
-  var map={}, order=[];
-  rows.forEach(function(h){
-    if (map[h.ebeln]) return;
-    map[h.ebeln] = {
-      ebeln:h.ebeln, bsart:h.bsart, lifnr:h.lifnr, name1:h.name1,
-      werks:h.werks, frgco:h.frgco, uname:h.uname, udate:h.udate,
-      utime:h.utime, comment:h.comment
-    };
-    order.push(h.ebeln);
-  });
-  return order.map(function(b){ return map[b]; });
-}
-
-/* ================================================================
    ITEM TABLE (expand) — dari GET_HISTORY_ITEMS. netpr/netwr EKPO
    diformat via formatNumHist (app-core.js) — bukan formatAmount,
    krn nilai sudah mentah dari DB (lihat komentar formatNumHist).
@@ -158,12 +152,15 @@ function renderHistItemTable(items) {
 }
 
 /* ================================================================
-   BUILD HISTORY CARDS — satu kartu per ebeln (lihat groupHistByEbeln).
+   BUILD HISTORY CARDS — SATU KARTU PER ROW (satu event release/
+   reject, bisa >1 kartu utk ebeln yg sama — lihat catatan header
+   file). DOM id kartu dikunci ke INDEX row (histCard_<idx>), BUKAN
+   ebeln, persis pola legacy main.htm (hcard_<idx>).
    ================================================================ */
-function buildHistCards(groups,type) {
+function buildHistCards(rows,type) {
   var isApp=(type==='approve');
 
-  if (groups.length===0){
+  if (rows.length===0){
     return '<div class="empty empty--inline">'+
            '<div class="empty-ico">'+svgIcon('i-search','ico-xl')+'</div>'+
            '<div class="empty-txt">Tidak ada history '+
@@ -173,11 +170,12 @@ function buildHistCards(groups,type) {
   var byCls=isApp?'meta-val--app':'meta-val--rej';
   var html='';
 
-  groups.forEach(function(pr){
+  rows.forEach(function(pr,idx){
     html+='<div class="po-card no-cb'+
           (histAllExpanded?' expanded':'')+
-          '" id="histCard_'+pr.ebeln+'" data-ebeln="'+escHtml(pr.ebeln)+'"'+
-          ' onclick="toggleHistExpand(\''+pr.ebeln+'\')">';
+          '" id="histCard_'+idx+'" data-ebeln="'+escHtml(pr.ebeln)+'"'+
+          ' data-idx="'+idx+'"'+
+          ' onclick="toggleHistExpand('+idx+')">';
 
     html+='<div class="card-top card-top--nocb">';
 
@@ -202,9 +200,9 @@ function buildHistCards(groups,type) {
 
     html+='<button type="button" class="card-expand"'+
           ' aria-expanded="'+(histAllExpanded?'true':'false')+'"'+
-          ' aria-controls="histDet_'+pr.ebeln+'"'+
+          ' aria-controls="histDet_'+idx+'"'+
           ' aria-label="Tampilkan detail item PO '+pr.ebeln+'"'+
-          ' onclick="event.stopPropagation();toggleHistExpand(\''+pr.ebeln+'\')">'+
+          ' onclick="event.stopPropagation();toggleHistExpand('+idx+')">'+
           svgIcon('i-chevron-down')+'</button>';
 
     html+='</div>'; /* card-top */
@@ -233,9 +231,9 @@ function buildHistCards(groups,type) {
             (pr.comment?escHtml(pr.comment):'<i>(Tidak ada komentar)</i>')+
             '</div>';
 
-    html+='<div class="card-detail" id="histDet_'+pr.ebeln+'"'+
+    html+='<div class="card-detail" id="histDet_'+idx+'"'+
           ' onclick="event.stopPropagation()">';
-    html+='<div id="histItemsBody_'+pr.ebeln+'">'+
+    html+='<div id="histItemsBody_'+idx+'">'+
           '<div class="card-detail-msg">Buka kartu untuk memuat item.</div>'+
           '</div>';
     html+='</div>'; /* card-detail */
@@ -340,7 +338,6 @@ function fetchHistCounts() {
 function renderHistTable() {
   var isApp = (histType==='approve');
 
-  var groups     = groupHistByEbeln(histData);
   var totalPages = histPageSize>0 ? (Math.ceil(histTotal/histPageSize)||1) : 1;
   if (histCurPage>totalPages) histCurPage=totalPages;
   var start = (histCurPage-1)*histPageSize;
@@ -391,13 +388,17 @@ function renderHistTable() {
   html+='</div></div>'; /* toolbar + page-sticky */
 
   html+='<div id="histTableWrap">';
-  html+=buildHistCards(groups,histType);
+  html+=buildHistCards(histData,histType);
   html+='</div>';
 
   document.getElementById('mainContent').innerHTML=html;
 
   /* Paginasi server-side: total/totalPages berasal dari histTotal
-     (row mentah, dikirim backend), BUKAN dari groups.length. */
+     (row mentah, dikirim backend). Sekarang SATU kartu dirender per
+     row histData (tidak ada dedup by ebeln lagi), jadi jumlah kartu
+     di halaman ini = histData.length, dan totalnya menjumlah persis
+     ke histTotal lintas halaman — pg-sub/pg-count (histTotal) sudah
+     konsisten dgn jumlah kartu yang benar2 dirender. */
   var pager='';
   if (histTotal>0){
     pager=(totalPages>1)
@@ -442,11 +443,16 @@ function histChangePageSize(val) {
 }
 
 /* ================================================================
-   HISTORY EXPAND / COLLAPSE — item dimuat lazy per kartu via
-   GET_HISTORY_ITEMS (cache per ebeln di histItemsCache).
+   HISTORY EXPAND / COLLAPSE — item dimuat lazy per KARTU (idx) via
+   GET_HISTORY_ITEMS. Cache isi item tetap boleh per ebeln
+   (histItemsCache) krn konten item PO sama utk ebeln yg sama
+   terlepas dari event mana yg memicu expand — tapi target DOM yang
+   di-update SELALU node per-idx (histItemsBody_<idx>), supaya >1
+   kartu dgn ebeln sama (multi-level release, lihat catatan header
+   file) tetap expand/collapse independen satu sama lain.
    ================================================================ */
-function loadHistItems(ebeln) {
-  var body=document.getElementById('histItemsBody_'+ebeln);
+function loadHistItems(idx,ebeln) {
+  var body=document.getElementById('histItemsBody_'+idx);
   if (!body) return;
   if (histItemsCache[ebeln]){
     body.innerHTML=renderHistItemTable(histItemsCache[ebeln]);
@@ -458,45 +464,52 @@ function loadHistItems(ebeln) {
     .then(function(res){
       var items=(res.status==='S')?(res.data||[]):[];
       histItemsCache[ebeln]=items;
-      var b=document.getElementById('histItemsBody_'+ebeln);
+      var b=document.getElementById('histItemsBody_'+idx);
       if (b) b.innerHTML=renderHistItemTable(items);
     })
     .catch(function(){
-      var b=document.getElementById('histItemsBody_'+ebeln);
+      var b=document.getElementById('histItemsBody_'+idx);
       if (b) b.innerHTML='<div class="card-detail-msg">Gagal memuat item.</div>';
     });
 }
 
-function toggleHistExpand(ebeln) {
-  var card=document.getElementById('histCard_'+ebeln);
+function toggleHistExpand(idx) {
+  var card=document.getElementById('histCard_'+idx);
   if (!card) return;
   var wasExp=card.classList.contains('expanded');
   setCardExpanded(card,!wasExp);
-  if (!wasExp) loadHistItems(ebeln);
+  if (!wasExp) {
+    var ebeln=card.getAttribute('data-ebeln');
+    loadHistItems(idx,ebeln);
+  }
 }
 
 /* Expand semua kartu halaman aktif — item yg belum ada di cache
-   di-fetch SEKALI lewat GET_HISTORY_ITEMS dgn ebelns gabungan
+   di-fetch SEKALI lewat GET_HISTORY_ITEMS dgn ebelns gabungan UNIK
    (comma-separated, sesuai kontrak endpoint), bukan satu request
-   per kartu. */
+   per kartu. Krn >1 kartu bisa berbagi ebeln yg sama (multi-level
+   release), idxByEbeln mengumpulkan SEMUA idx kartu yg perlu
+   di-update dari satu hasil fetch per ebeln. */
 function histExpandAll() {
   histAllExpanded=true;
   var toFetch=[];
+  var idxByEbeln={};
   document.querySelectorAll('#histTableWrap .po-card').forEach(function(c){
     setCardExpanded(c,true);
+    var idx=c.getAttribute('data-idx');
     var ebeln=c.getAttribute('data-ebeln');
-    if (!ebeln) return;
+    if (idx===null || !ebeln) return;
+    if (!idxByEbeln[ebeln]) idxByEbeln[ebeln]=[];
+    idxByEbeln[ebeln].push(idx);
     if (histItemsCache[ebeln]){
-      var b0=document.getElementById('histItemsBody_'+ebeln);
+      var b0=document.getElementById('histItemsBody_'+idx);
       if (b0) b0.innerHTML=renderHistItemTable(histItemsCache[ebeln]);
       return;
     }
-    if (toFetch.indexOf(ebeln)===-1){
-      toFetch.push(ebeln);
-      var b1=document.getElementById('histItemsBody_'+ebeln);
-      if (b1) b1.innerHTML='<div class="card-detail-msg">'+
-        '<div class="lo-spin lo-spin-sm"></div>Memuat item...</div>';
-    }
+    if (toFetch.indexOf(ebeln)===-1) toFetch.push(ebeln);
+    var b1=document.getElementById('histItemsBody_'+idx);
+    if (b1) b1.innerHTML='<div class="card-detail-msg">'+
+      '<div class="lo-spin lo-spin-sm"></div>Memuat item...</div>';
   });
   if (!toFetch.length) return;
 
@@ -511,14 +524,18 @@ function histExpandAll() {
       });
       toFetch.forEach(function(e){
         histItemsCache[e]=byEbeln[e]||[];
-        var b=document.getElementById('histItemsBody_'+e);
-        if (b) b.innerHTML=renderHistItemTable(histItemsCache[e]);
+        (idxByEbeln[e]||[]).forEach(function(idx){
+          var b=document.getElementById('histItemsBody_'+idx);
+          if (b) b.innerHTML=renderHistItemTable(histItemsCache[e]);
+        });
       });
     })
     .catch(function(){
       toFetch.forEach(function(e){
-        var b=document.getElementById('histItemsBody_'+e);
-        if (b) b.innerHTML='<div class="card-detail-msg">Gagal memuat item.</div>';
+        (idxByEbeln[e]||[]).forEach(function(idx){
+          var b=document.getElementById('histItemsBody_'+idx);
+          if (b) b.innerHTML='<div class="card-detail-msg">Gagal memuat item.</div>';
+        });
       });
     });
 }
