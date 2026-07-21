@@ -33,6 +33,7 @@ ENDIF.
   <title>Release Purchase Order - PT. Kayu Mebel Indonesia</title>
   <link rel="icon" type="image/png" href="logo.png">
   <!-- PWA / Web Push -->
+  <link rel="manifest" href="manifest.json" crossorigin="use-credentials">
   <link rel="apple-touch-icon" href="icon-192.png">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -317,5 +318,17 @@ ENDIF.
 <script src="app-history.js?v=<%=lv_ver%>"></script>
 <script src="app-detail.js?v=<%=lv_ver%>"></script>
 <script src="app-action.js?v=<%=lv_ver%>"></script>
+
+<!-- PWA — registrasi Service Worker offline-shell (sw.js). Tidak
+     memuat kode push/notifikasi, hanya precache aset statis. -->
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function () {
+    navigator.serviceWorker.register('sw.js').catch(function (e) {
+      console.log('SW register gagal', e);
+    });
+  });
+}
+</script>
 </body>
 </html>
