@@ -153,7 +153,9 @@ git commit -m "feat(zpo): index.htm shell mirror ZPR + stub modul app-*"
 **Files:**
 - Create: `ZPO_REL_BSP/MIMEs/manifest.json`, `ZPO_REL_BSP/MIMEs/sw.js`
 - Modify: `ZPO_REL_BSP/Page with FLow Logic/index.htm` (registrasi sw + link manifest)
-- Reference: `ZPR_REL_BSP/MIMEs/manifest.json`, `ZPR_REL_BSP/MIMEs/sw.js`
+- Reference: `ZPR_REL_BSP/MIMEs/manifest.json` (untuk manifest saja)
+
+> **KOREKSI (2026-07-21):** `sw.js` ZPR ternyata **murni push-notification** (tak ada precache/offline). Karena push di luar scope, `sw.js` ZPO **ditulis dari nol** sebagai offline-shell SW — BUKAN disalin dari ZPR. Keputusan user: precache aset statis saja, `main.htm` selalu network.
 
 **Interfaces:**
 - Consumes: icon dari Task 1.
@@ -161,18 +163,85 @@ git commit -m "feat(zpo): index.htm shell mirror ZPR + stub modul app-*"
 
 - [ ] **Step 1: Salin & sesuaikan `manifest.json`**
 
-Salin dari ZPR; ubah `name`/`short_name` → "Release PO" / "Release Purchase Order", `start_url` ke path BSP ZPO, warna tema sesuai ZPO. Icon tetap `icon-192.png`/`icon-512.png`.
+Salin dari `ZPR_REL_BSP/MIMEs/manifest.json`; ubah `name` → "Release PO ROTO - KMI", `short_name` → "Release PO", `description` → "Release Purchase Order ROTO untuk KMI-BOD", `start_url` = `index.htm`, `scope` = `./`. Icon tetap `icon-192.png`/`icon-512.png`. `theme_color`/`background_color` boleh ikut ZPR.
 
-- [ ] **Step 2: Salin `sw.js` & sesuaikan daftar precache**
+- [ ] **Step 2: Tulis `sw.js` offline-shell dari nol (tanpa kode push)**
 
-Salin `sw.js` ZPR. Ubah daftar aset yang di-precache jadi milik ZPO: `style.css`, `app-core.js`, `app-ui.js`, `app-list.js`, `app-history.js`, `app-detail.js`, `app-action.js`, font, icon. **Jangan** precache `main.htm` (data dinamis).
+Buat `sw.js` baru berisi HANYA offline-shell caching. Naikkan `CACHE_NAME` per versi agar aktivasi membersihkan cache lama. **Jangan** ada kode `push`/`notificationclick`. **Jangan** pernah cache `main.htm` (data PO dinamis → harus selalu network agar akurat).
 
-- [ ] **Step 3: Kembalikan `<link rel="manifest">` + registrasi SW di `index.htm`**
+```javascript
+/* sw.js — offline-shell Service Worker ZPO_REL_BSP (tanpa push).
+ * Host sejajar index.htm: .../sap/bc/bsp/sap/zpo_rel_bsp/sw.js */
+var CACHE_NAME = 'zpo-shell-v1';
+var SHELL_ASSETS = [
+  'style.css', 'app-core.js', 'app-ui.js', 'app-list.js',
+  'app-history.js', 'app-detail.js', 'app-action.js',
+  'DMSans.woff2', 'DMMono.woff2', 'icon-192.png', 'icon-512.png'
+];
 
+self.addEventListener('install', function (event) {
+  self.skipWaiting();
+  event.waitUntil(
+    caches.open(CACHE_NAME).then(function (cache) {
+      return cache.addAll(SHELL_ASSETS);
+    })
+  );
+});
+
+self.addEventListener('activate', function (event) {
+  event.waitUntil(
+    caches.keys().then(function (keys) {
+      return Promise.all(keys.map(function (k) {
+        if (k !== CACHE_NAME) { return caches.delete(k); }
+      }));
+    }).then(function () { return self.clients.claim(); })
+  );
+});
+
+self.addEventListener('fetch', function (event) {
+  var req = event.request;
+  if (req.method !== 'GET') { return; }
+  var url = new URL(req.url);
+
+  // main.htm (JSON API & data) — SELALU network, jangan pernah di-cache.
+  if (url.pathname.indexOf('main.htm') !== -1) {
+    return; // biarkan browser fetch normal ke network
+  }
+
+  // Navigasi (index.htm) — network dulu, fallback ke cache shell bila offline.
+  if (req.mode === 'navigate') {
+    event.respondWith(
+      fetch(req).catch(function () { return caches.match('index.htm') || caches.match(req); })
+    );
+    return;
+  }
+
+  // Aset statis — cache-first.
+  event.respondWith(
+    caches.match(req).then(function (hit) { return hit || fetch(req); })
+  );
+});
+```
+
+- [ ] **Step 3: Tambah `<link rel="manifest">` + registrasi SW di `index.htm`**
+
+Kembalikan link manifest di `<head>`:
 ```html
 <link rel="manifest" href="manifest.json" crossorigin="use-credentials">
 ```
-Registrasi (salin pola dari ZPR, biasanya di `app-core.js` boot atau inline). Pastikan URL `sw.js` benar untuk path BSP ZPO.
+Tambah registrasi SW (ZPR tak punya registrasi untuk disalin — tulis inline di `index.htm` sebelum `</body>` atau di boot `app-core.js`):
+```html
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function () {
+    navigator.serviceWorker.register('sw.js').catch(function (e) {
+      console.log('SW register gagal', e);
+    });
+  });
+}
+</script>
+```
+Pastikan path relatif benar untuk URL BSP ZPO.
 
 - [ ] **Step 4: Verifikasi**
 
