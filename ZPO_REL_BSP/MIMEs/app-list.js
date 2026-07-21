@@ -75,20 +75,14 @@ var pageSize     = 10;
 var filteredData = [];
 
 /* ================================================================
-   ICON HELPER — app-core.js ZPO `svgIcon(name)` MENAMBAHKAN SENDIRI
-   prefix '#i-' (kontraknya beda dari svgIcon(id,cls) ZPR yang
-   menerima id LENGKAP + kelas ukuran opsional). `getCategoryDef()`
-   (app-ui.js) mengembalikan icon SUDAH berprefix 'i-' (mis.
-   'i-cart'); dilucuti dulu di sini sebelum dioper ke svgIcon()
-   supaya href tidak dobel jadi '#i-i-cart'. Kelas ukuran (ico-sm/
-   ico-lg/ico-xl) TIDAK didukung svgIcon() versi app-core.js ZPO
-   (selalu class="icon") — tidak diperbaiki di sini krn app-core.js
-   di luar scope Task 7 (lihat app-ui.js yang sudah commit dgn
-   pola panggilan sama, mis. svgIcon(opts.icon) tanpa kelas).
+   ICON HELPER — app-core.js `svgIcon(id,cls)` mengikuti kontrak
+   kanonis ZPR: `id` adalah id LENGKAP simbol sprite TERMASUK prefix
+   'i-' (mis. 'i-cart'), `cls` opsional untuk kelas ukuran
+   (ico-sm/ico-lg/ico-xl). Output selalu class="ico ..." (cocok
+   dengan style.css). `getCategoryDef()` (app-ui.js) sudah
+   mengembalikan icon berprefix 'i-' — dioper langsung ke svgIcon()
+   tanpa pelucutan prefix.
    ================================================================ */
-function icoName(id) {
-  return (id||'').indexOf('i-') === 0 ? id.slice(2) : (id||'');
-}
 
 /* ================================================================
    FETCH LIST — PO Pending (satu panggilan, kedua plant sekaligus)
@@ -200,7 +194,7 @@ function resetPoFilters() {
    ================================================================ */
 function buildSearchBox(id, handler, value, placeholder) {
   return '<div class="search-wrap">' +
-    svgIcon('search') +
+    svgIcon('i-search') +
     '<input type="text" id="' + id + '"' +
     ' aria-label="' + escHtml(placeholder) + '"' +
     ' placeholder="' + escHtml(placeholder) + '"' +
@@ -224,7 +218,7 @@ function buildFilterButton(count) {
   return '<button type="button" class="btn btn-outline btn-filter"' +
     ' id="btnFilter" aria-expanded="' + (filterPanelOpen ? 'true' : 'false') + '"' +
     ' aria-controls="filterPanel" onclick="toggleFilterPanel(event)">' +
-    svgIcon('filter') + ' Filter' +
+    svgIcon('i-filter') + ' Filter' +
     (count > 0 ? '<span class="filter-badge">' + count + '</span>' : '') +
     '</button>';
 }
@@ -232,7 +226,7 @@ function buildFilterButton(count) {
 function buildExpandButton(id, expanded, handler) {
   return '<button type="button" class="btn btn-ghost" id="' + id + '"' +
     ' onclick="' + handler + '()">' +
-    svgIcon('chevron-down') + ' ' +
+    svgIcon('i-chevron-down') + ' ' +
     (expanded ? 'Tutup Semua' : 'Buka Semua') +
     '</button>';
 }
@@ -291,7 +285,7 @@ function renderList() {
   html += '<div class="page-sticky">';
 
   html += '<div class="pg-hdr">' +
-        '<h1 class="pg-title">' + svgIcon(icoName(catIcon)) +
+        '<h1 class="pg-title">' + svgIcon(catIcon) +
         escHtml(catLbl) + ' &mdash; ' + escHtml(getPlantLabel(curPlant)) + '</h1>' +
         '<div class="pg-sub">' + total + ' PO menunggu release</div>';
   html += '</div>';
@@ -300,7 +294,7 @@ function renderList() {
 
   html += '<button type="button" class="btn btn-outline" id="btnSelAll"' +
         ' onclick="toggleSelectAll()">' +
-        svgIcon('check') + ' Pilih Semua</button>';
+        svgIcon('i-check') + ' Pilih Semua</button>';
 
   /* Grup aksi massal duduk di sebelah "Pilih Semua" — hanya tampil
      saat ada PO terpilih (dinyalakan/dipadamkan oleh updateFabInfo()
@@ -313,10 +307,10 @@ function renderList() {
         '<span class="sel-count"><b id="selCount">0</b> dipilih</span>' +
         '<button type="button" class="btn btn-success"' +
         ' onclick="showModalRelease()">' +
-        svgIcon('check') + ' Release</button>' +
+        svgIcon('i-check') + ' Release</button>' +
         '<button type="button" class="btn btn-danger"' +
         ' onclick="showModalReject()">' +
-        svgIcon('trash') + ' Reject</button>' +
+        svgIcon('i-trash') + ' Reject</button>' +
         '</div>';
 
   html += buildSearchBox('searchInp', 'onSearchTrigger', searchKw,
@@ -357,7 +351,7 @@ function renderList() {
 
   if (total === 0) {
     html += '<div class="empty empty--inline">' +
-          '<div class="empty-ico">' + svgIcon('search') + '</div>' +
+          '<div class="empty-ico">' + svgIcon('i-search') + '</div>' +
           '<div class="empty-txt">Tidak ada ' + escHtml(catLbl) + ' pending</div>' +
           '</div>';
   } else {
@@ -387,7 +381,7 @@ function renderList() {
             '<span class="card-num">' + escHtml(d.ebeln) + '</span>' +
             '<button type="button" class="btn btn-ghost btn-xs"' +
             ' onclick="event.stopPropagation();showItemTextModal(\'' + d.ebeln + '\')">' +
-            svgIcon('file-text') + ' Lihat Teks</button>' +
+            svgIcon('i-file-text') + ' Lihat Teks</button>' +
             '</div>';
 
       html += '<div class="card-badges">';
@@ -411,7 +405,7 @@ function renderList() {
             ' aria-controls="det_' + d.ebeln + '"' +
             ' aria-label="Tampilkan detail item PO ' + d.ebeln + '"' +
             ' onclick="event.stopPropagation();toggleExpand(\'' + d.ebeln + '\')">' +
-            svgIcon('chevron-down') + '</button>';
+            svgIcon('i-chevron-down') + '</button>';
 
       html += '</div>'; /* card-top */
 

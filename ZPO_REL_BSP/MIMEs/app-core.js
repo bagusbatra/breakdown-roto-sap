@@ -128,8 +128,9 @@ function formatNumHist(rawStr, currency) {
 /* ================================================================
    UI / FETCH HELPERS
    ================================================================ */
-function svgIcon(name){
-  return '<svg class="icon" aria-hidden="true"><use href="#i-'+name+'"></use></svg>';
+function svgIcon(id,cls) {
+  return '<svg class="ico'+(cls?' '+cls:'')+'" aria-hidden="true">'+
+         '<use href="#'+id+'"></use></svg>';
 }
 function apiPost(action, params){
   var body = new URLSearchParams();
