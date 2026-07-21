@@ -1333,6 +1333,16 @@ LOOP AT lt_data2 INTO ls_item.
 ENDLOOP.
 
 CONCATENATE lv_json2 ']' INTO lv_json2.
+
+IF lv_action = 'GET_LIST'.
+  response->append_cdata( '{"status":"S","data1":' ).
+  response->append_cdata( lv_json1 ).
+  response->append_cdata( ',"data2":' ).
+  response->append_cdata( lv_json2 ).
+  response->append_cdata( '}' ).
+  _m_navigation->response_complete( ).
+  EXIT.
+ENDIF.
 %>
 <!DOCTYPE html>
 <html lang="id">
