@@ -357,14 +357,12 @@ git commit -m "feat(zpo): app-ui.js shell controller (port ZPR, remap PO)"
 **Interfaces:**
 - Produces: response JSON `{"status":"S","data1":[...],"data2":[...]}` untuk `action=GET_LIST&plant=<p>&potype=<t>`, di mana `data1`/`data2` = `lv_json1`/`lv_json2` yang **persis sama** dengan `ALL_DATA1`/`ALL_DATA2` lama.
 
-- [ ] **Step 1: Tambah handler GET_LIST yang membungkus blok serialisasi yang ADA**
+- [ ] **Step 1: Sisipkan short-circuit GET_LIST setelah serialisasi yang ADA**
 
-Sisipkan sebelum baris `%>` (main.htm:1336) sebuah blok `IF lv_action = 'GET_LIST'.` yang: (a) memanggil `Z_FM_YMMR068` untuk plant 1200 & 1300 **memakai blok kode yang sudah ada** (1050-1060, dipindah/di-*share*, tidak diubah), (b) membangun `lv_json1`/`lv_json2` dengan **blok 1230-1335 apa adanya**, lalu:
+> **PENYEDERHANAAN (verified 2026-07-21):** blok `Z_FM_YMMR068` (main.htm:1048-1071) + build `lv_json1` (1230-1292) + `lv_json2` (1295-1335) **sudah jalan tanpa syarat** sebelum HTML (untuk di-inject sebagai ALL_DATA1/2). Jadi **TIDAK perlu duplikasi FM**. Cukup sisipkan short-circuit **tepat setelah baris 1335** (`CONCATENATE lv_json2 ']' INTO lv_json2.`) dan **sebelum `%>` (1336)**, memakai `lv_json1`/`lv_json2` yang sudah terisi — output otomatis identik dengan ALL_DATA1/2.
 
 ```abap
 IF lv_action = 'GET_LIST'.
-  " ... (blok Z_FM_YMMR068 + build lv_json1/lv_json2 yang SUDAH ADA,
-  "      dipindah ke sini tanpa perubahan logic) ...
   CONCATENATE '{"status":"S","data1":' lv_json1
               ',"data2":' lv_json2 '}' INTO lv_output.
   response->append_cdata( lv_output ).
@@ -373,7 +371,7 @@ IF lv_action = 'GET_LIST'.
 ENDIF.
 ```
 
-Catatan: karena blok FM+serialisasi juga masih dipakai oleh render HTML lama (yang belum dihapus sampai Task 12), untuk sementara **duplikasikan pemanggilan**-nya di dalam handler GET_LIST (salin, jangan pindahkan) agar app lama tetap utuh. Konsolidasi dilakukan di Task 12.
+Catatan: `GET_LIST` tidak tercegat handler lebih awal (GET_HISTORY_*/GET_OGR meng-EXIT untuk action-nya sendiri), jadi ia jatuh ke FETCH DATA → skip BULK (action≠BULK_*) → build json → short-circuit ini. **Tanpa duplikasi, tanpa ubah logic.** (Konsolidasi di Task 12 tidak lagi diperlukan untuk GET_LIST.)
 
 - [ ] **Step 2: Verifikasi golden-JSON diff**
 
