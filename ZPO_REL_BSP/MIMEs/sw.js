@@ -2,6 +2,7 @@
  * Host sejajar index.htm: .../sap/bc/bsp/sap/zpo_rel_bsp/sw.js */
 var CACHE_NAME = 'zpo-shell-v1';
 var SHELL_ASSETS = [
+  'index.htm',
   'style.css', 'app-core.js', 'app-ui.js', 'app-list.js',
   'app-history.js', 'app-detail.js', 'app-action.js',
   'DMSans.woff2', 'DMMono.woff2', 'icon-192.png', 'icon-512.png'
@@ -39,7 +40,7 @@ self.addEventListener('fetch', function (event) {
   // Navigasi (index.htm) — network dulu, fallback ke cache shell bila offline.
   if (req.mode === 'navigate') {
     event.respondWith(
-      fetch(req).catch(function () { return caches.match('index.htm') || caches.match(req); })
+      fetch(req).catch(function () { return caches.match('index.htm'); })
     );
     return;
   }
