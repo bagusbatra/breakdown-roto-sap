@@ -38,12 +38,14 @@ Cara rekam praktis (tanpa tool khusus):
 **Dibuat baru:**
 - `ZPO_REL_BSP/Page with FLow Logic/index.htm` — shell page (head, sprite ikon, DOM landmark, script includes).
 - `ZPO_REL_BSP/MIMEs/style.css` — CSS (adopsi ZPR + token warna potype).
-- `ZPO_REL_BSP/MIMEs/app-core.js` — utilitas, format, fetch helper, boot.
-- `ZPO_REL_BSP/MIMEs/app-ui.js` — toast, modal, confirm, loading, skeleton, FAB, sticky, empty state.
-- `ZPO_REL_BSP/MIMEs/app-list.js` — sidebar, toolbar, pagination, kartu PO.
-- `ZPO_REL_BSP/MIMEs/app-history.js` — history sidebar, filter, tabel item, counts.
-- `ZPO_REL_BSP/MIMEs/app-detail.js` — detail PO + item text.
-- `ZPO_REL_BSP/MIMEs/app-action.js` — bulk release/reject + logoff.
+- `ZPO_REL_BSP/MIMEs/app-core.js` — utilitas, format (verbatim ZPO), fetch helper (`apiPost`), `svgIcon`.
+- `ZPO_REL_BSP/MIMEs/app-ui.js` — **shell controller** (mirror ZPR app-ui): sidebar, `switchView`, `init`, toast, modal, skeleton, user-menu, `doLogout`, label kategori/plant (POTYPE_MAP).
+- `ZPO_REL_BSP/MIMEs/app-list.js` — view list PO pending-release (mirror ZPR app-list): `fetchList`→GET_LIST, filter, search, page-size, `getFiltered`, `renderList`.
+- `ZPO_REL_BSP/MIMEs/app-history.js` — view history (mirror ZPR app-history): tabel/kartu, group by `ebeln`, filter, pagination, expand, item lazy-load.
+- `ZPO_REL_BSP/MIMEs/app-detail.js` — pagination + expand + `loadDetail` + seleksi + `updateFabInfo` (mirror ZPR app-detail).
+- `ZPO_REL_BSP/MIMEs/app-action.js` — modal Release/Reject + `processAction`→BULK_REL/BULK_REJ (mirror ZPR app-action). Logout ada di app-ui.
+
+> **Catatan grounding (2026-07-21):** pembagian modul frontend di atas **meniru struktur ZPR yang sebenarnya** (bukan verbatim JS ZPO lama). ZPO lama terikat DOM/CSS lama; UI di-*port* dari modul ZPR lalu diremap ke data PO. Data-format functions tetap verbatim dari ZPO (akurasi). Lihat blok GROUNDING di tiap Task 5/7/8/10/11.
 - `ZPO_REL_BSP/MIMEs/manifest.json`, `ZPO_REL_BSP/MIMEs/sw.js`, `icon-192.png`, `icon-512.png`, `DMSans.woff2`, `DMMono.woff2` — PWA + font (copy dari ZPR).
 
 **Dimodifikasi:**
@@ -301,33 +303,45 @@ git commit -m "feat(zpo): app-core.js util/format (verbatim) + svgIcon/apiPost"
 
 ---
 
-### Task 5: `app-ui.js` — komponen UI primitif
+### Task 5: `app-ui.js` — shell controller (PORT dari ZPR app-ui.js, remap PO)
+
+> **GROUNDING (2026-07-21):** `app-ui.js` ZPR **bukan** kumpulan primitif kecil — ia shell controller (sidebar + `switchView` + `init` + toast + modal + skeleton + user-menu + label kategori/plant). Task ini **mem-port `ZPR_REL_BSP/MIMEs/app-ui.js`** lalu remap PR→PO, BUKAN menyalin JS lama ZPO (yang terikat DOM/CSS lama). Verifikasi = statis (`node -c` + grep); paritas visual = user.
 
 **Files:**
 - Create/Fill: `ZPO_REL_BSP/MIMEs/app-ui.js`
-- Reference: `main.htm` blok `TOAST` (1793), `LOADING OVERLAY` (1832), `MODAL` (1850), `CONFIRM DIALOG` (1875), `FAB` (1755), `STICKY` (1901), `EMPTY STATE` (1934), `SKELETON` (1946), `A11Y FOCUS` (1939); pola interaksi dari `ZPR_REL_BSP/MIMEs/app-ui.js`.
+- Port source: `ZPR_REL_BSP/MIMEs/app-ui.js` (569 baris — titik awal, disalin lalu diremap)
+- PO config source (pindahkan verbatim dari monolit): `main.htm:2076-2130` — `ENABLE_OGR`, `POTYPE_MAP`, `PLANT_LABELS`, `BSART_POTYPE_MAP` + builder + `colorMap`.
 
-**Interfaces:**
-- Consumes: `escHtml`, `svgIcon` (app-core).
-- Produces: `showToast(msg,type)`, `showLoading()`/`hideLoading()`, `openModal(id)`/`closeModal(id)`, `confirmDialog(opts)`, `renderSkeleton(target,rows)`, `showEmpty(target,msg)`, `updateFab(count)`. Dipakai list/history/detail/action.
+**Interfaces (tiru nama & signature ZPR):**
+- Consumes dari app-core: `escHtml`, `svgIcon`, `fmtAmt`/`formatAmount`, `apiPost`.
+- Produces: `getCategoryDef(werks,category)`, `getPlantLabel(werks)`, `getCategoryLabelByBsart(werks,bsart)`, `setActionBar(show)`, `setPager(html)`, `hideActionBar()`, `showEmpty(msg)`, `skeletonCard()`, `showSkeleton(count)`, `isMobileView()`, `toggleSidebar()`, `closeSidebarMobile()`, `updateSidebarAria()`, `toggleUserMenu(e)`, `closeUserMenu()`, `doLogout()`, `showToast(type,msg)`, `focusableIn(root)`, `openModal(id)`, `closeModal(id)`, `renderSidebar()`, `switchView(plant,category,mode)`, `init()`, `loadSidebarData()`, `landing()` + helper sidebar (`normalizeCatCounts`, `sumCounts`, `sbBadge`, `sbLink`).
+- Forward-refs (didefinisikan Task 7/8/10, dipanggil `switchView`): `renderList()`, `renderHistContent()`, `loadDetail()`. Aman karena `init()` jalan setelah semua `<script>` termuat.
 
-- [ ] **Step 1: Pindahkan komponen VERBATIM dari `main.htm` ke `app-ui.js`**
+- [ ] **Step 1: Salin `ZPR_REL_BSP/MIMEs/app-ui.js` sebagai basis**
 
-Salin fungsi toast/loading/modal/confirm/FAB/sticky/empty/skeleton dari blok di atas. Sesuaikan hanya selector jika id berubah di shell baru (mis. `#lo`, `#fab`, `#fabInfo`) agar cocok dengan `index.htm` Task 2.
+Salin isinya ke `ZPO_REL_BSP/MIMEs/app-ui.js` (pertahankan header comment + `'use strict';`).
 
-- [ ] **Step 2: Selaraskan kelas CSS ke ZPR**
+- [ ] **Step 2: Pindahkan config PO dari `main.htm` ke `app-ui.js`**
 
-Pastikan markup yang dihasilkan memakai kelas ZPR (`.toast`, `.modal`, `.fab`, `.skeleton`) dari `style.css` Task 1, bukan kelas lama ZPO.
+Salin VERBATIM dari `main.htm:2076-2130`: `ENABLE_OGR`, `POTYPE_MAP`, `PLANT_LABELS`, dan blok IIFE `buildBsartMap` yang mengisi `BSART_POTYPE_MAP` (termasuk `colorMap`). Ini config presentasi (bukan logic bisnis). Taruh dekat atas file. **Jangan** hapus dari `main.htm` (app lama masih pakai sampai Task 12).
 
-- [ ] **Step 3: Verifikasi**
+- [ ] **Step 3: Remap PR→PO pada fungsi hasil port**
 
-Di `index.htm`, dari Console panggil `showToast('tes','success')`, `showLoading()`, `openModal('modalRelease')`, `updateFab(3)`. Setiap komponen tampil sesuai gaya ZPR, tanpa error.
+- Ganti sumber kategori/plant: `getCategoryDef`/`getPlantLabel`/`getCategoryLabelByBsart` dibaca dari `POTYPE_MAP`/`PLANT_LABELS`/`BSART_POTYPE_MAP` (bukan config PR ZPR). Warna badge dari `colorMap`.
+- Buang view "sudah PO" (ZPR `app-po`) dan filter khusus PR yang **tidak ada** di data PO. Cek field data PO (dari GET_LIST Task 6 / `ALL_DATA1`): bila ZPO tak punya `estkz`/MRP, hapus cabang filter MRP/`onEstkzFilter`; bila punya, pertahankan. Catat keputusan di report.
+- `doLogout()`: arahkan ke `/sap/bc/bsp/sap/zpo_rel_bsp/index.htm` (URL BSP ZPO).
+- Wording user-facing PR→PO ("Approve"→"Release"); item menu notifikasi sudah dihapus di index.htm — pastikan `toggleUserMenu` tak merujuk elemen notif yang tak ada.
+- `switchView`: batasi ke view ZPO (list PO pending-release + history rel/rej). Panggil `renderList()`/`renderHistContent()` (Task 7/8).
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 4: Verifikasi statis**
+
+`node -c ZPO_REL_BSP/MIMEs/app-ui.js` (sintaks OK). Grep pastikan tak ada sisa PR-only: `estkz` (bila diputuskan dibuang), `app-po`/`fetchHistApp` bila tak dipakai, `BAPI_REQUISITION`, `banfn` di string user-facing (→`ebeln`/"No PO"). Pastikan `openModal`/`closeModal` menyasar id yang ADA di `index.htm` (`modalRelease`, `modalReject`, `modalItemText`). Paritas visual/interaksi = verifikasi user.
+
+- [ ] **Step 5: Commit**
 
 ```bash
 git add ZPO_REL_BSP/MIMEs/app-ui.js
-git commit -m "feat(zpo): app-ui.js komponen UI (toast/modal/fab/skeleton) gaya ZPR"
+git commit -m "feat(zpo): app-ui.js shell controller (port ZPR, remap PO)"
 ```
 
 ---
@@ -378,90 +392,75 @@ git commit -m "feat(zpo): endpoint GET_LIST (bungkus serialisasi lama, output id
 
 ---
 
-### Task 7: `app-list.js` — sidebar, toolbar, pagination, kartu PO
+### Task 7: `app-list.js` — view list PO pending-release (PORT ZPR app-list.js, remap PO)
+
+> **GROUNDING:** mirror `ZPR_REL_BSP/MIMEs/app-list.js` = view list + filter + search + page-size + `getFiltered` + `renderList`. Sidebar ada di `app-ui` (Task 5), seleksi & pagination di `app-detail` (Task 10) — **sama seperti pembagian ZPR**. Task ini TIDAK memuat sidebar/seleksi.
 
 **Files:**
 - Create/Fill: `ZPO_REL_BSP/MIMEs/app-list.js`
-- Reference: template kartu/sidebar `ZPR_REL_BSP/MIMEs/app-list.js`; logika hitung sidebar `main.htm:2295-2327`; reverse-lookup potype `main.htm:2100`.
+- Port source: `ZPR_REL_BSP/MIMEs/app-list.js`
 
-**Interfaces:**
-- Consumes: `apiPost` (core), `showLoading/hideLoading/showEmpty/renderSkeleton/updateFab` (ui), GET_LIST (Task 6).
-- Produces: `loadList(plant,potype)`, `renderSidebar()`, `renderCards(list)`, `toggleSelect(ebeln)`, state global `ALL_DATA1`/`ALL_DATA2` (diisi dari GET_LIST), `getSelected()`. Dipakai detail & action.
+**Interfaces (tiru ZPR):**
+- Consumes: `apiPost`, `formatAmount`/`fmtAmt`, `escHtml`, `svgIcon` (core); `getCategoryDef`/`getCategoryLabelByBsart`/`showSkeleton`/`showEmpty`/`setActionBar`/`setPager`/`getPlantLabel` (ui, Task 5); state `ALL_DATA1`/`ALL_DATA2`; `toggleSelect`/`updateFabInfo` (detail, Task 10).
+- Produces (tiru nama ZPR): `fetchList(...)`, `onPlantSubFilter(val)`, `onSortFilter(val)`, `setFilterPanel(open)`, `toggleFilterPanel(e)`, `resetPrFilters()` (→ ganti nama sesuai domain, mis. `resetPoFilters`), `buildSearchBox(id,handler,value,placeholder)`, `buildPageSizeSelect(...)`, `buildFilterButton(count)`, `buildPlantSubSelect(...)`, `getFiltered()`, `renderList()`.
 
-- [ ] **Step 1: Muat data via GET_LIST, isi state**
+- [ ] **Step 1: Salin `ZPR_REL_BSP/MIMEs/app-list.js` sebagai basis**
 
-```javascript
-function loadList(plant, potype){
-  showLoading();
-  return apiPost('GET_LIST', { plant:plant, potype:potype||'ALL' })
-    .then(function(res){
-      window.ALL_DATA1 = res.data1 || [];
-      window.ALL_DATA2 = res.data2 || [];
-      hideLoading();
-      renderSidebar();
-      renderCards(filterByPotype(ALL_DATA1, potype));
-    });
-}
-```
+- [ ] **Step 2: `fetchList` → GET_LIST, isi state klien**
 
-- [ ] **Step 2: Sidebar counts — salin logika hitung VERBATIM**
+Ubah `fetchList` agar memanggil `apiPost('GET_LIST', {plant:curPlant, potype:...})` lalu isi `window.ALL_DATA1 = res.data1; window.ALL_DATA2 = res.data2;` dan panggil `renderList()`. (ZPR memanggil GET_LIST/GET_SIDEBAR terpisah; ZPO satu GET_LIST mengembalikan `data1`+`data2`.) Pertahankan pola loading (`showSkeleton()`), error (`showEmpty()`), dan `credentials` seperti ZPR.
 
-Pindahkan `buildSidebarCounts`/`countByBsart`/`countTotalByPlant` (main.htm:2299-2327) ke sini tanpa ubah rumus. Render memakai markup sidebar ZPR (kelas `.sb-*`).
+- [ ] **Step 3: `getFiltered` + `renderList` — remap ke kartu PO**
 
-- [ ] **Step 3: Kartu PO — pakai template ZPR, isi field PO**
+Adaptasi kartu ZPR: field `banfn`→`ebeln` (No PO), badge kategori via `getCategoryLabelByBsart`/potype + warna `colorMap`, total nilai via `formatAmount`/`renderCardAmount`, jumlah item (`item_count`). Checkbox seleksi memanggil `toggleSelect(ebeln)` (app-detail). Filter: potype (dari `switchView`/sidebar), plant-sub, sort, search. **Buang** cabang filter `estkz`/MRP bila Task 5 memutuskan ZPO tak punya field itu (konsisten dengan keputusan Task 5).
 
-Adaptasi `renderCards` dari `app-list.js` ZPR. Ganti field: `banfn`→`ebeln`, label kategori pakai reverse-lookup potype (`main.htm:2100`, salin map-nya). Tampilkan nomor PO, potype badge, total nilai (pakai `formatAmount`), jumlah item. Checkbox seleksi → `toggleSelect(ebeln)` → `updateFab(getSelected().length)`.
+- [ ] **Step 4: Verifikasi statis**
 
-- [ ] **Step 4: Toolbar + pagination**
+`node -c ZPO_REL_BSP/MIMEs/app-list.js`. Grep: kartu memakai `ebeln` (bukan `banfn`), tak ada sisa `fetchHistApp`/`app-po`/`estkz` (bila dibuang), tak ada string "PR" user-facing. Paritas side-by-side (jumlah PO/potype, total, urutan) = **verifikasi user** (butuh SAP).
 
-Salin pola page-size & pagination dari `app-list.js` ZPR (kelas ZPR). Sumber data = state lokal `ALL_DATA1` (client-side paging, sama seperti perilaku lama).
-
-- [ ] **Step 5: Verifikasi side-by-side**
-
-Buka app lama & baru untuk plant 1200 & 1300. Cocokkan: jumlah PO per potype di sidebar, jumlah kartu, total nilai tiap PO, urutan. **Harus sama.**
-
-- [ ] **Step 6: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
 git add ZPO_REL_BSP/MIMEs/app-list.js
-git commit -m "feat(zpo): app-list.js kartu PO + sidebar gaya ZPR (data via GET_LIST)"
+git commit -m "feat(zpo): app-list.js view list PO (port ZPR, data via GET_LIST)"
 ```
 
 ---
 
 ## FASE 3 — HISTORY
 
-### Task 8: `app-history.js` — sidebar history, filter, tabel item, counts
+### Task 8: `app-history.js` — view history (PORT ZPR app-history.js, remap PO)
+
+> **GROUNDING:** mirror `ZPR_REL_BSP/MIMEs/app-history.js` = `renderHistTable`/`groupHistByBanfn`/`buildHistCards`/`getFilteredHist`/`renderHistContent`/pagination/expand. Backend history ZPO **sudah JSON & tidak diubah**.
 
 **Files:**
 - Create/Fill: `ZPO_REL_BSP/MIMEs/app-history.js`
-- Reference: `app-history.js` ZPR; handler existing `GET_HISTORY_REL` (main.htm:68), `GET_HISTORY_REJ` (240), `GET_HISTORY_COUNT` (444), `GET_HISTORY_ITEMS` (552) — **sudah JSON, tidak diubah**.
+- Port source: `ZPR_REL_BSP/MIMEs/app-history.js`
+- Endpoint existing (JANGAN ubah): `GET_HISTORY_REL` (main.htm:68), `GET_HISTORY_REJ` (240), `GET_HISTORY_COUNT` (444), `GET_HISTORY_ITEMS` (552).
 
-**Interfaces:**
-- Consumes: `apiPost` (core), komponen ui, endpoint `GET_HISTORY_*` (existing).
-- Produces: `loadHistory(kind,plant,filter)`, `renderHistBadges(plant)`, `renderHistTable(rows)`, `loadHistItems(ebeln)`.
+**Interfaces (tiru ZPR, remap `banfn`→`ebeln`):**
+- Consumes: `apiPost`, `formatDate`/`formatTime`/`formatNumHist` (core), ui helpers, endpoint `GET_HISTORY_*`.
+- Produces: `renderHistTable(data,type)`, `groupHistByEbeln(rows)` (ex-`groupHistByBanfn`), `buildHistCards(groups,type)`, `onHistSearchTrigger(val)`, `getFilteredHist()`, `renderHistContent()`, `renderHistPagination(...)`, `histGoPage(pg)`, `histChangePageSize(val)`, `toggleHistExpand(ebeln)`, `histExpandAll()`, `histCollapseAll()`, `toggleHistExpandAll()`.
 
-- [ ] **Step 1: Ambil history via endpoint existing**
+- [ ] **Step 1: Salin `ZPR_REL_BSP/MIMEs/app-history.js` sebagai basis**
 
-`apiPost('GET_HISTORY_REL', {werks:plant, date_from, date_to, search, offset, limit})` dan `GET_HISTORY_REJ` serupa. Parameter mengikuti yang sudah dibaca handler (main.htm:76-83). **Tidak menambah/mengubah parameter backend.**
+- [ ] **Step 2: Sambungkan ke endpoint history ZPO existing**
 
-- [ ] **Step 2: Render tabel & badge pakai markup ZPR**
+Panggil `apiPost('GET_HISTORY_REL', {werks, date_from, date_to, search, offset, limit})` & `GET_HISTORY_REJ` dengan **parameter yang sudah dibaca handler** (main.htm:76-83) — jangan tambah/ubah param. Badge count via `GET_HISTORY_COUNT`. Item saat expand via `GET_HISTORY_ITEMS` (cache per `ebeln`, pola `main.htm:2161`).
 
-Adaptasi tampilan history ZPR; remap field ke PO (`ebeln`, `bsart`→potype, tanggal via `formatDate`, nilai via `formatNumHist`). Badge count via `GET_HISTORY_COUNT`.
+- [ ] **Step 3: Remap tampilan PR→PO**
 
-- [ ] **Step 3: Lazy-load item history**
+`groupHistByBanfn`→group by `ebeln`; kolom/kartu remap ke PO (`ebeln`, potype badge, tanggal `formatDate`, nilai `formatNumHist`). Markup & kelas mengikuti ZPR.
 
-Saat baris di-expand → `apiPost('GET_HISTORY_ITEMS',{ebeln:ebeln})`, render tabel item (kelas ZPR). Cache per `ebeln` di memori (pola cache lama `main.htm:2161`).
+- [ ] **Step 4: Verifikasi statis**
 
-- [ ] **Step 4: Verifikasi side-by-side**
-
-Bandingkan history REL & REJ (plant + rentang tanggal sama) app lama vs baru: jumlah baris, nilai, badge count, item saat expand. **Harus sama.**
+`node -c`. Grep: group/kolom pakai `ebeln`, tak ada param backend baru, tak ada string "PR" user-facing. Paritas side-by-side (baris, nilai, badge, item) = **verifikasi user**.
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add ZPO_REL_BSP/MIMEs/app-history.js
-git commit -m "feat(zpo): app-history.js (konsumsi GET_HISTORY_* existing)"
+git commit -m "feat(zpo): app-history.js view history (port ZPR, GET_HISTORY_* existing)"
 ```
 
 ---
@@ -506,82 +505,78 @@ git commit -m "feat(zpo): detail PO (repackage item existing / state klien)"
 
 ---
 
-### Task 10: `app-detail.js` — panel detail + modal item text
+### Task 10: `app-detail.js` — pagination + expand detail + seleksi (PORT ZPR app-detail.js, remap PO)
+
+> **GROUNDING:** mirror `ZPR_REL_BSP/MIMEs/app-detail.js` = pagination + expand kartu + `loadDetail` + seleksi + `updateFabInfo`. (Di ZPR, pagination & seleksi memang di modul ini.) Detail item PO diambil dari state klien `ALL_DATA2` (GET_LIST) bila lengkap; bila tidak, Task 9 (`GET_DETAIL`) mengisinya.
 
 **Files:**
 - Create/Fill: `ZPO_REL_BSP/MIMEs/app-detail.js`
-- Reference: `app-detail.js` ZPR; blok `ADD INFO` (main.htm:1684), item-text handler existing.
+- Port source: `ZPR_REL_BSP/MIMEs/app-detail.js`
+- Item-text: handler READ_TEXT existing (main.htm:937) — **jangan ubah**.
 
-**Interfaces:**
-- Consumes: state `ALL_DATA2` / GET_DETAIL, `apiPost`, komponen ui, `openModal('modalItemText')`.
-- Produces: `openDetail(ebeln)`, `renderDetailItems(ebeln)`, `showItemText(ebeln,item)`.
+**Interfaces (tiru ZPR, remap `banfn`→`ebeln`):**
+- Consumes: state `ALL_DATA2` (atau GET_DETAIL Task 9), `apiPost`, `formatAmount`/`formatNum`, `openModal('modalItemText')`/`showItemTextModal` (ui), `renderList` (list), `updateFabInfo` konsumen `showModalRelease/Reject` (action).
+- Produces: `pgBtn(...)`, `buildPagination(...)`, `renderPagination(...)`, `goPage(pg)`, `changePageSize(val)`, `onSearchTrigger(val)`, `setCardExpanded(card,on)`, `toggleExpand(ebeln)`, `expandAll()`, `collapseAll()`, `toggleExpandAll()`, `currencyChipClass(w)`, `loadDetail(ebeln)`, `toggleSelect(ebeln)`, `toggleSelectAll()`, `syncCheckboxes()`, `updateFabInfo()`. State seleksi global (mis. `selEbelns`).
 
-- [ ] **Step 1: Render item detail dari state/endpoint**
+- [ ] **Step 1: Salin `ZPR_REL_BSP/MIMEs/app-detail.js` sebagai basis**
 
-Filter `ALL_DATA2` by `ebeln` (atau GET_DETAIL), render tabel item memakai markup detail ZPR (remap field PO: qty via `formatNum`, harga via `formatAmount`, dll).
+- [ ] **Step 2: `loadDetail` — sumber item PO**
 
-- [ ] **Step 2: Modal item text**
+`loadDetail(ebeln)`: filter `ALL_DATA2` by `ebeln` (client state dari GET_LIST). Bila item PO tidak lengkap di `ALL_DATA2`, panggil `apiPost('GET_DETAIL',{ebeln})` (Task 9). Render tabel item markup detail ZPR (qty `formatNum`, harga `formatAmount`, currency chip).
 
-Adaptasi modal item-text ZPR (`#modalItemText`). Sumber teks = handler READ_TEXT existing (jangan ubah). Tampilkan meta + body teks.
+- [ ] **Step 3: Seleksi + FAB**
 
-- [ ] **Step 3: Verifikasi side-by-side**
+`toggleSelect(ebeln)`/`toggleSelectAll`/`syncCheckboxes`/`updateFabInfo` remap `banfn`→`ebeln`; `updateFabInfo` menampilkan "N PO dipilih" (id `fabInfo`). Modal item-text via `showItemTextModal` (ui) yang memanggil READ_TEXT existing.
 
-Buka detail beberapa PO, bandingkan daftar item + item text vs app lama. **Sama.**
+- [ ] **Step 4: Verifikasi statis**
 
-- [ ] **Step 4: Commit**
+`node -c`. Grep: seleksi/detail pakai `ebeln`, FAB teks "PO", tak ada string "PR". Paritas detail item + item-text = **verifikasi user**.
+
+- [ ] **Step 5: Commit**
 
 ```bash
 git add ZPO_REL_BSP/MIMEs/app-detail.js
-git commit -m "feat(zpo): app-detail.js detail PO + modal item text gaya ZPR"
+git commit -m "feat(zpo): app-detail.js pagination+seleksi+detail PO (port ZPR)"
 ```
 
 ---
 
 ## FASE 5 — BULK ACTION
 
-### Task 11: `app-action.js` — bulk release/reject + logoff (paling sensitif)
+### Task 11: `app-action.js` — modal Release/Reject + processAction (PORT ZPR, paling sensitif)
+
+> **GROUNDING:** mirror `ZPR_REL_BSP/MIMEs/app-action.js` = `showModalApprove`/`showModalReject`/`confirmApprove`/`confirmReject`/`setLoadingText`/`processAction`. Remap Approve→Release. **Logout ADA di `app-ui` (`doLogout`, Task 5)** — tidak diduplikasi di sini. `index.htm` sudah memakai `showModalRelease()`/`confirmRelease()` (Task 2 fix) — definisikan nama itu.
 
 **Files:**
 - Create/Fill: `ZPO_REL_BSP/MIMEs/app-action.js`
-- Reference: handler existing `BULK_REL` (main.htm:1092), `BULK_REJ` (1132), logoff (main.htm:4211/4320); modal reject lama.
+- Port source: `ZPR_REL_BSP/MIMEs/app-action.js`
+- Handler existing (JANGAN ubah logic): `BULK_REL` (main.htm:1092), `BULK_REJ` (1132).
 
-**Interfaces:**
-- Consumes: `getSelected()` (list), modal `#modalRelease`/`#modalReject`, `apiPost`, `showToast`.
-- Produces: `doRelease()`, `doReject(notes)`, `doLogoff()`, refresh list setelah aksi.
+**Interfaces (tiru ZPR, remap PO):**
+- Consumes: state seleksi `selEbelns`/`getSelected` (detail), modal `#modalRelease`/`#modalReject`/`#rejectNotes` (index.htm), `apiPost`, `showToast`, `closeModal`, `fetchList`/`renderList` (refresh).
+- Produces: `showModalRelease()` (ex-`showModalApprove`), `showModalReject()`, `confirmRelease()` (ex-`confirmApprove`), `confirmReject()`, `setLoadingText(txt)`, `processAction(ebelns, action, notes)`.
 
-- [ ] **Step 1: Pastikan BULK_REL/BULK_REJ mengembalikan JSON**
+- [ ] **Step 1: Salin `ZPR_REL_BSP/MIMEs/app-action.js` sebagai basis; remap nama**
 
-Cek handler existing (main.htm:1092/1132): jika sudah `append_cdata` JSON + `response_complete` + `EXIT`, **tidak diubah**. Jika masih menyatu dengan render HTML lama, tambahkan cabang JSON untuk saat dipanggil via `apiPost` **tanpa mengubah pemanggilan `Z_PO_RELEASE2`/`Z_PO_REJECT`/`BAPI_TRANSACTION_COMMIT`** — hanya bungkus hasil `BAPIRET2`/`BAPIRETURN` ke JSON. Verifikasi terpisah di Step 3.
+`showModalApprove`→`showModalRelease`, `confirmApprove`→`confirmRelease` (cocok dgn `index.htm`). Modal id `modalApprove`→`modalRelease`. Teks "Approve"→"Release".
 
-- [ ] **Step 2: Wire FAB → modal → aksi → refresh**
+- [ ] **Step 2: `processAction` → BULK_REL / BULK_REJ**
 
-```javascript
-function doRelease(){
-  var sel = getSelected();
-  if (!sel.length){ showToast('Pilih PO dulu','info'); return; }
-  showLoading();
-  apiPost('BULK_REL', { selected: sel.join(',') }).then(function(res){
-    hideLoading();
-    showToast(res.message || 'Selesai', res.status==='S'?'success':'error');
-    loadList(currentPlant, currentPotype); // refresh dari server
-  });
-}
-```
-`doReject(notes)` serupa dengan `action:'BULK_REJ'` + `notes` (dari `#rejectNotes`). Parameter `selected`/`notes` harus **sama nama** dengan yang dibaca handler lama.
+`processAction(ebelns, action, notes)`: `action` 'REL'→`apiPost('BULK_REL',{selected:ebelns.join(','), ...})`, 'REJ'→`apiPost('BULK_REJ',{selected:..., notes:notes})`. **Nama parameter (`selected`/`notes`) harus persis yang dibaca handler lama** (cek main.htm:1092/1132 & parsing `lt_selected`). Setelah sukses: `showToast`, tutup modal, refresh via `fetchList()`.
 
-- [ ] **Step 3: Verifikasi di PO UJI (kritis)**
+- [ ] **Step 3: Cek handler backend mengembalikan JSON saat dipanggil via fetch**
 
-Di client uji: pilih 1 PO uji, Release. Bandingkan `BAPIRET2`/`BAPIRETURN` & status commit dengan app lama untuk PO serupa. Ulangi untuk Reject + catatan. **Hasil & efek di SAP harus identik.** Jangan pakai PO produksi.
+Baca `BULK_REL`/`BULK_REJ` (main.htm:1092/1132). Bila sudah `append_cdata` JSON + `response_complete` + `EXIT` → **tak diubah**. Bila masih menyatu render HTML lama, tambah cabang JSON **tanpa mengubah pemanggilan `Z_PO_RELEASE2`/`Z_PO_REJECT`/`BAPI_TRANSACTION_COMMIT`** (hanya bungkus `BAPIRET2`/`BAPIRETURN` → JSON). Sintaks ABAP klasik.
 
-- [ ] **Step 4: Logoff**
+- [ ] **Step 4: Verifikasi**
 
-Salin pola logoff (main.htm:4320) ke `doLogoff()`; sesuaikan URL BSP ZPO (`/sap/bc/bsp/sap/zpo_rel_bsp/index.htm`).
+Statis: `node -c`; seleksi pakai `ebeln`; param `selected`/`notes` cocok handler. **KRITIS (user, di PO UJI):** Release 1 PO uji via app baru, bandingkan `BAPIRET2`/`BAPIRETURN` + commit dgn app lama; ulangi Reject+catatan. **Efek di SAP harus identik.** Jangan PO produksi.
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add ZPO_REL_BSP/MIMEs/app-action.js "ZPO_REL_BSP/Page with FLow Logic/main.htm"
-git commit -m "feat(zpo): app-action.js bulk release/reject + logoff (efek SAP identik)"
+git commit -m "feat(zpo): app-action.js modal Release/Reject + processAction (port ZPR)"
 ```
 
 ---
