@@ -737,6 +737,9 @@ CASE lv_action.
 
     DATA: lv_gl_bdat     TYPE string,
           lv_gl_txz01    TYPE string,
+          lv_gl_alltx    TYPE string,
+          lv_gl_asep     TYPE string,
+          ls_gl_makt     TYPE ty_makt,
           lv_gl_full     TYPE string,
           lv_gl_itcnt    TYPE string,
           lv_gl_icnt     TYPE i,
@@ -750,7 +753,8 @@ CASE lv_action.
     CLEAR: lv_json, lv_sep.
 
     LOOP AT lt_head INTO ls_head.
-      CLEAR: lt_gl_curr, lv_gl_icnt.
+      CLEAR: lt_gl_curr, lv_gl_icnt,
+             lv_gl_alltx, lv_gl_asep.
 
       LOOP AT lt_items INTO ls_gl_item
         WHERE banfn = ls_head-banfn.
@@ -759,6 +763,28 @@ CASE lv_action.
         ls_gl_curr-totpr = ls_gl_item-menge * ls_gl_item-preis.
         COLLECT ls_gl_curr INTO lt_gl_curr.
         lv_gl_icnt = lv_gl_icnt + 1.
+
+        " Kumpulkan short text semua item + deskripsi material
+        " supaya pencarian di layar bisa menemukan PR lewat
+        " deskripsi item ke-2 dst, bukan hanya item pertama.
+        IF ls_gl_item-txz01 IS NOT INITIAL.
+          CONCATENATE lv_gl_alltx lv_gl_asep ls_gl_item-txz01
+            INTO lv_gl_alltx.
+          lv_gl_asep = ' | '.
+        ENDIF.
+
+        IF ls_gl_item-matnr IS NOT INITIAL.
+          CLEAR ls_gl_makt.
+          READ TABLE lt_makt INTO ls_gl_makt
+            WITH KEY matnr = ls_gl_item-matnr.
+          IF sy-subrc = 0 AND
+             ls_gl_makt-maktx IS NOT INITIAL AND
+             ls_gl_makt-maktx NE ls_gl_item-txz01.
+            CONCATENATE lv_gl_alltx lv_gl_asep ls_gl_makt-maktx
+              INTO lv_gl_alltx.
+            lv_gl_asep = ' | '.
+          ENDIF.
+        ENDIF.
       ENDLOOP.
 
       IF lt_gl_curr IS INITIAL.
@@ -782,6 +808,7 @@ CASE lv_action.
       CONDENSE lv_gl_itcnt NO-GAPS.
 
       escape_json lv_gl_txz01.
+      escape_json lv_gl_alltx.
       escape_json lv_gl_full.
 
       CLEAR: lv_gl_totals, lv_gl_tsep.
@@ -801,6 +828,7 @@ CASE lv_action.
         '"werks":"'       ls_head-werks  '",'
         '"bsart":"'       ls_head-bsart  '",'
         '"txz01":"'       lv_gl_txz01    '",'
+        '"txall":"'       lv_gl_alltx    '",'
         '"ernam":"'       ls_head-ernam  '",'
         '"ernam_full":"'  lv_gl_full     '",'
         '"ekgrp":"'       ls_head-ekgrp  '",'

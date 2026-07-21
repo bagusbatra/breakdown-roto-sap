@@ -2234,6 +2234,7 @@ function getFiltered() {
       (d.ernam_full && d.ernam_full.toLowerCase().indexOf(kw)>-1)||
       (d.ernam && d.ernam.toLowerCase().indexOf(kw)>-1)||
       (d.txz01 && d.txz01.toLowerCase().indexOf(kw)>-1)||
+      (d.txall && d.txall.toLowerCase().indexOf(kw)>-1)||
       (d.ekgrp && d.ekgrp.toLowerCase().indexOf(kw)>-1)||
       (d.estkz && getEstkzLabel(d.estkz).toLowerCase().indexOf(kw)>-1);
   });
@@ -2293,7 +2294,7 @@ function renderList() {
   html+='<div class="sticky-toolbar"><div class="toolbar">';
 
   html+='<div class="search-wrap"><span>&#128269;</span>'+
-        '<input type="text" id="searchInp" placeholder="Cari No PR, Pembuat... (Enter)"'+
+        '<input type="text" id="searchInp" placeholder="Cari No PR, Deskripsi, Pembuat... (Enter)"'+
         ' value="'+escHtml(searchKw)+'" onkeydown="onSearchKey(event)" onblur="onSearchBlur()"></div>';
 
   html+='<select class="page-size-select" onchange="changePageSize(parseInt(this.value))">';
@@ -2511,7 +2512,7 @@ function renderHistView() {
 
   html+='<div class="sticky-toolbar"><div class="toolbar">';
   html+='<div class="search-wrap"><span>&#128269;</span>'+
-        '<input type="text" id="histSearchInp" placeholder="Cari No PR, Pembuat... (Enter)"'+
+        '<input type="text" id="histSearchInp" placeholder="Cari No PR, Deskripsi, Pembuat... (Enter)"'+
         ' value="'+(document.getElementById('histSearchInp')?escHtml(document.getElementById('histSearchInp').value):'')+'"'+
         ' onkeydown="onHistSearchKey(event)" onblur="onHistSearchBlur()"></div>';
 
@@ -3259,7 +3260,7 @@ function renderPoContent() {
   html+='<div class="sticky-toolbar"><div class="toolbar">';
 
   html+='<div class="search-wrap"><span>&#128269;</span>'+
-        '<input type="text" id="poSearchInp" placeholder="Cari No PR, No PO, Vendor... (Enter)"'+
+        '<input type="text" id="poSearchInp" placeholder="Cari No PR, No PO, Deskripsi, Vendor... (Enter)"'+
         ' value="'+escHtml(poSearchKw)+'" onkeydown="onPoSearchKey(event)"'+
         ' onblur="onPoSearchBlur()"></div>';
 
