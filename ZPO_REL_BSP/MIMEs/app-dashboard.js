@@ -60,7 +60,7 @@ function renderDashboard() {
       '<div class="dash-head">' +
         '<h1 class="dash-title">' + svgIcon('i-clipboard','ico-lg') +
           ' Dashboard</h1>' +
-        '<div class="dash-sub">Ringkasan PO pending &amp; aktivitas release/reject</div>' +
+        '<div class="dash-sub">Ringkasan PO pending & aktivitas release/reject</div>' +
       '</div>' +
 
       '<div class="dash-section-h">PO Menunggu Release</div>' +

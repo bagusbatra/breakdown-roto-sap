@@ -33,8 +33,8 @@ var POTYPE_MAP = {
     'JASA_PROD': { label: 'PO Jasa Production',               bsart: ['POK1'] },
     'BAHAN':     { label: 'PO Bahan Baku',                    bsart: ['PSB1','PSB3','PSB4'] },
     'PENUNJANG': { label: 'PO Bahan Baku Penunjang',          bsart: ['PSB2'] },
-    'SPAREPART': { label: 'PO Sparepart &amp; Tools',         bsart: ['PSB8','PSB9','PSBT'] },
-    'UTILITY':   { label: 'PO Bahan Penunjang &amp; Utility', bsart: ['PSB5','PSB6'] },
+    'SPAREPART': { label: 'PO Sparepart & Tools',         bsart: ['PSB8','PSB9','PSBT'] },
+    'UTILITY':   { label: 'PO Bahan Penunjang & Utility', bsart: ['PSB5','PSB6'] },
     'EXIM':      { label: 'PO Exim',                          bsart: ['PSBI','POK9'] },
     'PKIT':        { label: 'PO KITE',                            bsart: ['PKIT'] }
   },
@@ -42,8 +42,8 @@ var POTYPE_MAP = {
     'JASA':      { label: 'PO Jasa',                          bsart: ['PSM7'] },
     'BAHAN':     { label: 'PO Bahan Baku',                    bsart: ['PSM1','PSM3','PSM4'] },
     'PENUNJANG': { label: 'PO Bahan Baku Penunjang',          bsart: ['PSM2'] },
-    'SPAREPART': { label: 'PO Sparepart &amp; Tools',         bsart: ['PSM8','PSM9','PSMT'] },
-    'UTILITY':   { label: 'PO Bahan Penunjang &amp; Utility', bsart: ['PSM5','PSM6'] },
+    'SPAREPART': { label: 'PO Sparepart & Tools',         bsart: ['PSM8','PSM9','PSMT'] },
+    'UTILITY':   { label: 'PO Bahan Penunjang & Utility', bsart: ['PSM5','PSM6'] },
     'EXIM':      { label: 'PO Exim',                          bsart: ['PSMI','POK9'] }
   }
 };
