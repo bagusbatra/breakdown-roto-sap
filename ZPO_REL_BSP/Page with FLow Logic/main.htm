@@ -1049,6 +1049,13 @@ ENDIF.
 * = muat kedua plant (dipakai render HTML lama / akses main.htm langsung).
 * FM, parameter, & output tidak berubah — hanya di-scope ke plant terpilih.
 *------------------------------------------------------------------
+* === DEBUG PERF (SEMENTARA — dihapus setelah diagnosa) ===
+DATA: lv_dbg_t0   TYPE i, lv_dbg_t1 TYPE i, lv_dbg_t2 TYPE i,
+      lv_dbg_fm   TYPE i, lv_dbg_js TYPE i, lv_dbg_n  TYPE i,
+      lv_dbg_fm_c TYPE string, lv_dbg_js_c TYPE string,
+      lv_dbg_n_c  TYPE string.
+GET RUN TIME FIELD lv_dbg_t0.
+
 IF lv_plant IS INITIAL OR lv_plant = '1200'.
   CALL FUNCTION 'Z_FM_YMMR068'
     EXPORTING
@@ -1075,6 +1082,8 @@ APPEND LINES OF lt_data1_1200 TO lt_data1.
 APPEND LINES OF lt_data1_1300 TO lt_data1.
 APPEND LINES OF lt_data2_1200 TO lt_data2.
 APPEND LINES OF lt_data2_1300 TO lt_data2.
+
+GET RUN TIME FIELD lv_dbg_t1.  " DEBUG PERF: sesudah FM fetch
 
 *------------------------------------------------------------------
 * GET CHECKBOX
@@ -1341,11 +1350,24 @@ ENDLOOP.
 CONCATENATE lv_json2 ']' INTO lv_json2.
 
 IF lv_action = 'GET_LIST'.
+  GET RUN TIME FIELD lv_dbg_t2.  " DEBUG PERF: sesudah build JSON
+  lv_dbg_fm = ( lv_dbg_t1 - lv_dbg_t0 ) / 1000.  " FM fetch (ms)
+  lv_dbg_js = ( lv_dbg_t2 - lv_dbg_t1 ) / 1000.  " checkbox+build JSON (ms)
+  DESCRIBE TABLE lt_data1 LINES lv_dbg_n.
+  lv_dbg_fm_c = lv_dbg_fm. CONDENSE lv_dbg_fm_c NO-GAPS.
+  lv_dbg_js_c = lv_dbg_js. CONDENSE lv_dbg_js_c NO-GAPS.
+  lv_dbg_n_c  = lv_dbg_n.  CONDENSE lv_dbg_n_c  NO-GAPS.
   response->append_cdata( '{"status":"S","data1":' ).
   response->append_cdata( lv_json1 ).
   response->append_cdata( ',"data2":' ).
   response->append_cdata( lv_json2 ).
-  response->append_cdata( '}' ).
+  response->append_cdata( ',"_dbg":{"fm_ms":' ).
+  response->append_cdata( lv_dbg_fm_c ).
+  response->append_cdata( ',"json_ms":' ).
+  response->append_cdata( lv_dbg_js_c ).
+  response->append_cdata( ',"n":' ).
+  response->append_cdata( lv_dbg_n_c ).
+  response->append_cdata( '}}' ).
   _m_navigation->response_complete( ).
   EXIT.
 ENDIF.

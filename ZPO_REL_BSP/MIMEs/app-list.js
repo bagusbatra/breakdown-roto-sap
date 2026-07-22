@@ -89,8 +89,10 @@ var filteredData = [];
    ================================================================ */
 function fetchList() {
   showSkeleton();
+  var _dbgT0 = performance.now();               /* DEBUG PERF */
   apiPost('GET_LIST', { plant: curPlant, potype: curCategory })
     .then(function(res) {
+      var _dbgT1 = performance.now();            /* DEBUG PERF */
       if (res.status !== 'S') {
         showEmpty(res.message || 'Gagal memuat data');
         return;
@@ -100,6 +102,15 @@ function fetchList() {
       buildSbCounts();
       renderSidebar();
       renderList();
+      var _dbgT2 = performance.now();            /* DEBUG PERF */
+      var d = res._dbg || {};
+      console.log('[PERF GET_LIST] plant=' + curPlant +
+        ' | roundtrip(net+server)=' + (_dbgT1 - _dbgT0).toFixed(0) + 'ms' +
+        ' | server_FM=' + (d.fm_ms == null ? '?' : d.fm_ms) + 'ms' +
+        ' | server_JSON=' + (d.json_ms == null ? '?' : d.json_ms) + 'ms' +
+        ' | render=' + (_dbgT2 - _dbgT1).toFixed(0) + 'ms' +
+        ' | PO=' + (d.n == null ? '?' : d.n) +
+        ' | payloadKB=' + (JSON.stringify(res).length / 1024).toFixed(0));
     })
     .catch(function() {
       showEmpty('Gagal memuat data');
