@@ -499,8 +499,10 @@ function showItemTextModal(ebeln) {
 function init() {
   updateSidebarAria();
   loadSidebarData();
-  fetchList();
-  fetchHistCounts();
+  /* Lazy boot: JANGAN tarik data di sini. Shell + sidebar tampil instan;
+     data plant baru ditarik lewat switchView()->fetchList() saat user
+     memilih plant/kategori (menghindari beban Z_FM_YMMR068 saat buka). */
+  landing();
 }
 
 /* ================================================================

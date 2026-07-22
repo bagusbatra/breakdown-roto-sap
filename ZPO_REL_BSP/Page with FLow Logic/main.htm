@@ -1045,25 +1045,31 @@ IF lv_action = 'GET_OGR'.
 ENDIF.
 
 *------------------------------------------------------------------
-* FETCH DATA — ALWAYS LOAD FIRST
+* FETCH DATA — hanya plant yang diminta (perf). Param 'plant' kosong
+* = muat kedua plant (dipakai render HTML lama / akses main.htm langsung).
+* FM, parameter, & output tidak berubah — hanya di-scope ke plant terpilih.
 *------------------------------------------------------------------
-CALL FUNCTION 'Z_FM_YMMR068'
-  EXPORTING
-    p_werks = '1200'
-  TABLES
-    t_data1 = lt_data1_1200
-    t_data2 = lt_data2_1200
-    return  = lt_return_tmp.
+IF lv_plant IS INITIAL OR lv_plant = '1200'.
+  CALL FUNCTION 'Z_FM_YMMR068'
+    EXPORTING
+      p_werks = '1200'
+    TABLES
+      t_data1 = lt_data1_1200
+      t_data2 = lt_data2_1200
+      return  = lt_return_tmp.
+ENDIF.
 
 CLEAR lt_return_tmp.
 
-CALL FUNCTION 'Z_FM_YMMR068'
-  EXPORTING
-    p_werks = '1300'
-  TABLES
-    t_data1 = lt_data1_1300
-    t_data2 = lt_data2_1300
-    return  = lt_return_tmp.
+IF lv_plant IS INITIAL OR lv_plant = '1300'.
+  CALL FUNCTION 'Z_FM_YMMR068'
+    EXPORTING
+      p_werks = '1300'
+    TABLES
+      t_data1 = lt_data1_1300
+      t_data2 = lt_data2_1300
+      return  = lt_return_tmp.
+ENDIF.
 
 APPEND LINES OF lt_data1_1200 TO lt_data1.
 APPEND LINES OF lt_data1_1300 TO lt_data1.
