@@ -140,7 +140,8 @@ function apiPost(action, params){
      history tetap di main.htm (handler-nya sudah cepat, EXIT sebelum FM).
      main.htm TIDAK diubah (tetap dipakai owner). */
   var page = 'main.htm';
-  if (action === 'GET_LIST' || action === 'GET_ITEM_TEXT' ||
+  if (action === 'GET_LIST' || action === 'GET_SIDEBAR' ||
+      action === 'GET_ITEM_TEXT' ||
       action === 'BULK_REL' || action === 'BULK_REJ') {
     page = 'svc.htm';
   }

@@ -72,6 +72,15 @@ TYPES: BEGIN OF ty_hdr,
          frgco TYPE t16fc-frgco,
        END OF ty_hdr.
 
+TYPES: BEGIN OF ty_sb,
+         ebeln  TYPE ekpo-ebeln,
+         ebelp  TYPE ekpo-ebelp,
+         bsart  TYPE ekko-bsart,
+         werks  TYPE ekpo-werks,
+         menge  TYPE ekpo-menge,
+         outstd TYPE ekpo-menge,
+       END OF ty_sb.
+
 DATA: gt_item TYPE STANDARD TABLE OF ty_item,
       gs_item TYPE ty_item,
       gt_hdr  TYPE STANDARD TABLE OF ty_hdr,
@@ -373,6 +382,132 @@ IF lv_action = 'GET_LIST'.
 
   CONCATENATE '{"status":"S","data1":' lv_out
               ',"data2":' lv_json '}' INTO lv_out.
+  response->set_header_field(
+    name = 'Content-Type' value = 'application/json' ).
+  response->set_cdata( lv_out ).
+  _m_navigation->response_complete( ).
+  EXIT.
+ENDIF.
+
+*======================================================================
+* GET_SIDEBAR — jumlah PO pending per grup-plant + bsart (badge sidebar).
+* Kriteria seleksi IDENTIK GET_LIST (termasuk filter outstanding>0).
+* Kedua grup plant sekaligus. Payload ringan: hanya angka.
+*======================================================================
+IF lv_action = 'GET_SIDEBAR'.
+
+  DATA: gt_sb TYPE STANDARD TABLE OF ty_sb,
+        gs_sb TYPE ty_sb.
+
+  DATA: lt_sbw TYPE RANGE OF ekpo-werks,
+        ls_sbw LIKE LINE OF lt_sbw.
+  CLEAR lt_sbw.
+  ls_sbw-sign = 'I'. ls_sbw-option = 'EQ'.
+  ls_sbw-low = '1200'. APPEND ls_sbw TO lt_sbw.
+  ls_sbw-low = '2000'. APPEND ls_sbw TO lt_sbw.
+  ls_sbw-low = '1100'. APPEND ls_sbw TO lt_sbw.
+  ls_sbw-low = '1000'. APPEND ls_sbw TO lt_sbw.
+  ls_sbw-low = '1300'. APPEND ls_sbw TO lt_sbw.
+  ls_sbw-low = '3000'. APPEND ls_sbw TO lt_sbw.
+
+  SELECT a~bsart b~ebeln b~ebelp b~werks b~menge
+    FROM ekko AS a INNER JOIN ekpo AS b ON b~ebeln = a~ebeln
+    INTO CORRESPONDING FIELDS OF TABLE gt_sb
+    WHERE b~werks  IN lt_sbw
+      AND b~loekz  NE 'L'
+      AND a~frgzu  EQ ''
+      AND ( a~frgsx = 'P1' OR a~frgsx = 'P2' OR a~frgsx = 'P3'
+         OR a~frgsx = 'P4' OR a~frgsx = 'PX' )
+      AND b~elikz  EQ ''
+      AND a~procstat EQ '03'.
+
+  IF gt_sb IS INITIAL.
+    response->set_header_field(
+      name = 'Content-Type' value = 'application/json' ).
+    response->set_cdata( '{"status":"S","counts":[]}' ).
+    _m_navigation->response_complete( ).
+    EXIT.
+  ENDIF.
+
+  " Filter outstanding>0 (GR via ekbe + COLLECT) — sama seperti GET_LIST
+  DATA: BEGIN OF ls_sgr,
+          ebeln TYPE ekbe-ebeln, ebelp TYPE ekbe-ebelp,
+          bwart TYPE ekbe-bwart, menge TYPE ekbe-menge,
+        END OF ls_sgr,
+        lt_sgr  LIKE STANDARD TABLE OF ls_sgr,
+        lt_sgrs LIKE STANDARD TABLE OF ls_sgr,
+        ls_sgrs LIKE ls_sgr,
+        lv_s101 TYPE ekpo-menge, lv_s102 TYPE ekpo-menge,
+        lv_sng  TYPE ekpo-menge.
+
+  SELECT ebeln ebelp bwart menge FROM ekbe
+    INTO CORRESPONDING FIELDS OF TABLE lt_sgr
+    FOR ALL ENTRIES IN gt_sb
+    WHERE ebeln = gt_sb-ebeln
+      AND ebelp = gt_sb-ebelp
+      AND ( bwart = '101' OR bwart = '102' ).
+
+  CLEAR lt_sgrs.
+  LOOP AT lt_sgr INTO ls_sgr.
+    CLEAR ls_sgrs.
+    ls_sgrs-ebeln = ls_sgr-ebeln.
+    ls_sgrs-ebelp = ls_sgr-ebelp.
+    ls_sgrs-bwart = ls_sgr-bwart.
+    ls_sgrs-menge = ls_sgr-menge.
+    COLLECT ls_sgrs INTO lt_sgrs.
+  ENDLOOP.
+
+  LOOP AT gt_sb INTO gs_sb.
+    CLEAR: lv_s101, lv_s102.
+    READ TABLE lt_sgrs INTO ls_sgrs
+      WITH KEY ebeln = gs_sb-ebeln ebelp = gs_sb-ebelp bwart = '101'.
+    IF sy-subrc = 0. lv_s101 = ls_sgrs-menge. ENDIF.
+    READ TABLE lt_sgrs INTO ls_sgrs
+      WITH KEY ebeln = gs_sb-ebeln ebelp = gs_sb-ebelp bwart = '102'.
+    IF sy-subrc = 0. lv_s102 = ls_sgrs-menge. ENDIF.
+    lv_sng = lv_s101 - lv_s102.
+    gs_sb-outstd = gs_sb-menge - lv_sng.
+    MODIFY gt_sb FROM gs_sb.
+  ENDLOOP.
+  DELETE gt_sb WHERE outstd LE 0.
+
+  " 1 baris per ebeln (bawa bsart + werks header)
+  SORT gt_sb BY ebeln.
+  DELETE ADJACENT DUPLICATES FROM gt_sb COMPARING ebeln.
+
+  " Hitung per (grup-plant, bsart)
+  DATA: BEGIN OF ls_cnt,
+          plant TYPE werks_d,
+          bsart TYPE ekko-bsart,
+          cnt   TYPE i,
+        END OF ls_cnt,
+        lt_cnt LIKE STANDARD TABLE OF ls_cnt,
+        lv_grp TYPE werks_d,
+        lv_cntc TYPE string.
+  CLEAR lt_cnt.
+  LOOP AT gt_sb INTO gs_sb.
+    IF gs_sb-werks = '1300' OR gs_sb-werks = '3000'.
+      lv_grp = '1300'.
+    ELSE.
+      lv_grp = '1200'.
+    ENDIF.
+    CLEAR ls_cnt.
+    ls_cnt-plant = lv_grp.
+    ls_cnt-bsart = gs_sb-bsart.
+    ls_cnt-cnt   = 1.
+    COLLECT ls_cnt INTO lt_cnt.
+  ENDLOOP.
+
+  CLEAR lt_rows.
+  LOOP AT lt_cnt INTO ls_cnt.
+    lv_cntc = ls_cnt-cnt. CONDENSE lv_cntc NO-GAPS.
+    CONCATENATE '{"plant":"' ls_cnt-plant
+                '","bsart":"' ls_cnt-bsart
+                '","cnt":' lv_cntc '}' INTO lv_row.
+    APPEND lv_row TO lt_rows.
+  ENDLOOP.
+  CONCATENATE LINES OF lt_rows INTO lv_json SEPARATED BY ','.
+  CONCATENATE '{"status":"S","counts":[' lv_json ']}' INTO lv_out.
   response->set_header_field(
     name = 'Content-Type' value = 'application/json' ).
   response->set_cdata( lv_out ).

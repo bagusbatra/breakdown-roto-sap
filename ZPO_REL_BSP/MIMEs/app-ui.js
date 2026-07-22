@@ -494,11 +494,12 @@ function showItemTextModal(ebeln) {
    dimuat (lihat urutan <script> index.htm). */
 function init() {
   updateSidebarAria();
+  /* Boot: hanya tarik HITUNGAN badge (ringan) — bukan data list penuh.
+     loadSidebarData() -> GET_SIDEBAR (pending), fetchHistCounts() ->
+     GET_HISTORY_COUNT (history). Data list plant baru ditarik saat user
+     klik (switchView->fetchList). Landing dipanggil di loadSidebarData. */
   loadSidebarData();
-  /* Lazy boot: JANGAN tarik data di sini. Shell + sidebar tampil instan;
-     data plant baru ditarik lewat switchView()->fetchList() saat user
-     memilih plant/kategori (menghindari beban Z_FM_YMMR068 saat buka). */
-  landing();
+  fetchHistCounts();
 }
 
 /* ================================================================
@@ -523,6 +524,24 @@ function loadSidebarData() {
   });
   renderSidebar();
   landing();
+  /* Badge count PENDING selalu tampil sejak boot: svc.htm GET_SIDEBAR
+     mengembalikan hitungan (per grup-plant + bsart) dgn kriteria sama
+     seperti GET_LIST — ringan (hanya angka, tanpa data list penuh). */
+  apiPost('GET_SIDEBAR', {}).then(function(res){
+    if (!res || res.status !== 'S') { return; }
+    var raw = {};
+    (res.counts||[]).forEach(function(c){
+      var info = BSART_POTYPE_MAP[c.bsart];
+      if (!info) { return; }
+      if (!raw[c.plant]) { raw[c.plant] = {}; }
+      raw[c.plant][info.potype] =
+        (raw[c.plant][info.potype] || 0) + (parseInt(c.cnt, 10) || 0);
+    });
+    ['1200','1300'].forEach(function(w){
+      sbCounts.pending[w] = normalizeCatCounts(raw, w);
+    });
+    renderSidebar();
+  });
 }
 
 /* Halaman awal. ZPR menampilkan dashboard agregat (app-dashboard.js)
