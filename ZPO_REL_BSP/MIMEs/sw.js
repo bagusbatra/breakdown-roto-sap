@@ -45,8 +45,10 @@ self.addEventListener('fetch', function (event) {
     return;
   }
 
-  // Aset statis — cache-first.
+  // Aset statis — cache-first. ignoreSearch supaya URL berversi
+  // (mis. app-core.js?v=NNN) tetap cocok dgn entri precache tanpa query.
   event.respondWith(
-    caches.match(req).then(function (hit) { return hit || fetch(req); })
+    caches.match(req, { ignoreSearch: true })
+      .then(function (hit) { return hit || fetch(req); })
   );
 });
