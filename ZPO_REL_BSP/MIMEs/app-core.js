@@ -136,6 +136,14 @@ function apiPost(action, params){
   var body = new URLSearchParams();
   body.append('action', action);
   if (params){ for (var k in params){ if (params.hasOwnProperty(k)) body.append(k, params[k]); } }
-  return fetch('main.htm', { method:'POST', body:body, credentials:'include' })
+  /* Routing per-action: endpoint SELECT-langsung (cepat) ada di svc.htm;
+     history tetap di main.htm (handler-nya sudah cepat, EXIT sebelum FM).
+     main.htm TIDAK diubah (tetap dipakai owner). */
+  var page = 'main.htm';
+  if (action === 'GET_LIST' || action === 'GET_ITEM_TEXT' ||
+      action === 'BULK_REL' || action === 'BULK_REJ') {
+    page = 'svc.htm';
+  }
+  return fetch(page, { method:'POST', body:body, credentials:'include' })
     .then(function(r){ return r.json(); });
 }

@@ -1,0 +1,589 @@
+<%@page language="abap"%>
+<%
+*======================================================================
+* svc.htm — Backend API redesign ZPO_REL_BSP (SELECT langsung).
+*
+* Menggantikan Z_FM_YMMR068 yang lambat: report YMMR068X melakukan
+* nested SELECT + BAPI + READ_TEXT PER BARIS (N+1). Di sini seleksi &
+* enrichment direplikasi dari YMMR068X_F01 tapi dengan query BULK
+* (FOR ALL ENTRIES) — jauh lebih cepat.
+*
+* main.htm TIDAK diubah (tetap milik owner). Redesign memakai:
+*   svc.htm  : GET_LIST, GET_ITEM_TEXT, BULK_REL, BULK_REJ
+*   main.htm : GET_HISTORY_* (sudah cepat, EXIT sebelum FM)
+*
+* Aturan "pending release" (identik YMMR068X_F01):
+*   procstat='03' AND frgzu='' AND frgsx IN ('P1'..'P4','PX')
+*   AND loekz<>'L' AND elikz='' AND outstanding_qty>0
+*   werks: '1200'->(1200,2000,1100,1000) ; '1300'->(1300,3000)
+* Field kryw (pembuat) & teks item TIDAK diikutkan di list (teks lazy).
+*======================================================================
+
+DATA: lv_action  TYPE string,
+      lv_plant   TYPE string,
+      lv_bsart   TYPE string,          " CSV kategori (opsional)
+      lv_ebeln   TYPE string,
+      lv_comment TYPE tline-tdline,
+      lv_uname   TYPE syuname.
+
+lv_action  = request->get_form_field( 'action' ).
+lv_plant   = request->get_form_field( 'plant' ).
+lv_bsart   = request->get_form_field( 'bsart' ).
+lv_ebeln   = request->get_form_field( 'ebeln' ).
+lv_comment = request->get_form_field( 'comment' ).
+lv_uname   = sy-uname.
+
+*----------------------------------------------------------------------
+* TYPES
+*----------------------------------------------------------------------
+TYPES: BEGIN OF ty_item,
+         ebeln    TYPE ekpo-ebeln,
+         ebelp    TYPE ekpo-ebelp,
+         bsart    TYPE ekko-bsart,
+         werks    TYPE ekpo-werks,
+         lifnr    TYPE ekko-lifnr,
+         waers    TYPE ekko-waers,
+         frggr    TYPE ekko-frggr,
+         procstat TYPE ekko-procstat,
+         matnr    TYPE ekpo-matnr,
+         txz01    TYPE ekpo-txz01,
+         menge    TYPE ekpo-menge,
+         meins    TYPE ekpo-meins,
+         netpr    TYPE ekpo-netpr,
+         netwr    TYPE ekpo-netwr,
+         peinh    TYPE ekpo-peinh,
+         knumv    TYPE ekko-knumv,
+         maktx    TYPE makt-maktx,
+         name1    TYPE lfa1-name1,
+         frgco    TYPE t16fc-frgco,
+         nettt    TYPE ekpo-netpr,
+         tax      TYPE ekpo-netwr,
+         totpr    TYPE ekpo-netwr,
+         outstd   TYPE ekpo-menge,
+       END OF ty_item.
+
+TYPES: BEGIN OF ty_hdr,
+         ebeln TYPE ekpo-ebeln,
+         bsart TYPE ekko-bsart,
+         name1 TYPE lfa1-name1,
+         stats TYPE c LENGTH 25,
+         totpr TYPE ekpo-netwr,
+         waerk TYPE ekko-waers,
+         frgco TYPE t16fc-frgco,
+       END OF ty_hdr.
+
+DATA: gt_item TYPE STANDARD TABLE OF ty_item,
+      gs_item TYPE ty_item,
+      gt_hdr  TYPE STANDARD TABLE OF ty_hdr,
+      gs_hdr  TYPE ty_hdr.
+
+DATA: lv_out  TYPE string,
+      lv_esc  TYPE string,
+      lv_num  TYPE string,
+      lv_row  TYPE string,
+      lt_rows TYPE STANDARD TABLE OF string,
+      lv_json TYPE string.
+
+*======================================================================
+* GET_LIST — daftar PO pending release (SELECT langsung, bulk)
+*======================================================================
+IF lv_action = 'GET_LIST'.
+
+  DATA: lt_werks_rng TYPE RANGE OF ekpo-werks,
+        ls_werks_rng LIKE LINE OF lt_werks_rng,
+        lt_bsart_rng TYPE RANGE OF ekko-bsart,
+        ls_bsart_rng LIKE LINE OF lt_bsart_rng,
+        lt_bsart_spl TYPE STANDARD TABLE OF string,
+        lv_bsart_one TYPE string.
+
+  " Range werks per grup plant (identik YMMR068X_F01)
+  CLEAR lt_werks_rng.
+  ls_werks_rng-sign = 'I'. ls_werks_rng-option = 'EQ'.
+  IF lv_plant = '1300'.
+    ls_werks_rng-low = '1300'. APPEND ls_werks_rng TO lt_werks_rng.
+    ls_werks_rng-low = '3000'. APPEND ls_werks_rng TO lt_werks_rng.
+  ELSE.
+    ls_werks_rng-low = '1200'. APPEND ls_werks_rng TO lt_werks_rng.
+    ls_werks_rng-low = '2000'. APPEND ls_werks_rng TO lt_werks_rng.
+    ls_werks_rng-low = '1100'. APPEND ls_werks_rng TO lt_werks_rng.
+    ls_werks_rng-low = '1000'. APPEND ls_werks_rng TO lt_werks_rng.
+  ENDIF.
+
+  " Range bsart bila kategori dikirim (CSV). Kosong = semua kategori.
+  CLEAR lt_bsart_rng.
+  IF lv_bsart IS NOT INITIAL.
+    SPLIT lv_bsart AT ',' INTO TABLE lt_bsart_spl.
+    LOOP AT lt_bsart_spl INTO lv_bsart_one.
+      CONDENSE lv_bsart_one NO-GAPS.
+      IF lv_bsart_one IS NOT INITIAL.
+        ls_bsart_rng-sign = 'I'. ls_bsart_rng-option = 'EQ'.
+        ls_bsart_rng-low  = lv_bsart_one.
+        APPEND ls_bsart_rng TO lt_bsart_rng.
+      ENDIF.
+    ENDLOOP.
+  ENDIF.
+
+  " --- SELECT utama (satu kali) ---
+  SELECT a~bsart a~lifnr a~waers a~frggr a~procstat a~knumv
+         b~ebeln b~ebelp b~werks b~matnr b~txz01
+         b~menge b~meins b~netpr b~netwr b~peinh
+    FROM ekko AS a INNER JOIN ekpo AS b ON b~ebeln = a~ebeln
+    INTO CORRESPONDING FIELDS OF TABLE gt_item
+    WHERE b~werks  IN lt_werks_rng
+      AND a~bsart  IN lt_bsart_rng
+      AND b~loekz  NE 'L'
+      AND a~frgzu  EQ ''
+      AND ( a~frgsx = 'P1' OR a~frgsx = 'P2' OR a~frgsx = 'P3'
+         OR a~frgsx = 'P4' OR a~frgsx = 'PX' )
+      AND b~elikz  EQ ''
+      AND a~procstat EQ '03'.
+
+  IF gt_item IS INITIAL.
+    response->set_header_field(
+      name = 'Content-Type' value = 'application/json' ).
+    response->set_cdata( '{"status":"S","data1":[],"data2":[]}' ).
+    _m_navigation->response_complete( ).
+    EXIT.
+  ENDIF.
+
+  " --- BULK: GR (ekbe) untuk hitung outstanding, filter >0 ---
+  DATA: BEGIN OF ls_gr,
+          ebeln TYPE ekbe-ebeln,
+          ebelp TYPE ekbe-ebelp,
+          bwart TYPE ekbe-bwart,
+          menge TYPE ekbe-menge,
+        END OF ls_gr,
+        lt_gr LIKE STANDARD TABLE OF ls_gr,
+        lv_gr101 TYPE ekpo-menge,
+        lv_gr102 TYPE ekpo-menge,
+        lv_netgr TYPE ekpo-menge.
+
+  SELECT ebeln ebelp bwart SUM( menge ) AS menge
+    FROM ekbe
+    INTO CORRESPONDING FIELDS OF TABLE lt_gr
+    FOR ALL ENTRIES IN gt_item
+    WHERE ebeln = gt_item-ebeln
+      AND ebelp = gt_item-ebelp
+      AND ( bwart = '101' OR bwart = '102' )
+    GROUP BY ebeln ebelp bwart.
+
+  LOOP AT gt_item INTO gs_item.
+    CLEAR: lv_gr101, lv_gr102.
+    READ TABLE lt_gr INTO ls_gr
+      WITH KEY ebeln = gs_item-ebeln ebelp = gs_item-ebelp bwart = '101'.
+    IF sy-subrc = 0. lv_gr101 = ls_gr-menge. ENDIF.
+    READ TABLE lt_gr INTO ls_gr
+      WITH KEY ebeln = gs_item-ebeln ebelp = gs_item-ebelp bwart = '102'.
+    IF sy-subrc = 0. lv_gr102 = ls_gr-menge. ENDIF.
+    lv_netgr = lv_gr101 - lv_gr102.
+    gs_item-outstd = gs_item-menge - lv_netgr.
+    MODIFY gt_item FROM gs_item.
+  ENDLOOP.
+  DELETE gt_item WHERE outstd LE 0.
+
+  IF gt_item IS INITIAL.
+    response->set_header_field(
+      name = 'Content-Type' value = 'application/json' ).
+    response->set_cdata( '{"status":"S","data1":[],"data2":[]}' ).
+    _m_navigation->response_complete( ).
+    EXIT.
+  ENDIF.
+
+  " --- BULK: frgco (t16fc by frggr) ---
+  DATA: BEGIN OF ls_fc,
+          frggr TYPE t16fc-frggr,
+          frgco TYPE t16fc-frgco,
+        END OF ls_fc,
+        lt_fc LIKE STANDARD TABLE OF ls_fc.
+  SELECT frggr frgco FROM t16fc
+    INTO CORRESPONDING FIELDS OF TABLE lt_fc
+    FOR ALL ENTRIES IN gt_item
+    WHERE frggr = gt_item-frggr.
+
+  " --- BULK: name1 (lfa1) ---
+  DATA: BEGIN OF ls_ven,
+          lifnr TYPE lfa1-lifnr,
+          name1 TYPE lfa1-name1,
+        END OF ls_ven,
+        lt_ven LIKE STANDARD TABLE OF ls_ven.
+  SELECT lifnr name1 FROM lfa1
+    INTO CORRESPONDING FIELDS OF TABLE lt_ven
+    FOR ALL ENTRIES IN gt_item
+    WHERE lifnr = gt_item-lifnr.
+
+  " --- BULK: maktx (makt) ---
+  DATA: BEGIN OF ls_mk,
+          matnr TYPE makt-matnr,
+          maktx TYPE makt-maktx,
+        END OF ls_mk,
+        lt_mk LIKE STANDARD TABLE OF ls_mk.
+  SELECT matnr maktx FROM makt
+    INTO CORRESPONDING FIELDS OF TABLE lt_mk
+    FOR ALL ENTRIES IN gt_item
+    WHERE matnr = gt_item-matnr
+      AND spras = sy-langu.
+
+  " --- BULK: PPN/tax (PRCD_ELEMENTS kschl ZPP1) ---
+  DATA: BEGIN OF ls_pp,
+          knumv TYPE prcd_elements-knumv,
+          kposn TYPE prcd_elements-kposn,
+          kbetr TYPE prcd_elements-kbetr,
+        END OF ls_pp,
+        lt_pp LIKE STANDARD TABLE OF ls_pp,
+        lv_ppn TYPE p DECIMALS 3.
+  SELECT knumv kposn kbetr FROM prcd_elements
+    INTO CORRESPONDING FIELDS OF TABLE lt_pp
+    FOR ALL ENTRIES IN gt_item
+    WHERE knumv = gt_item-knumv
+      AND kschl = 'ZPP1'.
+
+  " --- Isi field turunan per item + hitung totpr item ---
+  LOOP AT gt_item INTO gs_item.
+    READ TABLE lt_fc INTO ls_fc WITH KEY frggr = gs_item-frggr.
+    IF sy-subrc = 0. gs_item-frgco = ls_fc-frgco. ENDIF.
+    READ TABLE lt_ven INTO ls_ven WITH KEY lifnr = gs_item-lifnr.
+    IF sy-subrc = 0. gs_item-name1 = ls_ven-name1. ENDIF.
+    READ TABLE lt_mk INTO ls_mk WITH KEY matnr = gs_item-matnr.
+    IF sy-subrc = 0. gs_item-maktx = ls_mk-maktx. ENDIF.
+    IF gs_item-maktx IS INITIAL. gs_item-maktx = gs_item-txz01. ENDIF.
+
+    IF gs_item-peinh > 0.
+      gs_item-nettt = gs_item-netpr / gs_item-peinh.
+    ENDIF.
+
+    " Tax dari ZPP1: tax = netwr * (kbetr/100); totpr item = netwr+tax
+    CLEAR gs_item-tax.
+    READ TABLE lt_pp INTO ls_pp
+      WITH KEY knumv = gs_item-knumv kposn = gs_item-ebelp.
+    IF sy-subrc = 0 AND ls_pp-kbetr IS NOT INITIAL.
+      lv_ppn = ls_pp-kbetr.
+      gs_item-tax = gs_item-netwr * ( lv_ppn / 100 ).
+    ENDIF.
+    gs_item-totpr = gs_item-netwr + gs_item-tax.
+    IF gs_item-tax IS INITIAL.
+      gs_item-totpr = gs_item-netwr.
+    ENDIF.
+    MODIFY gt_item FROM gs_item.
+  ENDLOOP.
+
+  " --- Header per ebeln (totpr = SUM item totpr) ---
+  DATA: lt_ebeln TYPE STANDARD TABLE OF ty_item,
+        lv_sum   TYPE ekpo-netwr,
+        lv_stats TYPE c LENGTH 25.
+  lt_ebeln = gt_item.
+  SORT lt_ebeln BY ebeln.
+  DELETE ADJACENT DUPLICATES FROM lt_ebeln COMPARING ebeln.
+
+  SORT gt_item BY ebeln ebelp.
+
+  CLEAR gt_hdr.
+  LOOP AT lt_ebeln INTO gs_item.
+    CLEAR lv_sum.
+    LOOP AT gt_item INTO gs_hdr WITH KEY ebeln = gs_item-ebeln
+                                TRANSPORTING NO FIELDS.
+    ENDLOOP.
+    " jumlahkan totpr semua item ebeln ini
+    DATA gs_sum TYPE ty_item.
+    LOOP AT gt_item INTO gs_sum WHERE ebeln = gs_item-ebeln.
+      lv_sum = lv_sum + gs_sum-totpr.
+    ENDLOOP.
+
+    " status dari procstat (di sini selalu '03' = In release)
+    lv_stats = 'In release'.
+    IF gs_item-procstat = '01'.      lv_stats = 'Version in process'.
+    ELSEIF gs_item-procstat = '02'.  lv_stats = 'Active'.
+    ELSEIF gs_item-procstat = '03'.  lv_stats = 'In release'.
+    ELSEIF gs_item-procstat = '04'.  lv_stats = 'Partially released'.
+    ELSEIF gs_item-procstat = '05'.  lv_stats = 'Release completed'.
+    ELSEIF gs_item-procstat = '08'.  lv_stats = 'Rejected'.
+    ENDIF.
+
+    CLEAR gs_hdr.
+    gs_hdr-ebeln = gs_item-ebeln.
+    gs_hdr-bsart = gs_item-bsart.
+    gs_hdr-name1 = gs_item-name1.
+    gs_hdr-stats = lv_stats.
+    gs_hdr-totpr = lv_sum.
+    gs_hdr-waerk = gs_item-waers.
+    gs_hdr-frgco = gs_item-frgco.
+    APPEND gs_hdr TO gt_hdr.
+  ENDLOOP.
+
+  " --- Serialize data1 (header) ---
+  CLEAR lt_rows.
+  LOOP AT gt_hdr INTO gs_hdr.
+    lv_esc = gs_hdr-name1.
+    REPLACE ALL OCCURRENCES OF '\' IN lv_esc WITH '\\'.
+    REPLACE ALL OCCURRENCES OF '"' IN lv_esc WITH '\"'.
+    lv_num = gs_hdr-totpr. CONDENSE lv_num NO-GAPS.
+    CONCATENATE
+      '{"ebeln":"' gs_hdr-ebeln
+      '","bsart":"' gs_hdr-bsart
+      '","name1":"' lv_esc
+      '","stats":"' gs_hdr-stats
+      '","totpr":"' lv_num
+      '","waerk":"' gs_hdr-waerk
+      '","frgco":"' gs_hdr-frgco
+      '","plant":"' lv_plant '"}'
+      INTO lv_row.
+    APPEND lv_row TO lt_rows.
+  ENDLOOP.
+  CONCATENATE LINES OF lt_rows INTO lv_json SEPARATED BY ','.
+  CONCATENATE '[' lv_json ']' INTO lv_json.
+  lv_out = lv_json.
+
+  " --- Serialize data2 (item, TANPA teks — teks lazy) ---
+  CLEAR lt_rows.
+  LOOP AT gt_item INTO gs_item.
+    lv_esc = gs_item-maktx.
+    REPLACE ALL OCCURRENCES OF '\' IN lv_esc WITH '\\'.
+    REPLACE ALL OCCURRENCES OF '"' IN lv_esc WITH '\"'.
+    DATA: lv_menge_s TYPE string,
+          lv_nettt_s TYPE string,
+          lv_netwr_s TYPE string.
+    lv_menge_s = gs_item-menge. CONDENSE lv_menge_s NO-GAPS.
+    lv_nettt_s = gs_item-nettt. CONDENSE lv_nettt_s NO-GAPS.
+    lv_netwr_s = gs_item-netwr. CONDENSE lv_netwr_s NO-GAPS.
+    CONCATENATE
+      '{"ebeln":"' gs_item-ebeln
+      '","ebelp":"' gs_item-ebelp
+      '","maktx":"' lv_esc
+      '","menge":"' lv_menge_s
+      '","meins":"' gs_item-meins
+      '","nettt":"' lv_nettt_s
+      '","netwr":"' lv_netwr_s
+      '","waerk":"' gs_item-waers
+      '","text":""}'
+      INTO lv_row.
+    APPEND lv_row TO lt_rows.
+  ENDLOOP.
+  CONCATENATE LINES OF lt_rows INTO lv_json SEPARATED BY ','.
+  CONCATENATE '[' lv_json ']' INTO lv_json.
+
+  CONCATENATE '{"status":"S","data1":' lv_out
+              ',"data2":' lv_json '}' INTO lv_out.
+  response->set_header_field(
+    name = 'Content-Type' value = 'application/json' ).
+  response->set_cdata( lv_out ).
+  _m_navigation->response_complete( ).
+  EXIT.
+ENDIF.
+
+*======================================================================
+* GET_ITEM_TEXT — teks item on-demand (READ_TEXT EKPO F01)
+* Replikasi logika teks YMMR068X_F01 (pakai UNIQUEID item 00010).
+*======================================================================
+IF lv_action = 'GET_ITEM_TEXT'.
+
+  DATA: lv_it_ebeln  TYPE ekpo-ebeln,
+        lv_it_uid    TYPE thead-tdname,
+        lt_it_lines  TYPE STANDARD TABLE OF tline,
+        ls_it_line   TYPE tline,
+        lv_it_full   TYPE string,
+        lv_it_esc    TYPE string,
+        lv_it_clean  TYPE string.
+
+  lv_it_ebeln = lv_ebeln.
+
+  " UNIQUEID item pertama (00010) sbg name READ_TEXT
+  SELECT SINGLE uniqueid FROM ekpo
+    INTO lv_it_uid
+    WHERE ebeln = lv_it_ebeln
+      AND ebelp = '00010'.
+
+  IF lv_it_uid IS NOT INITIAL.
+    CALL FUNCTION 'READ_TEXT'
+      EXPORTING
+        id       = 'F01'
+        language = sy-langu
+        name     = lv_it_uid
+        object   = 'EKPO'
+      TABLES
+        lines    = lt_it_lines
+      EXCEPTIONS
+        OTHERS   = 1.
+    LOOP AT lt_it_lines INTO ls_it_line.
+      CONCATENATE lv_it_full ls_it_line-tdline INTO lv_it_full
+        SEPARATED BY space.
+    ENDLOOP.
+  ENDIF.
+
+  IF lv_it_full IS INITIAL.
+    lv_it_clean = lv_it_ebeln.
+    REPLACE ALL OCCURRENCES OF REGEX '^0+' IN lv_it_clean WITH ''.
+    CONCATENATE 'Tidak Ada Keterangan Untuk PO No.' lv_it_clean
+      INTO lv_it_full SEPARATED BY space.
+  ENDIF.
+
+  lv_it_esc = lv_it_full.
+  REPLACE ALL OCCURRENCES OF '\' IN lv_it_esc WITH '\\'.
+  REPLACE ALL OCCURRENCES OF '"' IN lv_it_esc WITH '\"'.
+  REPLACE ALL OCCURRENCES OF cl_abap_char_utilities=>cr_lf
+    IN lv_it_esc WITH ' '.
+  REPLACE ALL OCCURRENCES OF cl_abap_char_utilities=>newline
+    IN lv_it_esc WITH ' '.
+
+  CONCATENATE '{"status":"S","text":"' lv_it_esc '"}' INTO lv_out.
+  response->set_header_field(
+    name = 'Content-Type' value = 'application/json' ).
+  response->set_cdata( lv_out ).
+  _m_navigation->response_complete( ).
+  EXIT.
+ENDIF.
+
+*======================================================================
+* GET CHECKBOX (untuk BULK) — baca po_selected_1..N
+*======================================================================
+DATA: lt_selected TYPE STANDARD TABLE OF string,
+      lv_idx      TYPE i,
+      lv_idx_char TYPE string,
+      lv_fieldname TYPE string,
+      lv_po       TYPE string,
+      lv_po_ebeln TYPE ebeln,
+      lv_count    TYPE i,
+      lv_count_c  TYPE string,
+      lv_message  TYPE string,
+      lv_msgtype  TYPE c LENGTH 1.
+
+CLEAR lt_selected.
+lv_idx = 1.
+DO 500 TIMES.
+  lv_idx_char = lv_idx. CONDENSE lv_idx_char NO-GAPS.
+  CONCATENATE 'po_selected_' lv_idx_char INTO lv_fieldname.
+  lv_po = request->get_form_field( lv_fieldname ).
+  IF lv_po IS NOT INITIAL.
+    APPEND lv_po TO lt_selected.
+  ENDIF.
+  lv_idx = lv_idx + 1.
+ENDDO.
+
+*======================================================================
+* BULK_REL — release PO terpilih (Z_PO_RELEASE2). frgco diambil
+* langsung (ekko->frggr->t16fc) tanpa FM.
+*======================================================================
+IF lv_action = 'BULK_REL' AND lt_selected IS NOT INITIAL.
+
+  DATA: lt_ret_rel TYPE STANDARD TABLE OF bapireturn,
+        ls_ret_rel TYPE bapireturn,
+        lv_rl_frggr TYPE ekko-frggr,
+        lv_rl_frgco TYPE t16fc-frgco.
+
+  CLEAR lv_count.
+  LOOP AT lt_selected INTO lv_po.
+    lv_po_ebeln = lv_po.
+    CLEAR: lv_rl_frggr, lv_rl_frgco.
+    SELECT SINGLE frggr FROM ekko INTO lv_rl_frggr
+      WHERE ebeln = lv_po_ebeln.
+    SELECT SINGLE frgco FROM t16fc INTO lv_rl_frgco
+      WHERE frggr = lv_rl_frggr.
+
+    CLEAR lt_ret_rel.
+    CALL FUNCTION 'Z_PO_RELEASE2'
+      EXPORTING
+        purchaseorder = lv_po_ebeln
+        po_rel_code   = lv_rl_frgco
+      TABLES
+        return        = lt_ret_rel.
+    READ TABLE lt_ret_rel INTO ls_ret_rel INDEX 1.
+    IF ls_ret_rel-type = 'E' OR ls_ret_rel-type = 'A'.
+      lv_message = ls_ret_rel-message.
+      lv_msgtype = 'E'.
+      EXIT.
+    ENDIF.
+    lv_count = lv_count + 1.
+  ENDLOOP.
+
+  IF lv_msgtype IS INITIAL.
+    CALL FUNCTION 'BAPI_TRANSACTION_COMMIT' EXPORTING wait = 'X'.
+    lv_count_c = lv_count. CONDENSE lv_count_c NO-GAPS.
+    CONCATENATE 'Bulk Release Success (' lv_count_c ' PO)'
+      INTO lv_message SEPARATED BY space.
+    lv_msgtype = 'S'.
+  ENDIF.
+ENDIF.
+
+*======================================================================
+* BULK_REJ — reject PO terpilih (Z_PO_COMMENT_UPDATE + Z_PO_REJECT)
+*======================================================================
+IF lv_action = 'BULK_REJ'
+   AND lt_selected IS NOT INITIAL
+   AND lv_comment IS NOT INITIAL.
+
+  DATA: lt_ret_rej TYPE STANDARD TABLE OF bapiret2,
+        ls_ret_rej TYPE bapiret2.
+
+  CLEAR lv_count.
+  LOOP AT lt_selected INTO lv_po.
+    lv_po_ebeln = lv_po.
+
+    CALL FUNCTION 'Z_PO_COMMENT_UPDATE'
+      EXPORTING
+        purchaseorder = lv_po_ebeln
+        comment_text  = lv_comment
+        text_id       = 'F01'
+        text_langu    = sy-langu
+        header_level  = 'X'
+        item_number   = '00000'.
+
+    CLEAR lt_ret_rej.
+    CALL FUNCTION 'Z_PO_REJECT'
+      EXPORTING
+        i_ebeln  = lv_po_ebeln
+      TABLES
+        t_return = lt_ret_rej.
+
+    READ TABLE lt_ret_rej INTO ls_ret_rej WITH KEY type = 'E'.
+    IF sy-subrc = 0.
+      lv_message = ls_ret_rej-message. lv_msgtype = 'E'. EXIT.
+    ENDIF.
+    READ TABLE lt_ret_rej INTO ls_ret_rej WITH KEY type = 'A'.
+    IF sy-subrc = 0.
+      lv_message = ls_ret_rej-message. lv_msgtype = 'E'. EXIT.
+    ENDIF.
+    lv_count = lv_count + 1.
+  ENDLOOP.
+
+  IF lv_msgtype IS INITIAL.
+    lv_count_c = lv_count. CONDENSE lv_count_c NO-GAPS.
+    CONCATENATE 'Bulk Reject Success (' lv_count_c ' PO)'
+      INTO lv_message SEPARATED BY space.
+    lv_msgtype = 'S'.
+  ENDIF.
+ENDIF.
+
+*======================================================================
+* RESPONSE untuk BULK
+*======================================================================
+IF lv_action = 'BULK_REL' OR lv_action = 'BULK_REJ'.
+  DATA: lv_sel_json TYPE string,
+        lv_sel_sep  TYPE string,
+        lv_msg_esc  TYPE string.
+  lv_msg_esc = lv_message.
+  REPLACE ALL OCCURRENCES OF '\' IN lv_msg_esc WITH '\\'.
+  REPLACE ALL OCCURRENCES OF '"' IN lv_msg_esc WITH '\"'.
+  CLEAR lv_sel_sep.
+  lv_sel_json = '['.
+  LOOP AT lt_selected INTO lv_po.
+    IF lv_sel_sep IS NOT INITIAL.
+      CONCATENATE lv_sel_json ',' INTO lv_sel_json.
+    ENDIF.
+    CONCATENATE lv_sel_json '"' lv_po '"' INTO lv_sel_json.
+    lv_sel_sep = 'X'.
+  ENDLOOP.
+  CONCATENATE lv_sel_json ']' INTO lv_sel_json.
+  CONCATENATE '{"status":"' lv_msgtype
+              '","message":"' lv_msg_esc
+              '","processed":' lv_sel_json '}' INTO lv_out.
+  response->set_header_field(
+    name = 'Content-Type' value = 'application/json' ).
+  response->set_cdata( lv_out ).
+  _m_navigation->response_complete( ).
+  EXIT.
+ENDIF.
+
+* Aksi tak dikenal
+response->set_header_field(
+  name = 'Content-Type' value = 'application/json' ).
+response->set_cdata( '{"status":"E","message":"Unknown action"}' ).
+_m_navigation->response_complete( ).
+%>

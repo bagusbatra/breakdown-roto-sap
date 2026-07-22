@@ -452,32 +452,28 @@ document.addEventListener('keydown',function(e){
    itu tak berlaku untuk PO). ALL_DATA2 diisi app-list.js (Task 7)
    lewat GET_LIST; forward-ref yang aman karena fungsi ini hanya
    dipanggil lewat interaksi user setelah data termuat. */
+/* Teks item di-lazy-load: svc.htm GET_LIST tidak lagi mengirim teks
+   (menghindari READ_TEXT per baris). Teks diambil on-demand di sini
+   lewat GET_ITEM_TEXT saat user membuka modal. */
 function showItemTextModal(ebeln) {
   var meta = document.getElementById('itemTextMeta');
   var body = document.getElementById('itemTextBody');
 
   meta.innerHTML = 'PO <b>'+escHtml(ebeln)+'</b>';
+  body.innerHTML = '<div class="item-text-empty">Memuat teks&hellip;</div>';
   openModal('modalItemText');
 
-  var items = (ALL_DATA2||[]).filter(function(it){
-    return it.ebeln===ebeln;
-  });
-  if (!items.length){
+  apiPost('GET_ITEM_TEXT', { ebeln: ebeln }).then(function(res){
+    if (res && res.status === 'S' && res.text){
+      body.innerHTML = escHtml(res.text);
+    } else {
+      body.innerHTML = '<div class="item-text-empty">'+
+        'Item ini tidak memiliki teks.</div>';
+    }
+  }).catch(function(){
     body.innerHTML = '<div class="item-text-empty">'+
-      'Item ini tidak memiliki teks.</div>';
-    return;
-  }
-  items.sort(function(a,b){
-    return (parseInt(a.ebelp,10)||0)-(parseInt(b.ebelp,10)||0);
+      'Gagal memuat teks.</div>';
   });
-  var first = items[0];
-  if (!first.text){
-    body.innerHTML = '<div class="item-text-empty">'+
-      'Item ini tidak memiliki teks.</div>';
-    return;
-  }
-  meta.innerHTML = 'PO <b>'+escHtml(ebeln)+'</b> &middot; Item '+escHtml(first.ebelp);
-  body.innerHTML = escHtml(first.text);
 }
 
 /* ================================================================

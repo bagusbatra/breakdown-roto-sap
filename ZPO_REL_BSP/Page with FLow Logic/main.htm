@@ -1045,45 +1045,30 @@ IF lv_action = 'GET_OGR'.
 ENDIF.
 
 *------------------------------------------------------------------
-* FETCH DATA — hanya plant yang diminta (perf). Param 'plant' kosong
-* = muat kedua plant (dipakai render HTML lama / akses main.htm langsung).
-* FM, parameter, & output tidak berubah — hanya di-scope ke plant terpilih.
+* FETCH DATA — ALWAYS LOAD FIRST
 *------------------------------------------------------------------
-* === DEBUG PERF (SEMENTARA — dihapus setelah diagnosa) ===
-DATA: lv_dbg_t0   TYPE i, lv_dbg_t1 TYPE i, lv_dbg_t2 TYPE i,
-      lv_dbg_fm   TYPE i, lv_dbg_js TYPE i, lv_dbg_n  TYPE i,
-      lv_dbg_fm_c TYPE string, lv_dbg_js_c TYPE string,
-      lv_dbg_n_c  TYPE string.
-GET RUN TIME FIELD lv_dbg_t0.
-
-IF lv_plant IS INITIAL OR lv_plant = '1200'.
-  CALL FUNCTION 'Z_FM_YMMR068'
-    EXPORTING
-      p_werks = '1200'
-    TABLES
-      t_data1 = lt_data1_1200
-      t_data2 = lt_data2_1200
-      return  = lt_return_tmp.
-ENDIF.
+CALL FUNCTION 'Z_FM_YMMR068'
+  EXPORTING
+    p_werks = '1200'
+  TABLES
+    t_data1 = lt_data1_1200
+    t_data2 = lt_data2_1200
+    return  = lt_return_tmp.
 
 CLEAR lt_return_tmp.
 
-IF lv_plant IS INITIAL OR lv_plant = '1300'.
-  CALL FUNCTION 'Z_FM_YMMR068'
-    EXPORTING
-      p_werks = '1300'
-    TABLES
-      t_data1 = lt_data1_1300
-      t_data2 = lt_data2_1300
-      return  = lt_return_tmp.
-ENDIF.
+CALL FUNCTION 'Z_FM_YMMR068'
+  EXPORTING
+    p_werks = '1300'
+  TABLES
+    t_data1 = lt_data1_1300
+    t_data2 = lt_data2_1300
+    return  = lt_return_tmp.
 
 APPEND LINES OF lt_data1_1200 TO lt_data1.
 APPEND LINES OF lt_data1_1300 TO lt_data1.
 APPEND LINES OF lt_data2_1200 TO lt_data2.
 APPEND LINES OF lt_data2_1300 TO lt_data2.
-
-GET RUN TIME FIELD lv_dbg_t1.  " DEBUG PERF: sesudah FM fetch
 
 *------------------------------------------------------------------
 * GET CHECKBOX
@@ -1241,19 +1226,14 @@ ENDIF.
 *------------------------------------------------------------------
 * SERIALIZE DATA TO JSON
 *------------------------------------------------------------------
-* Serialisasi O(n): tiap baris dibangun sekali lalu di-APPEND ke tabel
-* string, digabung SEKALI di akhir (CONCATENATE LINES OF). Menghindari
-* pola O(n^2) 'CONCATENATE lv_json INTO lv_json' yang menyalin seluruh
-* string tiap iterasi. Output JSON identik.
-DATA: lt_j1     TYPE STANDARD TABLE OF string,
-      lv_j1_row TYPE string,
-      lt_j2     TYPE STANDARD TABLE OF string,
-      lv_j2_row TYPE string.
-
-CLEAR lt_j1.
+CLEAR lv_sep.
+lv_json1 = '['.
 
 lv_cur_plant = '1200'.
 LOOP AT lt_data1_1200 INTO ls_data.
+  IF lv_sep IS NOT INITIAL.
+    CONCATENATE lv_json1 ',' INTO lv_json1.
+  ENDIF.
   lv_name1_esc = ls_data-name1.
   REPLACE ALL OCCURRENCES OF '\' IN lv_name1_esc WITH '\\'.
   REPLACE ALL OCCURRENCES OF '"' IN lv_name1_esc WITH '\"'.
@@ -1266,7 +1246,7 @@ LOOP AT lt_data1_1200 INTO ls_data.
   REPLACE ALL OCCURRENCES OF '"' IN lv_stats_esc WITH '\"'.
   lv_totpr_str = ls_data-totpr.
   CONDENSE lv_totpr_str NO-GAPS.
-  CONCATENATE
+  CONCATENATE lv_json1
     '{"ebeln":"' ls_data-ebeln
     '","bsart":"' ls_data-bsart
     '","name1":"' lv_name1_esc
@@ -1275,12 +1255,15 @@ LOOP AT lt_data1_1200 INTO ls_data.
     '","waerk":"' ls_data-waerk
     '","frgco":"' ls_data-frgco
     '","plant":"' lv_cur_plant '"}'
-    INTO lv_j1_row.
-  APPEND lv_j1_row TO lt_j1.
+  INTO lv_json1.
+  lv_sep = 'X'.
 ENDLOOP.
 
 lv_cur_plant = '1300'.
 LOOP AT lt_data1_1300 INTO ls_data.
+  IF lv_sep IS NOT INITIAL.
+    CONCATENATE lv_json1 ',' INTO lv_json1.
+  ENDIF.
   lv_name1_esc = ls_data-name1.
   REPLACE ALL OCCURRENCES OF '\' IN lv_name1_esc WITH '\\'.
   REPLACE ALL OCCURRENCES OF '"' IN lv_name1_esc WITH '\"'.
@@ -1293,7 +1276,7 @@ LOOP AT lt_data1_1300 INTO ls_data.
   REPLACE ALL OCCURRENCES OF '"' IN lv_stats_esc WITH '\"'.
   lv_totpr_str = ls_data-totpr.
   CONDENSE lv_totpr_str NO-GAPS.
-  CONCATENATE
+  CONCATENATE lv_json1
     '{"ebeln":"' ls_data-ebeln
     '","bsart":"' ls_data-bsart
     '","name1":"' lv_name1_esc
@@ -1302,16 +1285,19 @@ LOOP AT lt_data1_1300 INTO ls_data.
     '","waerk":"' ls_data-waerk
     '","frgco":"' ls_data-frgco
     '","plant":"' lv_cur_plant '"}'
-    INTO lv_j1_row.
-  APPEND lv_j1_row TO lt_j1.
+  INTO lv_json1.
+  lv_sep = 'X'.
 ENDLOOP.
 
-CONCATENATE LINES OF lt_j1 INTO lv_json1 SEPARATED BY ','.
-CONCATENATE '[' lv_json1 ']' INTO lv_json1.
+CONCATENATE lv_json1 ']' INTO lv_json1.
 
-CLEAR lt_j2.
+CLEAR lv_sep.
+lv_json2 = '['.
 
 LOOP AT lt_data2 INTO ls_item.
+  IF lv_sep IS NOT INITIAL.
+    CONCATENATE lv_json2 ',' INTO lv_json2.
+  ENDIF.
   lv_maktx_esc = ls_item-maktx.
   REPLACE ALL OCCURRENCES OF '\' IN lv_maktx_esc WITH '\\'.
   REPLACE ALL OCCURRENCES OF '"' IN lv_maktx_esc WITH '\"'.
@@ -1332,7 +1318,7 @@ LOOP AT lt_data2 INTO ls_item.
   CONDENSE: lv_menge_str NO-GAPS,
             lv_nettt_str NO-GAPS,
             lv_netwr_str NO-GAPS.
-  CONCATENATE
+  CONCATENATE lv_json2
     '{"ebeln":"' ls_item-ebeln
     '","ebelp":"' ls_item-ebelp
     '","maktx":"' lv_maktx_esc
@@ -1342,35 +1328,11 @@ LOOP AT lt_data2 INTO ls_item.
     '","netwr":"' lv_netwr_str
     '","waerk":"' ls_item-waerk
     '","text":"'  lv_text_esc '"}'
-    INTO lv_j2_row.
-  APPEND lv_j2_row TO lt_j2.
+  INTO lv_json2.
+  lv_sep = 'X'.
 ENDLOOP.
 
-CONCATENATE LINES OF lt_j2 INTO lv_json2 SEPARATED BY ','.
-CONCATENATE '[' lv_json2 ']' INTO lv_json2.
-
-IF lv_action = 'GET_LIST'.
-  GET RUN TIME FIELD lv_dbg_t2.  " DEBUG PERF: sesudah build JSON
-  lv_dbg_fm = ( lv_dbg_t1 - lv_dbg_t0 ) / 1000.  " FM fetch (ms)
-  lv_dbg_js = ( lv_dbg_t2 - lv_dbg_t1 ) / 1000.  " checkbox+build JSON (ms)
-  DESCRIBE TABLE lt_data1 LINES lv_dbg_n.
-  lv_dbg_fm_c = lv_dbg_fm. CONDENSE lv_dbg_fm_c NO-GAPS.
-  lv_dbg_js_c = lv_dbg_js. CONDENSE lv_dbg_js_c NO-GAPS.
-  lv_dbg_n_c  = lv_dbg_n.  CONDENSE lv_dbg_n_c  NO-GAPS.
-  response->append_cdata( '{"status":"S","data1":' ).
-  response->append_cdata( lv_json1 ).
-  response->append_cdata( ',"data2":' ).
-  response->append_cdata( lv_json2 ).
-  response->append_cdata( ',"_dbg":{"fm_ms":' ).
-  response->append_cdata( lv_dbg_fm_c ).
-  response->append_cdata( ',"json_ms":' ).
-  response->append_cdata( lv_dbg_js_c ).
-  response->append_cdata( ',"n":' ).
-  response->append_cdata( lv_dbg_n_c ).
-  response->append_cdata( '}}' ).
-  _m_navigation->response_complete( ).
-  EXIT.
-ENDIF.
+CONCATENATE lv_json2 ']' INTO lv_json2.
 %>
 <!DOCTYPE html>
 <html lang="id">
