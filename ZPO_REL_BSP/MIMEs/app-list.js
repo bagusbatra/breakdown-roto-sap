@@ -264,6 +264,11 @@ function getFiltered() {
    RENDER LIST — PO Pending
    ================================================================ */
 function renderList() {
+  if (!curPlant) {
+    landing();
+    return;
+  }
+
   filteredData = getFiltered();
   var total      = filteredData.length;
   var totalPages = pageSize === 0 ? 1 : Math.ceil(total / pageSize) || 1;
