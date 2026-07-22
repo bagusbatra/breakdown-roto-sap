@@ -87,7 +87,24 @@ var filteredData = [];
 /* ================================================================
    FETCH LIST — PO Pending (satu panggilan, kedua plant sekaligus)
    ================================================================ */
-function fetchList() {
+/* Cache per-plant: Z_FM_YMMR068 mengembalikan SEMUA kategori satu plant
+   dalam satu panggilan. Tiap link sidebar memicu switchView()->fetchList(),
+   jadi pindah kategori dalam plant yang sama — atau kembali ke plant yang
+   sudah dimuat — TIDAK perlu panggil FM lagi; cukup filter ulang
+   client-side (getFiltered/renderList). Dibersihkan setelah Release/Reject
+   (app-action.js) supaya data selalu segar. Panggil fetchList(true) untuk
+   paksa ambil ulang dari server. */
+var plantCache = {};
+
+function fetchList(force) {
+  if (!force && plantCache[curPlant]) {
+    window.ALL_DATA1 = plantCache[curPlant].data1;
+    window.ALL_DATA2 = plantCache[curPlant].data2;
+    buildSbCounts();
+    renderSidebar();
+    renderList();
+    return;
+  }
   showSkeleton();
   var _dbgT0 = performance.now();               /* DEBUG PERF */
   apiPost('GET_LIST', { plant: curPlant, potype: curCategory })
@@ -99,6 +116,7 @@ function fetchList() {
       }
       window.ALL_DATA1 = res.data1 || [];
       window.ALL_DATA2 = res.data2 || [];
+      plantCache[curPlant] = { data1: window.ALL_DATA1, data2: window.ALL_DATA2 };
       buildSbCounts();
       renderSidebar();
       renderList();

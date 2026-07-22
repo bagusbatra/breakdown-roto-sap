@@ -156,9 +156,10 @@ function processAction(ebelns, action, notes) {
 
       /* Reset seleksi & muat ulang daftar pending — PO yang sudah
          di-release/reject otomatis hilang dari hasil GET_LIST
-         berikutnya. */
+         berikutnya. fetchList(true) = paksa ambil dari server (abaikan
+         cache lama) + perbarui cache plant dgn data segar. */
       selEbelns = {};
-      fetchList();
+      fetchList(true);
     })
     .catch(function() {
       if (lo) lo.classList.remove('show');
