@@ -153,28 +153,42 @@ IF lv_action = 'GET_LIST'.
           bwart TYPE ekbe-bwart,
           menge TYPE ekbe-menge,
         END OF ls_gr,
-        lt_gr LIKE STANDARD TABLE OF ls_gr,
+        lt_gr    LIKE STANDARD TABLE OF ls_gr,
+        lt_grsum LIKE STANDARD TABLE OF ls_gr,
+        ls_grsum LIKE ls_gr,
         lv_gr101 TYPE ekpo-menge,
         lv_gr102 TYPE ekpo-menge,
         lv_netgr TYPE ekpo-menge.
 
-  SELECT ebeln ebelp bwart SUM( menge ) AS menge
+  " Catatan: FOR ALL ENTRIES tak boleh digabung GROUP BY di sebagian
+  " rilis ABAP. Ambil baris ekbe apa adanya, lalu jumlahkan pakai
+  " COLLECT (per ebeln+ebelp+bwart) — hasil sama, murni klasik.
+  SELECT ebeln ebelp bwart menge
     FROM ekbe
     INTO CORRESPONDING FIELDS OF TABLE lt_gr
     FOR ALL ENTRIES IN gt_item
     WHERE ebeln = gt_item-ebeln
       AND ebelp = gt_item-ebelp
-      AND ( bwart = '101' OR bwart = '102' )
-    GROUP BY ebeln ebelp bwart.
+      AND ( bwart = '101' OR bwart = '102' ).
+
+  CLEAR lt_grsum.
+  LOOP AT lt_gr INTO ls_gr.
+    CLEAR ls_grsum.
+    ls_grsum-ebeln = ls_gr-ebeln.
+    ls_grsum-ebelp = ls_gr-ebelp.
+    ls_grsum-bwart = ls_gr-bwart.
+    ls_grsum-menge = ls_gr-menge.
+    COLLECT ls_grsum INTO lt_grsum.
+  ENDLOOP.
 
   LOOP AT gt_item INTO gs_item.
     CLEAR: lv_gr101, lv_gr102.
-    READ TABLE lt_gr INTO ls_gr
+    READ TABLE lt_grsum INTO ls_grsum
       WITH KEY ebeln = gs_item-ebeln ebelp = gs_item-ebelp bwart = '101'.
-    IF sy-subrc = 0. lv_gr101 = ls_gr-menge. ENDIF.
-    READ TABLE lt_gr INTO ls_gr
+    IF sy-subrc = 0. lv_gr101 = ls_grsum-menge. ENDIF.
+    READ TABLE lt_grsum INTO ls_grsum
       WITH KEY ebeln = gs_item-ebeln ebelp = gs_item-ebelp bwart = '102'.
-    IF sy-subrc = 0. lv_gr102 = ls_gr-menge. ENDIF.
+    IF sy-subrc = 0. lv_gr102 = ls_grsum-menge. ENDIF.
     lv_netgr = lv_gr101 - lv_gr102.
     gs_item-outstd = gs_item-menge - lv_netgr.
     MODIFY gt_item FROM gs_item.
@@ -268,6 +282,7 @@ IF lv_action = 'GET_LIST'.
 
   " --- Header per ebeln (totpr = SUM item totpr) ---
   DATA: lt_ebeln TYPE STANDARD TABLE OF ty_item,
+        gs_sum   TYPE ty_item,
         lv_sum   TYPE ekpo-netwr,
         lv_stats TYPE c LENGTH 25.
   lt_ebeln = gt_item.
@@ -279,11 +294,7 @@ IF lv_action = 'GET_LIST'.
   CLEAR gt_hdr.
   LOOP AT lt_ebeln INTO gs_item.
     CLEAR lv_sum.
-    LOOP AT gt_item INTO gs_hdr WITH KEY ebeln = gs_item-ebeln
-                                TRANSPORTING NO FIELDS.
-    ENDLOOP.
     " jumlahkan totpr semua item ebeln ini
-    DATA gs_sum TYPE ty_item.
     LOOP AT gt_item INTO gs_sum WHERE ebeln = gs_item-ebeln.
       lv_sum = lv_sum + gs_sum-totpr.
     ENDLOOP.
