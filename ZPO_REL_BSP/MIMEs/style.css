@@ -1,0 +1,1474 @@
+/* ================================================================
+   ZPR_REL_BSP — Stylesheet
+   Arah visual: "Soft Modern" (radius besar, shadow lembut,
+   permukaan bertint, spasi lega).
+
+   Semua nilai visual berasal dari token di :root. Jangan menulis
+   warna/radius/shadow/ukuran font secara hardcode di file ini
+   maupun di file JS — tambahkan token baru bila perlu.
+   ================================================================ */
+
+/* ================================================================
+   FONT — self-host dari folder MIMEs (tidak bergantung internet).
+   DM Sans disajikan Google sebagai variable font, jadi satu file
+   melayani seluruh bobot 400/500/700.
+   ================================================================ */
+@font-face {
+  font-family: 'DM Sans';
+  font-style: normal;
+  font-weight: 100 1000;
+  font-display: swap;
+  src: url('DMSans.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'DM Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('DMMono.woff2') format('woff2');
+}
+
+/* ================================================================
+   TOKEN
+   ================================================================ */
+:root {
+  /* — Permukaan — empat lapis, dari belakang ke depan:
+       0 KANVAS  = --canvas   (latar area konten)
+       1 KONTEN  = --surface  (kartu, panel) + --sh-1 / --sh-2 saat hover
+       2 KACA    = --*-glass  (chrome lengket: header, toolbar, action bar)
+                              semi-transparan + backdrop blur, supaya konten
+                              TERLIHAT lewat di bawahnya, bukan tertutup
+       3 OVERLAY = --surface  + --sh-3 (popover) / --sh-4 (modal)
+
+     Kedalaman hanya "dibelanjakan" di lapis 2 dan 3 — yaitu tepat di
+     tempat benda memang bertumpuk. Sisanya datar. */
+  --canvas:         #eceef3;
+  --surface:        #ffffff;
+  --surface-2:      #f7f8fa;
+  --surface-3:      #eef0f4;
+  --border:         #e8eaef;
+  --border-strong:  #d5d8de;
+
+  /* — Lapis 2: kaca —
+     Dulu .main dan .page-sticky sama-sama memakai #e8e8e8 yang
+     di-hardcode. Karena warnanya PERSIS SAMA, kartu yang di-scroll ke
+     bawah toolbar lenyap tanpa jejak — tidak ada isyarat apa pun bahwa
+     toolbar itu melayang. Di situlah kesan "berlapis" hilang.
+     Kalau backdrop-filter tidak didukung, latar rgba-nya tetap
+     terender — hanya tanpa blur. Luruh dengan anggun. */
+  --canvas-glass:   rgba(236,238,243,.72);
+  --surface-glass:  rgba(255,255,255,.80);
+  --glass:          saturate(140%) blur(14px);
+
+  /* — Teks — */
+  --text:           #111827;
+  --text-2:         #4b5563;
+  --muted:          #6b7280;
+
+  /* — Brand — */
+  --primary:        #1a56db;
+  --primary-soft:   #eff6ff;
+  --primary-border: #c3d4f7;
+
+  /* — Semantik: solid + soft — */
+  --success:        #057a55;
+  --success-hover:  #046c4a;
+  --success-soft:   #def7ec;
+  --danger:         #c81e1e;
+  --danger-hover:   #a91818;
+  --danger-soft:    #fde8e8;
+  --warning:        #b45309;
+  --warning-soft:   #fef3c7;
+  --info:           #1d4ed8;
+  --info-soft:      #dbeafe;
+
+  /* — Kategori PO type — nilai diambil verbatim dari colorMap di
+     ZPO_REL_BSP/Page with FLow Logic/main.htm (buildBsartMap, ~L2100).
+     Dipakai task frontend berikutnya untuk mewarnai badge tipe PO. — */
+  --po-jasa:            #7c3aed;
+  --po-jasa-bg:         #ede9fe;
+  --po-bahan:           #057a55;
+  --po-bahan-bg:        #def7ec;
+  --po-penunjang:       #0369a1;
+  --po-penunjang-bg:    #e0f2fe;
+  --po-sparepart:       #b45309;
+  --po-sparepart-bg:    #fef3c7;
+  --po-utility:         #0891b2;
+  --po-utility-bg:      #cffafe;
+  --po-exim:            #c81e1e;
+  --po-exim-bg:         #fde8e8;
+  --po-pkit:            #4f46e5;
+  --po-pkit-bg:         #e0e7ff;
+  --po-fallback:        #374151;
+  --po-fallback-bg:     #f3f4f6;
+
+  /* — Radius — */
+  --r-sm:   8px;
+  --r-md:  10px;
+  --r-lg:  14px;
+  --r-xl:  18px;
+  --r-full: 999px;
+
+  /* — Elevasi — */
+  --sh-1: 0 1px 2px rgba(16,24,40,.04), 0 1px 3px rgba(16,24,40,.06);
+  --sh-2: 0 2px 4px rgba(16,24,40,.04), 0 6px 16px rgba(16,24,40,.07);
+  --sh-3: 0 4px 8px rgba(16,24,40,.05), 0 14px 36px rgba(16,24,40,.11);
+  --sh-4: 0 8px 16px rgba(16,24,40,.07), 0 28px 68px rgba(16,24,40,.18);
+
+  /* — Spasi (kelipatan 4) — */
+  --sp-1:  4px;
+  --sp-2:  8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-8: 32px;
+
+  /* — Tipografi — */
+  --font:    'DM Sans','Segoe UI',system-ui,-apple-system,sans-serif;
+  --font-mono: 'DM Mono','Cascadia Mono',Consolas,monospace;
+  --fs-xs:   11px;
+  --fs-sm:   12px;
+  --fs-base: 13px;
+  --fs-md:   15px;
+  --fs-lg:   17px;
+  --fs-xl:   22px;
+  --fs-2xl:  28px;
+  --lh-tight:   1.25;
+  --lh-base:    1.5;
+  --lh-relaxed: 1.7;
+
+  /* — Gerak — */
+  --dur-fast: 120ms;
+  --dur:      200ms;
+  --dur-slow: 320ms;
+  --ease: cubic-bezier(.4,0,.2,1);
+
+  /* — Layout — */
+  --sidebar-w: 264px;
+  --header-h:   60px;
+
+  /* — Z-index — */
+  --z-sticky:    150;
+  --z-backdrop:  190;
+  --z-sidebar:   200;
+  --z-header:    300;
+  --z-fab:       400;
+  --z-popover:   500;
+  --z-modal:     999;
+  --z-toast:    9990;
+  --z-loading: 10000;
+}
+
+*, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
+
+body {
+  font-family:var(--font);
+  font-size:var(--fs-base);
+  line-height:var(--lh-base);
+  background:var(--canvas);
+  color:var(--text);
+  min-height:100vh;
+  -webkit-font-smoothing:antialiased;
+}
+
+/* Angka selalu rata kolom — penting untuk memindai nominal. */
+.num, .card-num, .card-amount-val, .card-amount-row-val,
+td.num, th.num { font-variant-numeric:tabular-nums; }
+
+/* ================================================================
+   FOKUS — satu aturan global, berlaku ke seluruh elemen interaktif.
+   ================================================================ */
+:focus { outline:none; }
+:focus-visible {
+  outline:2px solid var(--primary);
+  outline-offset:2px;
+  border-radius:var(--r-sm);
+}
+.btn-danger:focus-visible,
+.fab-rej:focus-visible,
+.filter-panel-reset:focus-visible { outline-color:var(--danger); }
+.btn-success:focus-visible,
+.fab-app:focus-visible { outline-color:var(--success); }
+
+.visually-hidden {
+  position:absolute; width:1px; height:1px;
+  padding:0; margin:-1px; overflow:hidden;
+  clip:rect(0 0 0 0); white-space:nowrap; border:0;
+}
+
+/* ================================================================
+   IKON — sprite SVG inline (lihat blok <symbol> di index.htm).
+   Selalu mewarisi warna teks induknya lewat currentColor.
+   ================================================================ */
+.ico {
+  width:16px; height:16px; flex:none;
+  display:inline-block; vertical-align:-3px;
+  fill:none; stroke:currentColor;
+  stroke-width:1.75; stroke-linecap:round; stroke-linejoin:round;
+}
+.ico-sm { width:14px; height:14px; vertical-align:-2px; }
+.ico-lg { width:20px; height:20px; vertical-align:-4px; }
+.ico-xl { width:40px; height:40px; stroke-width:1.25; }
+
+/* ================================================================
+   HEADER
+   ================================================================ */
+/* LAPIS 2 (kaca). Konten yang di-scroll lewat di bawah header akan
+   terlihat samar & buram, bukan terpotong bersih — itulah isyarat
+   bahwa header memang MELAYANG di atas konten, bukan sekadar
+   menutupinya. */
+.hdr {
+  position:fixed; top:0; left:0; right:0;
+  height:var(--header-h);
+  background:var(--surface-glass);
+  -webkit-backdrop-filter:var(--glass);
+  backdrop-filter:var(--glass);
+  border-bottom:1px solid var(--border);
+  display:flex; align-items:center;
+  padding:0 var(--sp-5); gap:var(--sp-3);
+  z-index:var(--z-header);
+}
+.hdr-logo {
+  width:34px; height:34px; border-radius:var(--r-md);
+  background:var(--surface-2);
+  display:flex; align-items:center; justify-content:center;
+  flex-shrink:0; overflow:hidden;
+}
+.hdr-logo img { width:26px; height:26px; object-fit:contain; }
+.hdr-brand { font-size:var(--fs-md); font-weight:700; line-height:var(--lh-tight); }
+.hdr-corp  { font-size:var(--fs-xs); color:var(--muted); }
+
+/* Logo + judul jadi satu tombol: klik untuk kembali ke dashboard. */
+.hdr-home {
+  display:flex; align-items:center; gap:var(--sp-3);
+  background:transparent; border:none; cursor:pointer;
+  font-family:inherit; text-align:left;
+  padding:4px 10px 4px 4px; border-radius:var(--r-md);
+  transition:background var(--dur-fast) var(--ease);
+}
+.hdr-home:hover { background:var(--surface-2); }
+.hdr-home-text { display:flex; flex-direction:column; }
+
+.btn-toggle-sb {
+  width:36px; height:36px; border:none;
+  background:transparent; border-radius:var(--r-sm);
+  cursor:pointer; color:var(--text-2);
+  display:flex; align-items:center; justify-content:center;
+  transition:background var(--dur-fast) var(--ease); flex-shrink:0;
+}
+.btn-toggle-sb:hover { background:var(--surface-3); }
+
+/* ── User menu ── */
+.hdr-user { margin-left:auto; position:relative; }
+.hdr-user-btn {
+  display:flex; align-items:center; gap:var(--sp-2);
+  background:transparent; border:none; cursor:pointer;
+  font-family:inherit; font-size:var(--fs-base); font-weight:600;
+  color:var(--text-2); padding:5px 8px; border-radius:var(--r-sm);
+  transition:background var(--dur-fast) var(--ease);
+}
+.hdr-user-btn:hover { background:var(--surface-2); }
+.hdr-avatar {
+  width:32px; height:32px; border-radius:50%;
+  background:var(--primary); color:#fff;
+  display:flex; align-items:center; justify-content:center;
+  font-size:var(--fs-base); font-weight:700; flex:none;
+}
+.hdr-user-name { max-width:190px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+.usermenu {
+  display:none; position:absolute;
+  top:calc(100% + 10px); right:0;
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:var(--r-lg); box-shadow:var(--sh-3);
+  min-width:190px; z-index:var(--z-popover); overflow:hidden;
+}
+.usermenu.open { display:block; }
+.usermenu-head { padding:var(--sp-3) var(--sp-4); border-bottom:1px solid var(--border); }
+.usermenu-label { font-size:var(--fs-sm); color:var(--muted); }
+.usermenu-name  { font-size:var(--fs-base); font-weight:700; color:var(--text); }
+.usermenu-item {
+  display:flex; align-items:center; gap:var(--sp-2);
+  width:100%; padding:11px var(--sp-4);
+  background:transparent; border:none; border-top:1px solid var(--border);
+  font-family:inherit; font-size:var(--fs-base); font-weight:600;
+  color:var(--primary); cursor:pointer; text-align:left;
+  transition:background var(--dur-fast) var(--ease);
+}
+.usermenu-item:first-of-type { border-top:none; }
+.usermenu-item:hover { background:var(--primary-soft); }
+.usermenu-item-danger { color:var(--danger); }
+.usermenu-item-danger:hover { background:var(--danger-soft); }
+
+/* ================================================================
+   SIDEBAR — datar. Seluruh menu & submenu selalu tampil; tidak
+   ada accordion. Nama plant hanyalah label seksi, bukan tombol.
+
+   ATURAN WARNA SIDEBAR (dipegang konsisten):
+   Sidebar hanya menjawab satu pertanyaan — "mana yang menunggu
+   keputusan saya?" Jadi warna dipakai sebagai SINYAL, bukan hiasan:
+
+     ink pekat  = tumpukan kerja plant (satu angka besar per plant)
+     abu netral = jumlah antrean per kategori — itu DATA, bukan status
+     biru       = di sini kamu sedang berada (baris aktif)
+     hijau/merah= HANYA saat kamu membuka riwayat approve/reject
+
+   Riwayat sengaja dibuat mundur ke belakang (angka telanjang, ikon
+   abu) karena isinya arsip: sudah selesai, tidak menuntut tindakan.
+   ================================================================ */
+.sidebar {
+  position:fixed; top:var(--header-h); left:0; bottom:0;
+  width:var(--sidebar-w); background:var(--surface);
+  border-right:1px solid var(--border);
+  overflow-y:auto; overscroll-behavior:contain;
+  z-index:var(--z-sidebar);
+  padding:var(--sp-4) var(--sp-3) var(--sp-6);
+  transition:transform var(--dur) var(--ease);
+  scrollbar-width:thin;
+  scrollbar-color:var(--border-strong) transparent;
+}
+/* Scrollbar tipis yang tidak ikut menggeser konten saat muncul. */
+.sidebar::-webkit-scrollbar { width:10px; }
+.sidebar::-webkit-scrollbar-track { background:transparent; }
+.sidebar::-webkit-scrollbar-thumb {
+  background:var(--border-strong); border-radius:var(--r-full);
+  border:3px solid var(--surface); background-clip:padding-box;
+}
+
+.sb-section + .sb-section { margin-top:var(--sp-5); }
+.sb-section + .sb-section::before {
+  content:""; display:block; height:1px;
+  background:var(--border); margin:0 var(--sp-2) var(--sp-5);
+}
+
+/* Kepala plant: nama + SATU angka pekat = beban kerja plant itu.
+   padding-left disamakan dengan .sb-link agar avatar plant, ikon menu,
+   dan label "Riwayat" berdiri di satu garis kiri yang sama. */
+.sb-plant-hdr {
+  display:flex; align-items:center; justify-content:space-between;
+  gap:var(--sp-2);
+  padding:0 var(--sp-2) 0 var(--sp-3);
+  margin-bottom:var(--sp-3);
+  cursor:default; user-select:none;
+}
+.sb-plant-left {
+  display:flex; align-items:center; gap:10px; min-width:0;
+  font-size:var(--fs-sm); font-weight:700;
+  letter-spacing:.06em; text-transform:uppercase;
+  color:var(--text);
+}
+.sb-plant-left img {
+  width:22px; height:22px; object-fit:cover;
+  border-radius:6px; flex:none;
+  box-shadow:0 0 0 1px var(--border-strong);
+}
+
+.sb-link {
+  position:relative; display:flex; align-items:center;
+  justify-content:space-between; gap:var(--sp-2);
+  width:100%;
+  padding:8px var(--sp-2) 8px var(--sp-3);
+  background:transparent; border:none;
+  border-radius:var(--r-sm);
+  font-family:inherit; font-size:var(--fs-base); font-weight:500;
+  color:var(--text-2); cursor:pointer; text-align:left;
+  transition:background var(--dur-fast) var(--ease),
+             color var(--dur-fast) var(--ease);
+}
+.sb-link + .sb-link { margin-top:2px; }
+.sb-link:hover { background:var(--surface-2); color:var(--text); }
+.sb-link:focus-visible { outline:2px solid var(--primary); outline-offset:1px; }
+
+.sb-link-label { display:flex; align-items:center; gap:10px; min-width:0; }
+.sb-link-label span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+/* Ikon ikut meredup/menyala bersama barisnya, tidak berdiri sendiri. */
+.sb-link .ico { color:var(--muted); flex:none;
+  transition:color var(--dur-fast) var(--ease); }
+.sb-link:hover .ico { color:var(--text-2); }
+
+/* Baris aktif: pill bertinta + teks & ikon sewarna. Rail 3px lama
+   dibuang — dengan pill penuh ia jadi aksesori yang tidak menambah
+   informasi apa pun. */
+.sb-link[aria-current] {
+  background:var(--primary-soft); color:var(--primary); font-weight:600;
+}
+.sb-link[aria-current] .ico { color:var(--primary); }
+.sb-link[data-tone="app"][aria-current] { background:var(--success-soft); color:var(--success); }
+.sb-link[data-tone="app"][aria-current] .ico { color:var(--success); }
+.sb-link[data-tone="rej"][aria-current] { background:var(--danger-soft);  color:var(--danger); }
+.sb-link[data-tone="rej"][aria-current] .ico { color:var(--danger); }
+
+/* Pembatas berlabel: garis kosong tidak memberi tahu apa-apa. Label
+   ini menyatakan hal yang benar tentang isinya — segala yang di ATAS
+   menuntut tindakan, yang di BAWAH sudah selesai. */
+.sb-hist-sep {
+  height:auto; background:none;
+  margin:var(--sp-4) var(--sp-2) var(--sp-2) var(--sp-3);
+  display:flex; align-items:center; gap:var(--sp-2);
+  font-size:var(--fs-xs); font-weight:700;
+  letter-spacing:.08em; text-transform:uppercase;
+  color:var(--muted);
+}
+.sb-hist-sep::before { content:"Riwayat"; flex:none; }
+.sb-hist-sep::after  { content:""; flex:1; height:1px; background:var(--border); }
+
+.sb-badge {
+  font-size:var(--fs-xs); font-weight:700; line-height:1.45;
+  padding:2px 7px; border-radius:var(--r-full);
+  min-width:22px; text-align:center; flex:none;
+  font-variant-numeric:tabular-nums;
+}
+/* Angka pekat: satu-satunya chip solid di sidebar. Ini beban kerja. */
+.sb-badge-total   { background:var(--text);      color:#fff; }
+/* Antrean per kategori: netral. Besar-kecilnya angka yang bicara. */
+.sb-badge-pending { background:var(--surface-3); color:var(--text-2); }
+/* Arsip: angka telanjang, tanpa chip — sengaja tidak menarik mata. */
+.sb-badge-app,
+.sb-badge-rej     { background:transparent; color:var(--muted); padding:2px 0; }
+
+.sb-link:hover .sb-badge-pending { background:var(--surface-3); color:var(--text); }
+
+/* Saat barisnya aktif, angkanya baru boleh menyala — sewarna barisnya. */
+.sb-link[aria-current] .sb-badge-pending { background:var(--primary); color:#fff; }
+.sb-link[data-tone="app"][aria-current] .sb-badge-app {
+  background:var(--success); color:#fff; padding:2px 7px;
+}
+.sb-link[data-tone="rej"][aria-current] .sb-badge-rej {
+  background:var(--danger);  color:#fff; padding:2px 7px;
+}
+
+.sb-backdrop {
+  position:fixed; inset:var(--header-h) 0 0 0;
+  background:rgba(17,24,39,.42);
+  opacity:0; pointer-events:none;
+  transition:opacity var(--dur) var(--ease);
+  z-index:var(--z-backdrop);
+}
+
+/* ================================================================
+   MAIN
+   ================================================================ */
+/* padding-bottom menyediakan ruang bagi .actionbar yang position:fixed,
+   supaya kartu terakhir tidak tertutup olehnya. */
+/* LAPIS 0 (kanvas). min-height memaksa kanvas mengisi penuh tinggi
+   layar. Tanpa ini, halaman berkonten pendek (dashboard) memperlihatkan
+   JAHITAN: kanvas berhenti, lalu warna <body> muncul di bawahnya sebagai
+   strip abu yang berbeda. Dulu memang beda betul — .main #e8e8e8 vs
+   body #f4f5f9 — dua abu yang tak pernah dimaksudkan bertemu. */
+.main {
+  margin-left:var(--sidebar-w); margin-top:var(--header-h);
+  background:var(--canvas);
+  min-height:calc(100vh - var(--header-h));
+  padding:0 0 88px;
+  transition:margin-left var(--dur) var(--ease);
+}
+
+/* Judul halaman + toolbar menempel sebagai satu blok. Ini menggantikan
+   dua sticky terpisah yang dulu bergantung offset hardcode 74px dan
+   patah begitu judulnya wrap ke dua baris.
+
+   LAPIS 2 (kaca). Inilah satu-satunya tempat di halaman ini yang benda
+   sungguh-sungguh bertumpuk — kartu lewat DI BAWAH toolbar — jadi di
+   sinilah kedalaman dibelanjakan. Hairline di bawahnya menandai batas
+   lapisan; blur-nya membuat kartu yang lewat tetap terbaca sebagai
+   kartu, cuma kabur. */
+.page-sticky {
+  position:sticky; top:var(--header-h); z-index:var(--z-sticky);
+  padding:var(--sp-5);
+  background:var(--canvas-glass);
+  -webkit-backdrop-filter:var(--glass);
+  backdrop-filter:var(--glass);
+  border-bottom:1px solid var(--border);
+}
+
+/* Jarak kartu terhadap tepi kanvas. Dulu tiga kali `margin:20px` yang
+   di-hardcode di luar skala spasi; nilainya sama (--sp-5 = 20px). */
+#cardContainer,
+#histTableWrap,
+#poTableWrap {
+  margin:var(--sp-5);
+}
+/* Judul & subjudul sebaris (baseline), membungkus ke bawah di layar
+   sempit. */
+.pg-hdr {
+  margin-bottom:var(--sp-4);
+  display:flex; align-items:baseline; flex-wrap:wrap;
+  column-gap:var(--sp-3); row-gap:var(--sp-1);
+}
+.pg-title {
+  font-size:var(--fs-xl); font-weight:700; line-height:var(--lh-tight);
+  display:flex; align-items:center; gap:var(--sp-2);
+}
+.pg-title--app { color:var(--success); }
+.pg-title--rej { color:var(--danger); }
+.pg-sub { font-size:var(--fs-base); color:var(--muted); }
+.pg-sub-em { font-weight:700; color:var(--primary); }
+.pg-sub-mrp { font-weight:600; color:var(--info); }
+.pg-sub-nonmrp { font-weight:600; color:var(--warning); }
+
+/* ================================================================
+   TOOLBAR
+   ================================================================ */
+.toolbar {
+  display:flex; align-items:center; gap:var(--sp-2); flex-wrap:wrap;
+}
+.search-wrap {
+  display:flex; align-items:center; gap:var(--sp-2);
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:var(--r-md); padding:0 var(--sp-3); height:36px;
+  color:var(--muted);
+  transition:border-color var(--dur-fast) var(--ease),
+             box-shadow var(--dur-fast) var(--ease);
+}
+.search-wrap:focus-within {
+  border-color:var(--primary);
+  box-shadow:0 0 0 3px var(--primary-soft);
+}
+.search-wrap input {
+  border:none; outline:none; background:transparent;
+  font-family:inherit; font-size:var(--fs-base);
+  width:190px; color:var(--text);
+}
+.search-wrap input::placeholder { color:var(--muted); }
+
+/* Satu aturan untuk seluruh <select> (page size, sort, filter). */
+.select {
+  height:36px; padding:0 32px 0 var(--sp-3);
+  border:1px solid var(--border); background-color:var(--surface);
+  border-radius:var(--r-md); font-family:inherit;
+  font-size:var(--fs-base); font-weight:600; color:var(--text-2);
+  cursor:pointer; appearance:none; outline:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat:no-repeat; background-position:right 10px center;
+}
+.select:hover { border-color:var(--border-strong); }
+.select--accent {
+  border-color:var(--primary-border); color:var(--primary);
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%231a56db' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+}
+.select--block { width:100%; }
+
+/* ── Aksi massal di toolbar ──
+   Duduk tepat di sebelah "Pilih Semua" supaya kursor tidak perlu
+   menyeberang layar ke pojok kanan bawah setelah memilih. Dipisah
+   dari sisa toolbar oleh satu garis tegak: ini kelompok yang berbeda
+   sifatnya — mengubah data, bukan menyaring tampilan.
+   Dinyalakan oleh updateFabInfo() (app-detail.js) saat cnt > 0. */
+.sel-actions {
+  display:none; align-items:center; gap:var(--sp-2);
+  margin-left:var(--sp-1); padding-left:var(--sp-3);
+  border-left:1px solid var(--border-strong);
+}
+.sel-actions.show {
+  display:flex;
+  animation:selActionsIn var(--dur) var(--ease);
+}
+.sel-count {
+  font-size:var(--fs-base); color:var(--text-2);
+  white-space:nowrap; padding-right:var(--sp-1);
+  font-variant-numeric:tabular-nums;
+}
+.sel-count b { color:var(--text); font-weight:700; }
+
+@keyframes selActionsIn {
+  from { opacity:0; transform:translateX(-6px); }
+  to   { opacity:1; transform:none; }
+}
+@media (prefers-reduced-motion:reduce) {
+  .sel-actions.show { animation:none; }
+}
+
+.pg-count {
+  margin-left:auto; font-size:var(--fs-base);
+  color:var(--muted); white-space:nowrap;
+  font-variant-numeric:tabular-nums;
+}
+
+/* ── Panel Filter ── */
+.filter-wrap { position:relative; }
+.filter-badge {
+  display:inline-flex; align-items:center; justify-content:center;
+  min-width:17px; height:17px; padding:0 5px;
+  border-radius:var(--r-full); background:var(--primary); color:#fff;
+  font-size:10px; font-weight:700; line-height:1;
+}
+.btn-filter[aria-expanded="true"] {
+  border-color:var(--primary-border);
+  color:var(--primary); background:var(--primary-soft);
+}
+.filter-panel {
+  display:none; position:absolute; top:calc(100% + var(--sp-2)); left:0;
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:var(--r-lg); box-shadow:var(--sh-3);
+  padding:var(--sp-4); width:220px; z-index:var(--z-popover);
+}
+.filter-panel.open { display:block; }
+.filter-panel-row { display:flex; flex-direction:column; gap:var(--sp-1); margin-bottom:var(--sp-3); }
+.filter-panel-row:last-of-type { margin-bottom:0; }
+.filter-panel-lbl {
+  font-size:var(--fs-xs); color:var(--muted); font-weight:600;
+  letter-spacing:.04em; text-transform:uppercase;
+}
+.filter-panel-reset {
+  display:block; width:100%; margin-top:var(--sp-3);
+  padding-top:var(--sp-3); border:none; border-top:1px solid var(--border);
+  background:transparent; font-family:inherit;
+  font-size:var(--fs-sm); font-weight:600;
+  color:var(--danger); cursor:pointer;
+}
+.filter-panel-reset:hover { text-decoration:underline; }
+
+/* ================================================================
+   TOMBOL — satu basis, beberapa varian & dua ukuran.
+   Hover memakai warna eksplisit, bukan opacity (opacity ikut
+   memudarkan teks dan merusak kontras).
+   ================================================================ */
+.btn {
+  display:inline-flex; align-items:center; justify-content:center;
+  gap:var(--sp-2); height:36px; padding:0 var(--sp-4);
+  border:1px solid transparent; border-radius:var(--r-md);
+  font-family:inherit; font-size:var(--fs-base); font-weight:600;
+  color:#fff; cursor:pointer; white-space:nowrap;
+  transition:background var(--dur-fast) var(--ease),
+             border-color var(--dur-fast) var(--ease);
+}
+.btn-lg { height:38px; padding:0 var(--sp-5); }
+.btn-xs { height:28px; padding:0 10px; font-size:var(--fs-sm); }
+
+.btn-success { background:var(--success); }
+.btn-success:hover { background:var(--success-hover); }
+.btn-danger  { background:var(--danger); }
+.btn-danger:hover { background:var(--danger-hover); }
+
+.btn-outline {
+  background:var(--surface); color:var(--text-2);
+  border-color:var(--border);
+}
+.btn-outline:hover { background:var(--surface-2); border-color:var(--border-strong); }
+
+/* Aksi netral (Expand/Collapse, Lihat Teks). Dulu berwarna hijau
+   --success, dengan hover yang membuat teks hijau di atas latar
+   hijau: praktis tak terbaca. */
+.btn-ghost {
+  background:var(--surface); color:var(--text-2);
+  border-color:var(--border);
+}
+.btn-ghost:hover { background:var(--surface-3); color:var(--text); }
+
+/* ================================================================
+   PAGINATION
+   ================================================================ */
+/* Hidup di dalam .actionbar, jadi tanpa padding sendiri dan rata kiri. */
+.pagination-bar {
+  display:flex; align-items:center; justify-content:flex-start;
+  gap:var(--sp-1); flex-wrap:wrap;
+}
+.pg-btn {
+  height:34px; min-width:34px; padding:0 var(--sp-2);
+  border:1px solid var(--border); background:var(--surface);
+  border-radius:var(--r-sm); font-family:inherit;
+  font-size:var(--fs-base); font-weight:600; color:var(--text-2);
+  cursor:pointer; display:flex; align-items:center; justify-content:center;
+  transition:background var(--dur-fast) var(--ease),
+             border-color var(--dur-fast) var(--ease);
+  font-variant-numeric:tabular-nums;
+}
+.pg-btn:hover:not(:disabled) { background:var(--surface-2); border-color:var(--border-strong); }
+.pg-btn[aria-current] { background:var(--primary); color:#fff; border-color:var(--primary); }
+.pg-btn:disabled { opacity:.4; cursor:default; }
+.pg-info {
+  font-size:var(--fs-sm); color:var(--muted);
+  font-weight:500; padding:0 var(--sp-2);
+  font-variant-numeric:tabular-nums;
+}
+
+/* ================================================================
+   KARTU PR
+   Grid tiga (atau empat) kolom menggantikan flex-wrap lama, di mana
+   card-amount memakai margin-left:auto dan posisinya patah begitu
+   badge membungkus ke baris berikutnya.
+   ================================================================ */
+.po-card {
+  --card-indent:50px;
+  position:relative;
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:var(--r-lg); margin-bottom:var(--sp-3);
+  box-shadow:var(--sh-1); overflow:hidden;
+  transition:box-shadow var(--dur) var(--ease),
+             border-color var(--dur) var(--ease),
+             transform var(--dur) var(--ease);
+}
+
+/* ── Garis biru di tepi kiri ──
+   Aksen tetap di setiap kartu PR, di semua view (pending, riwayat,
+   status PO). Sengaja SATU warna, bukan kode status: status sudah
+   disampaikan oleh chip di dalam kartu, dan garis ini bertugas
+   sebagai penanda tepi kartu saja.
+
+   Dipasang sebagai ::before absolut, BUKAN border-left, karena
+   .po-card:hover/.selected/.highlight memakai shorthand border-color
+   yang akan menimpa keempat sisinya sekaligus dan mematikan warnanya
+   begitu kursor lewat. */
+.po-card::before {
+  content:""; position:absolute; left:0; top:0; bottom:0;
+  width:3px; background:var(--primary);
+}
+/* Kartu tidak lagi terangkat saat hover. Dalam daftar 10 kartu,
+   translateY membuat halaman terasa bergoyang saat kursor lewat;
+   perubahan border + bayangan sudah cukup menandai baris aktif. */
+.po-card:hover {
+  box-shadow:var(--sh-2);
+  border-color:var(--border-strong);
+}
+/* Sebelumnya PR terpilih sama sekali tidak punya penanda pada kartu,
+   hanya centang di kotaknya. */
+.po-card.selected {
+  border-color:var(--primary);
+  box-shadow:0 0 0 3px var(--primary-soft), var(--sh-2);
+}
+/* Sorotan sementara pada PR yang dituju deep-link dari notifikasi. */
+.po-card.highlight {
+  border-color:var(--primary);
+  box-shadow:0 0 0 3px var(--primary-soft), var(--sh-2);
+}
+.po-card.removing {
+  opacity:0; max-height:0; margin-bottom:0; overflow:hidden;
+  transition:opacity var(--dur-slow) var(--ease),
+             max-height var(--dur-slow) var(--ease),
+             margin-bottom var(--dur-slow) var(--ease);
+}
+
+.card-top {
+  display:grid;
+  grid-template-columns:auto minmax(0,1fr) auto auto;
+  column-gap:var(--sp-3); row-gap:var(--sp-3);
+  padding:var(--sp-4) var(--sp-5);
+  align-items:start;
+}
+.card-top--nocb { grid-template-columns:minmax(0,1fr) auto auto; }
+.po-card.no-cb { --card-indent:var(--sp-5); }
+
+.card-cb {
+  width:18px; height:18px; margin-top:5px;
+  accent-color:var(--primary); cursor:pointer; flex:none;
+}
+/* card-head (No PR + Lihat Teks) dan card-badges sebaris; membungkus
+   ke bawah bila tak muat. */
+.card-main {
+  min-width:0; display:flex; align-items:center; flex-wrap:wrap;
+  column-gap:var(--sp-4); row-gap:var(--sp-2);
+}
+.card-head { display:flex; align-items:center; gap:var(--sp-3); flex-wrap:wrap; }
+/* Memakai font teks (DM Sans) seperti elemen lain, bukan monospace.
+   tabular-nums (lihat aturan .num di atas) tetap menjaga digitnya
+   selebar sama sehingga nomor PR tetap rapi saat ditumpuk. */
+/* Nomor PR = identitas baris, bukan judulnya. Dulu 17px biru tebal,
+   berebut perhatian dengan nominal yang juga 17px tebal — tak ada
+   yang memberi tahu mana yang harus dibaca lebih dulu. Sekarang ia
+   mundur: tinta, 15px, digit tabular. Biru juga dilepas karena
+   angkanya bukan tautan — yang bisa diklik adalah seluruh kartunya. */
+.card-num {
+  font-size:var(--fs-md); font-weight:700;
+  color:var(--text); white-space:nowrap;
+  font-variant-numeric:tabular-nums; letter-spacing:.01em;
+}
+.card-badges { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+
+/* Nominal = pahlawan kartu. Inilah yang dipindai approver saat
+   memutuskan. Diset dengan DM Mono (sudah di-self-host di MIMEs):
+   figur tabular sehingga digit rupiah berbaris lurus antar kartu —
+   uang layak diperlakukan sebagai data, bukan sebagai kalimat. */
+.card-amount { text-align:right; }
+.card-amount-val {
+  display:block;
+  font-family:var(--font-mono);
+  font-size:var(--fs-xl); font-weight:500;
+  color:var(--text); letter-spacing:-.02em; line-height:1.15;
+  font-variant-numeric:tabular-nums;
+}
+.card-amount-cur {
+  display:block; margin-top:3px;
+  font-size:var(--fs-xs); color:var(--muted);
+  font-weight:600; letter-spacing:.08em; text-transform:uppercase;
+}
+/* PR dengan item lintas mata uang: satu baris per currency, bukan
+   dijumlahkan jadi satu angka yang salah. */
+.card-amount-multi { display:flex; flex-direction:column; align-items:flex-end; gap:var(--sp-1); }
+.card-amount-row { display:flex; align-items:baseline; gap:var(--sp-2); }
+.card-amount-row-val {
+  font-family:var(--font-mono);
+  font-size:var(--fs-md); font-weight:500; color:var(--text);
+  font-variant-numeric:tabular-nums;
+}
+.card-amount-row-cur {
+  font-size:var(--fs-xs); color:var(--muted); min-width:34px;
+  text-align:left; font-weight:600; letter-spacing:.06em;
+}
+
+.card-expand {
+  background:transparent; border:none; border-radius:var(--r-sm);
+  color:var(--muted); cursor:pointer;
+  display:flex; align-items:center; justify-content:center;
+  width:28px; height:28px; flex:none;
+  transition:background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+.card-expand:hover { background:var(--surface-3); color:var(--text); }
+.card-expand .ico { transition:transform var(--dur) var(--ease); }
+.po-card.expanded .card-expand .ico { transform:rotate(180deg); }
+
+.card-meta {
+  display:grid; grid-template-columns:repeat(4,1fr);
+  gap:var(--sp-3); padding:0 var(--sp-5) var(--sp-4) var(--card-indent);
+}
+.meta-lbl {
+  font-size:var(--fs-xs); text-transform:uppercase; letter-spacing:.06em;
+  color:var(--muted); font-weight:600; margin-bottom:2px;
+}
+.meta-val { font-size:var(--fs-base); font-weight:600; }
+.meta-val--sm { font-size:var(--fs-sm); font-weight:500; }
+.meta-val--app { color:var(--success); }
+.meta-val--rej { color:var(--danger); }
+
+.card-reason {
+  padding:0 var(--sp-5) var(--sp-4) var(--card-indent);
+  font-size:var(--fs-sm); color:var(--muted);
+}
+.card-reason b { color:var(--text-2); }
+
+.card-detail { display:none; border-top:1px solid var(--border); padding:0 var(--sp-5) var(--sp-4); }
+.po-card.expanded .card-detail { display:block; }
+.card-detail-scroll { overflow-x:auto; }
+.card-detail table { width:100%; border-collapse:collapse; margin-top:var(--sp-3); font-size:var(--fs-base); }
+.card-detail th {
+  text-align:left; padding:7px 10px;
+  font-size:var(--fs-xs); text-transform:uppercase; letter-spacing:.05em;
+  color:var(--muted); font-weight:600; white-space:nowrap;
+  border-bottom:1px solid var(--border);
+}
+.card-detail td {
+  padding:9px 10px; border-bottom:1px solid var(--surface-2);
+  color:var(--text-2);
+}
+.card-detail tr:last-child td { border-bottom:none; }
+.card-detail td.num, .card-detail th.num { text-align:right; }
+.cell-mono { font-family:var(--font-mono); font-size:var(--fs-sm); }
+.cell-item { font-family:var(--font-mono); font-weight:500; color:var(--primary); }
+.cell-total { font-weight:700; color:var(--text); }
+.cell-muted { color:var(--muted); }
+.cell-strong { font-weight:500; color:var(--text); }
+.cell-age-crit { color:var(--danger); font-weight:700; }
+.card-detail-msg { padding:var(--sp-3); text-align:center; font-size:var(--fs-base); color:var(--muted); }
+.card-detail-msg--error { color:var(--danger); }
+
+/* ── Chip dalam tabel ── */
+.chip {
+  display:inline-block; padding:2px 6px; border-radius:5px;
+  font-size:var(--fs-xs); font-weight:600;
+}
+.chip-uom { background:var(--surface-3); color:var(--text-2); font-weight:500; }
+.chip-cur      { background:var(--surface-3); color:var(--text-2); }
+.chip-cur--usd { background:var(--info-soft); color:var(--info); }
+.chip-cur--alt { background:var(--warning-soft); color:var(--warning); }
+
+/* ================================================================
+   BADGE
+   ================================================================ */
+/* ATURAN CHIP KARTU (sejalan dengan aturan warna di sidebar):
+   SATU kartu = SATU sinyal berwarna, yaitu STATUS-nya.
+   Sisanya — plant, jenis PR, jumlah item, kategori — adalah FASET:
+   fakta netral untuk memindai, bukan peringatan. Semuanya abu.
+
+   Sebelumnya b-nonmrp memakai amber yang sama persis dengan b-pending
+   ("Manual" dan "Pending" tampak identik), dan b-items memakai hijau
+   yang sama persis dengan b-app (jumlah item terbaca seperti
+   "approved"). Dua-duanya warna yang berbohong. */
+.badge {
+  display:inline-flex; align-items:center; gap:5px;
+  padding:3px 10px; border-radius:var(--r-full);
+  font-size:var(--fs-xs); font-weight:600; line-height:1.5;
+  white-space:nowrap;
+}
+
+/* ── Faset: netral, dibedakan lewat teksnya, bukan lewat warnanya ── */
+.b-plant,
+.b-cat,
+.b-nonmrp {
+  background:var(--surface-2); color:var(--text-2);
+  border:1px solid var(--border);
+}
+/* Jumlah item bahkan tak perlu jadi pil. Empat pil sebaris membuat
+   mata harus menyaring; ini cuma keterangan, jadi biarkan jadi teks. */
+.b-items {
+  background:transparent; border:1px solid transparent;
+  color:var(--muted); padding-left:2px; padding-right:2px;
+}
+/* Satu pengecualian: MRP = PR yang dilahirkan sistem, bukan orang.
+   Itu fakta yang dipakai approver untuk memilah cepat (dan punya
+   filternya sendiri), jadi boleh bertinta tipis. */
+.b-mrp { background:var(--info-soft); color:var(--info); border:1px solid transparent; }
+
+/* ── Status ── */
+/* "Pending" muncul di SETIAP kartu daftar pending — ia tidak
+   membedakan satu baris pun dari baris lain. Jadi dibuat tenang:
+   titiknya yang menyampaikan status, chip-nya tidak ikut berteriak. */
+.b-pending {
+  background:transparent; color:var(--text-2);
+  border:1px solid var(--border);
+}
+.b-pending::before {
+  content:""; width:6px; height:6px; border-radius:50%;
+  background:var(--warning); flex:none;
+}
+.b-app { background:var(--success-soft); color:var(--success); }
+.b-rej { background:var(--danger-soft);  color:var(--danger); }
+
+/* Status PO — sinyal berwarna kartu ini. Nilainya benar-benar
+   berbeda antar baris, jadi berhak atas warna. */
+.b-po-open    { background:var(--warning-soft); color:var(--warning); }
+.b-po-partial { background:var(--info-soft);    color:var(--info); }
+.b-po-done    { background:var(--success-soft); color:var(--success); }
+.b-po-del     { background:var(--surface-3);    color:var(--muted); }
+
+/* Umur (aging) — eskalasi bertingkat, bukan dua nada amber yang
+   bertabrakan. Dulu b-age-warn memakai amber yang sama persis dengan
+   b-po-open, sehingga "Belum PO" dan "9 hari" berdampingan sebagai
+   dua pil kembar yang artinya berbeda.
+     <7 hari   : diam
+     7-13 hari : chip netral, jarum jamnya saja yang menguning
+     >=14 hari : merah penuh — ini alarmnya, dan hanya ini. */
+.b-age      { background:var(--surface-3); color:var(--text-2); }
+.b-age .ico { color:var(--muted); }
+.b-age-warn {
+  background:var(--surface-2); color:var(--text-2);
+  border:1px solid var(--warning-soft);
+}
+.b-age-warn .ico { color:var(--warning); }
+.b-age-crit { background:var(--danger-soft); color:var(--danger); }
+.b-age-crit .ico { color:var(--danger); }
+
+/* ================================================================
+   SKELETON — menggantikan spinner "Loading...". Geometrinya meniru
+   kartu asli supaya tidak ada pergeseran layout saat data tiba.
+   ================================================================ */
+.skel {
+  position:relative; overflow:hidden;
+  background:var(--surface-3); border-radius:var(--r-sm);
+}
+.skel::after {
+  content:""; position:absolute; inset:0; transform:translateX(-100%);
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.8),transparent);
+  animation:shimmer 1.4s infinite;
+}
+@keyframes shimmer { 100% { transform:translateX(100%); } }
+
+.skel-card { pointer-events:none; }
+.skel-card:hover { transform:none; box-shadow:var(--sh-1); border-color:var(--border); }
+.skel-title   { height:24px; width:240px; }
+.skel-sub     { height:13px; width:170px; margin-top:var(--sp-2); }
+.skel-num     { height:19px; width:110px; }
+.skel-pill    { height:20px; border-radius:var(--r-full); }
+.skel-pill-a  { width:72px; }
+.skel-pill-b  { width:98px; }
+.skel-pill-c  { width:56px; }
+.skel-amt     { height:20px; width:120px; margin-left:auto; }
+.skel-amt-sub { height:10px; width:54px; margin:7px 0 0 auto; }
+.skel-lbl     { height:9px;  width:64px; margin-bottom:6px; }
+.skel-line    { height:13px; width:100%; }
+
+/* ================================================================
+   ACTION BAR — pagination dan aksi massal digabung dalam satu bar
+   tetap di bawah, selebar area konten (mengikuti .main). Menggantikan
+   FAB melayang + baris pagination yang terpisah di dalam alur.
+   ================================================================ */
+/* LAPIS 2 (kaca). Kartu terakhir kini terlihat samar lewat di bawah
+   bar, bukan terpotong mendadak — jadi jelas masih ada isi di bawahnya.
+   Bayangannya sengaja mengarah KE ATAS: bar ini duduk di dasar layar,
+   jadi cahayanya jatuh dari atas dan bayangannya melawan arah itu.
+   --sh-* semuanya berbias ke bawah, maka di sini ditulis eksplisit. */
+.actionbar {
+  position:fixed; left:var(--sidebar-w); right:0; bottom:0;
+  display:none; z-index:var(--z-fab);
+  background:var(--surface-glass);
+  -webkit-backdrop-filter:var(--glass);
+  backdrop-filter:var(--glass);
+  border-top:1px solid var(--border);
+  box-shadow:0 -1px 3px rgba(16,24,40,.04),
+             0 -10px 28px rgba(16,24,40,.07);
+  transition:left var(--dur) var(--ease);
+}
+.actionbar.show { display:block; }
+.actionbar-inner {
+  display:flex; align-items:center; gap:var(--sp-4);
+  padding:var(--sp-3) var(--sp-5); flex-wrap:wrap;
+}
+.actionbar-pager { min-width:0; }
+body.sb-collapsed .actionbar { left:0; }
+
+/* Kelompok aksi massal: hanya muncul untuk approver saat ada PR
+   terpilih. Kelas .fab/.fab.show dipertahankan agar konsisten dgn
+   state yang di-set renderList()/switchView(). */
+.fab {
+  display:none; align-items:center; gap:var(--sp-3); margin-left:auto;
+}
+.fab.show { display:flex; }
+.fab-info {
+  font-size:var(--fs-base); font-weight:600;
+  color:var(--text-2); white-space:nowrap; padding:0 var(--sp-1);
+}
+
+/* ================================================================
+   TOAST
+   ================================================================ */
+.toast {
+  position:fixed; top:calc(var(--header-h) + var(--sp-3)); right:var(--sp-5);
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:var(--r-md); padding:var(--sp-3) var(--sp-4);
+  box-shadow:var(--sh-3);
+  font-size:var(--fs-md); font-weight:600;
+  display:flex; align-items:center; gap:var(--sp-2);
+  z-index:var(--z-toast); max-width:min(420px,calc(100vw - 40px));
+  animation:slideIn var(--dur) var(--ease);
+}
+.toast-s { border-left:4px solid var(--success); color:var(--success); }
+.toast-e { border-left:4px solid var(--danger);  color:var(--danger); }
+@keyframes slideIn {
+  from { opacity:0; transform:translateX(16px); }
+  to   { opacity:1; transform:translateX(0); }
+}
+
+/* ================================================================
+   LOADING OVERLAY (aksi approve/reject — memblokir, disengaja)
+   ================================================================ */
+#lo {
+  position:fixed; inset:0; background:rgba(17,24,39,.45);
+  display:none; align-items:center; justify-content:center;
+  z-index:var(--z-loading);
+}
+#lo.show { display:flex; }
+.lo-box {
+  background:var(--surface); padding:var(--sp-6) var(--sp-8);
+  border-radius:var(--r-xl); text-align:center;
+  font-weight:600; font-size:var(--fs-md); color:var(--text-2);
+  box-shadow:var(--sh-4); min-width:230px;
+}
+.lo-spin {
+  width:34px; height:34px; margin:var(--sp-3) auto 0;
+  border:3px solid var(--surface-3);
+  border-top-color:var(--primary);
+  border-radius:50%; animation:spin .7s linear infinite;
+}
+.lo-spin-sm { width:20px; height:20px; border-width:2.5px; margin:0 auto; }
+@keyframes spin { to { transform:rotate(360deg); } }
+
+/* ================================================================
+   MODAL
+   ================================================================ */
+.modal {
+  display:none; position:fixed; inset:0;
+  background:rgba(17,24,39,.5); z-index:var(--z-modal);
+  align-items:center; justify-content:center; padding:var(--sp-4);
+}
+.modal.show { display:flex; }
+.modal-box {
+  background:var(--surface); border-radius:var(--r-xl);
+  padding:var(--sp-6); width:100%; max-width:480px;
+  max-height:88vh; overflow-y:auto; box-shadow:var(--sh-4);
+}
+.modal-box-text { max-width:580px; }
+.modal-title {
+  font-size:var(--fs-lg); font-weight:700; margin-bottom:var(--sp-2);
+  display:flex; align-items:center; gap:var(--sp-2);
+}
+.modal-desc { font-size:var(--fs-base); color:var(--muted); margin-bottom:var(--sp-4); }
+.modal-info, .modal-info-danger {
+  border-radius:var(--r-sm); padding:var(--sp-3) var(--sp-4);
+  font-size:var(--fs-base); color:var(--text-2);
+  margin-bottom:var(--sp-4); line-height:var(--lh-relaxed);
+}
+.modal-info        { background:var(--success-soft); border:1px solid #bbf7d0; }
+.modal-info-danger { background:var(--danger-soft);  border:1px solid #fecaca; }
+.modal-label { font-size:var(--fs-sm); font-weight:600; color:var(--text-2); margin-bottom:var(--sp-1); }
+.modal-opt { font-size:var(--fs-xs); color:var(--muted); font-weight:400; margin-left:var(--sp-1); }
+.modal-ta {
+  width:100%; border:1px solid var(--border); border-radius:var(--r-sm);
+  padding:10px var(--sp-3); font-family:inherit; font-size:var(--fs-base);
+  resize:vertical; min-height:80px; outline:none; margin-bottom:var(--sp-4);
+  color:var(--text); background:var(--surface);
+  transition:border-color var(--dur-fast) var(--ease), box-shadow var(--dur-fast) var(--ease);
+}
+.modal-ta:focus { border-color:var(--danger); box-shadow:0 0 0 3px var(--danger-soft); }
+.modal-footer { display:flex; gap:var(--sp-2); justify-content:flex-end; }
+
+/* ── Modal Teks Item ── */
+.item-text-meta { font-size:var(--fs-sm); color:var(--muted); margin-bottom:var(--sp-3); }
+.item-text-body {
+  background:var(--surface-2); border:1px solid var(--border);
+  border-radius:var(--r-sm); padding:var(--sp-3) var(--sp-4);
+  font-size:var(--fs-base); line-height:var(--lh-relaxed); color:var(--text-2);
+  white-space:pre-wrap; word-break:break-word;
+  max-height:50vh; overflow-y:auto; margin-bottom:var(--sp-4);
+}
+.item-text-empty { color:var(--muted); font-style:italic; }
+.wo-note { color:var(--muted); font-size:var(--fs-sm); font-style:italic; margin-bottom:var(--sp-2); }
+.wo-tbl { width:100%; border-collapse:collapse; font-size:var(--fs-sm); white-space:normal; }
+.wo-tbl th, .wo-tbl td {
+  border:1px solid var(--border); padding:6px 9px;
+  text-align:left; vertical-align:top;
+}
+.wo-tbl th { background:var(--surface); font-weight:600; color:var(--text-2); }
+
+/* ================================================================
+   DASHBOARD — halaman awal.
+
+   Disusun menurut SIAPA YANG HARUS BERTINDAK, bukan menurut jenis
+   angka: Antrean (Anda) -> Belum PO (Purchasing) -> Riwayat (selesai).
+
+   Aturan warnanya sama dengan sidebar dan kartu:
+     ink pekat = beban kerja        abu = data
+     biru      = tempat aksi        merah = HANYA yang benar-benar telat
+
+   Versi lama memakai empat tile berwarna (amber/hijau/merah/biru) di
+   atas tabel yang berisi angka yang sama persis — 26 angka berwarna
+   setara dalam satu layar. Sekarang tiap angka hidup di satu tempat.
+   ================================================================ */
+.dash { padding:var(--sp-6); max-width:1180px; }
+
+/* ── 1. HERO — tesis halaman ── */
+.dash-hero {
+  display:flex; align-items:center; gap:var(--sp-5); flex-wrap:wrap;
+  padding: 0 0 var(--sp-6);
+}
+/* Satu angka besar, DM Mono, seperti nominal di kartu PR: angka yang
+   bisa dibandingkan adalah data, bukan kalimat. */
+.dash-hero-num {
+  font-family:var(--font-mono);
+  font-size:64px; font-weight:500; line-height:1;
+  letter-spacing:-.04em; color:var(--text);
+  font-variant-numeric:tabular-nums; flex:none;
+}
+.dash-hero-txt { min-width:0; }
+.dash-hero-lbl {
+  font-size:var(--fs-xl); font-weight:700;
+  line-height:var(--lh-tight); color:var(--text);
+}
+.dash-hero-split { margin-top:var(--sp-1); font-size:var(--fs-base); color:var(--muted); }
+.dash-hero-split b {
+  color:var(--text-2); font-weight:700;
+  font-variant-numeric:tabular-nums;
+}
+
+/* ── Seksi berlabel ──
+   Eyebrow-nya menyatakan siapa yang harus bertindak. Itu hal yang
+   benar tentang isi seksinya, bukan judul hiasan. */
+.dash-sec + .dash-sec { margin-top:var(--sp-6); }
+.dash-sec-lbl {
+  font-size:var(--fs-xs); font-weight:700;
+  text-transform:uppercase; letter-spacing:.08em;
+  color:var(--muted); margin-bottom:var(--sp-3);
+}
+.dash-grid {
+  display:grid; grid-template-columns:1fr 1fr;
+  gap:var(--sp-4); align-items:start;
+}
+
+/* ── 2. ANTREAN ── */
+.dash-card {
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:var(--r-lg); box-shadow:var(--sh-1);
+  padding:var(--sp-4);
+}
+.dash-card-hdr {
+  display:flex; align-items:center; gap:var(--sp-3);
+  padding-bottom:var(--sp-3); margin-bottom:var(--sp-2);
+  border-bottom:1px solid var(--border);
+}
+.dash-plant-img {
+  width:36px; height:36px; border-radius:var(--r-sm);
+  object-fit:cover; flex:none;
+  box-shadow:0 0 0 1px var(--border-strong);
+}
+.dash-plant-id { min-width:0; flex:1; }
+.dash-plant-name { font-size:var(--fs-md); font-weight:700; line-height:1.2; }
+.dash-plant-meta {
+  font-size:var(--fs-sm); color:var(--muted);
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+/* Idiom yang sama dengan badge total di sidebar: ink = beban kerja. */
+.dash-plant-tot {
+  flex:none; font-size:var(--fs-xs); font-weight:700;
+  padding:2px 8px; border-radius:var(--r-full);
+  background:var(--text); color:#fff;
+  font-variant-numeric:tabular-nums;
+}
+
+.dash-cats { display:flex; flex-direction:column; }
+.dash-cat {
+  display:flex; align-items:center; gap:var(--sp-3);
+  width:100%; padding:10px var(--sp-2);
+  background:transparent; border:none; border-radius:var(--r-sm);
+  font-family:inherit; text-align:left; cursor:pointer;
+  color:var(--text-2);
+  transition:background var(--dur-fast) var(--ease),
+             color var(--dur-fast) var(--ease);
+}
+.dash-cat:hover { background:var(--surface-2); color:var(--text); }
+.dash-cat:focus-visible { outline:2px solid var(--primary); outline-offset:1px; }
+.dash-cat-ico {
+  width:30px; height:30px; border-radius:var(--r-sm); flex:none;
+  display:flex; align-items:center; justify-content:center;
+  background:var(--surface-3); color:var(--muted);
+  transition:background var(--dur-fast) var(--ease),
+             color var(--dur-fast) var(--ease);
+}
+.dash-cat:hover .dash-cat-ico { background:var(--primary-soft); color:var(--primary); }
+.dash-cat-name { flex:1; min-width:0; font-size:var(--fs-base); font-weight:600; }
+.dash-cat-val {
+  flex:none; font-size:var(--fs-md); font-weight:700; color:var(--text);
+  font-variant-numeric:tabular-nums;
+}
+.dash-cat-go { flex:none; color:var(--border-strong); }
+.dash-cat:hover .dash-cat-go { color:var(--muted); }
+/* Antrean kosong tetap ditampilkan — ketiadaannya juga informasi —
+   tapi diredupkan supaya tidak ikut menarik mata. */
+.dash-cat.is-empty { color:var(--muted); }
+.dash-cat.is-empty .dash-cat-val { color:var(--border-strong); font-weight:600; }
+
+/* ── 3. BELUM PO ──
+   PR yang sudah di-approve lalu menganggur menunggu Purchasing adalah
+   kegagalan proses. Seluruh blok ini DITANDAI MERAH SERAGAM supaya
+   tidak bisa dilewatkan — merahnya dipasang dengan idiom yang sama
+   persis seperti di kartu PR: garis kiri 3px lewat ::before (bukan
+   border-left, yang akan tertimpa shorthand border-color saat hover).
+
+   Yang membedakan gawat/tidaknya kini teksnya sendiri — "tertua 30
+   hari" vs "tertua 12 hari" — bukan lagi warnanya.
+
+   SATU pengecualian: kalau tidak ada satu pun PR yang tersisa, kartu
+   kembali netral. Menandai bahaya pada sesuatu yang justru sudah beres
+   itu berbohong, dan sekali warna berbohong ia berhenti dipercaya. */
+.dash-po {
+  position:relative; overflow:hidden;
+  display:flex; align-items:center; gap:var(--sp-3);
+  width:100%; padding:var(--sp-4);
+  background:var(--surface); border:1px solid var(--danger-soft);
+  border-radius:var(--r-lg); box-shadow:var(--sh-1);
+  font-family:inherit; text-align:left; cursor:pointer;
+  transition:border-color var(--dur-fast) var(--ease),
+             box-shadow var(--dur-fast) var(--ease);
+}
+.dash-po::before {
+  content:""; position:absolute; left:0; top:0; bottom:0;
+  width:3px; background:var(--danger);
+}
+.dash-po:hover { border-color:var(--danger); box-shadow:var(--sh-2); }
+.dash-po:focus-visible { outline:2px solid var(--danger); outline-offset:1px; }
+
+.dash-po-ico {
+  width:34px; height:34px; border-radius:var(--r-sm); flex:none;
+  display:flex; align-items:center; justify-content:center;
+  background:var(--danger-soft); color:var(--danger);
+}
+.dash-po-txt { flex:1; min-width:0; }
+.dash-po-main { display:block; font-size:var(--fs-base); color:var(--text-2); }
+.dash-po-main b {
+  font-size:var(--fs-md); font-weight:700; color:var(--danger);
+  font-variant-numeric:tabular-nums;
+}
+.dash-po-sub { display:block; margin-top:1px; font-size:var(--fs-sm); color:var(--muted); }
+.dash-age { color:var(--danger); font-weight:700; }
+
+/* Tidak ada sisa -> tidak ada yang perlu ditandai. */
+.dash-po.is-clear { border-color:var(--border); }
+.dash-po.is-clear::before { background:var(--border-strong); }
+.dash-po.is-clear:hover { border-color:var(--border-strong); }
+.dash-po.is-clear:focus-visible { outline-color:var(--primary); }
+.dash-po.is-clear .dash-po-ico { background:var(--surface-3); color:var(--muted); }
+.dash-po.is-clear .dash-po-main b { color:var(--text); }
+.dash-po.is-clear .dash-age { color:var(--muted); font-weight:600; }
+
+/* Placeholder selagi angka status PO dimuat progresif. */
+.dash-dot {
+  display:inline-block; width:22px; height:8px; border-radius:var(--r-full);
+  background:var(--surface-3); position:relative; overflow:hidden;
+}
+.dash-dot::after {
+  content:""; position:absolute; inset:0; transform:translateX(-100%);
+  background:linear-gradient(90deg,transparent,rgba(0,0,0,.08),transparent);
+  animation:shimmer 1.4s infinite;
+}
+
+/* ── 4. RIWAYAT ──
+   Arsip: sudah selesai, tidak menuntut apa pun. Sengaja mundur ke
+   belakang — angka abu, tanpa tile berwarna. Sama seperti blok
+   "Riwayat" di sidebar. */
+.dash-arc {
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:var(--r-lg); box-shadow:var(--sh-1);
+  padding:var(--sp-1) var(--sp-4);
+}
+.dash-arc-row {
+  display:flex; align-items:center; gap:var(--sp-2);
+  padding:var(--sp-2) 0;
+}
+.dash-arc-row + .dash-arc-row { border-top:1px solid var(--border); }
+.dash-arc-plant {
+  flex:1; min-width:0;
+  font-size:var(--fs-base); font-weight:600; color:var(--text-2);
+}
+.dash-arc-link {
+  background:transparent; border:none; cursor:pointer;
+  font-family:inherit; font-size:var(--fs-sm); color:var(--muted);
+  padding:4px var(--sp-2); border-radius:var(--r-sm);
+  transition:background var(--dur-fast) var(--ease),
+             color var(--dur-fast) var(--ease);
+}
+.dash-arc-link b {
+  font-weight:700; color:var(--text-2);
+  font-variant-numeric:tabular-nums;
+}
+.dash-arc-link:hover { background:var(--surface-2); color:var(--text); }
+.dash-arc-link:hover b { color:var(--text); }
+.dash-arc-link:focus-visible { outline:2px solid var(--primary); outline-offset:1px; }
+
+/* ================================================================
+   EMPTY
+   ================================================================ */
+.empty { text-align:center; padding:80px var(--sp-5); color:var(--muted); }
+.empty--inline { padding:56px var(--sp-5); }
+.empty-ico { color:var(--border-strong); margin-bottom:var(--sp-3); }
+.empty-txt { font-size:var(--fs-md); font-weight:500; }
+
+/* ================================================================
+   RESPONSIVE
+   ================================================================ */
+@media (max-width:1024px) {
+  .sidebar { transform:translateX(-100%); box-shadow:var(--sh-3); }
+  body.sb-mobile-open .sidebar { transform:translateX(0); }
+  body.sb-mobile-open .sb-backdrop { opacity:1; pointer-events:auto; }
+  .main { margin-left:0; }
+  .actionbar { left:0; }
+  .card-meta { grid-template-columns:repeat(2,1fr); }
+  .hdr-user-name { display:none; }
+  /* Dashboard menumpuk: Surabaya lalu Semarang. */
+  .dash-grid { grid-template-columns:1fr; }
+}
+@media (min-width:1025px) {
+  .sb-backdrop { display:none; }
+  body.sb-collapsed .sidebar { transform:translateX(-100%); }
+  body.sb-collapsed .main { margin-left:0; }
+}
+@media (max-width:640px) {
+  .card-top {
+    grid-template-columns:auto minmax(0,1fr) auto;
+    row-gap:var(--sp-2);
+  }
+  .card-amount { grid-column:1 / -1; text-align:left; padding-left:var(--card-indent); }
+  .card-amount-multi { align-items:flex-start; }
+  .card-top--nocb { grid-template-columns:minmax(0,1fr) auto; }
+
+  /* Bar membungkus jadi dua baris: pagination, lalu aksi selebar layar.
+     padding-bottom .main ikut naik agar kartu terakhir tetap terlihat. */
+  .main { padding-bottom:150px; }
+  .actionbar-inner { padding:var(--sp-2) var(--sp-3); gap:var(--sp-2); }
+  .actionbar-pager { width:100%; }
+  .pagination-bar { justify-content:center; }
+  .fab { width:100%; margin-left:0; }
+  .fab .btn { flex:1; }
+  .fab-info { flex:1 0 100%; text-align:center; }
+
+  .search-wrap input { width:100%; }
+  .search-wrap { flex:1; }
+
+  /* Header di ponsel: sembunyikan judul agar tidak berdesakan;
+     logo tetap jadi tombol kembali ke dashboard. */
+  .hdr-home-text { display:none; }
+
+  /* Dashboard di ponsel: hemat ruang. Angka hero dikecilkan supaya
+     tidak mendorong labelnya turun sendirian. */
+  .dash { padding:var(--sp-4); }
+  .dash-hero { gap:var(--sp-4); padding:var(--sp-2) 0 var(--sp-5); }
+  .dash-hero-num { font-size:48px; }
+  .dash-hero-lbl { font-size:var(--fs-lg); }
+  .dash-card-hdr .dash-plant-meta { white-space:normal; }
+}
+
+/* ================================================================
+   PREFERENSI GERAK — matikan seluruh animasi & transisi.
+   ================================================================ */
+@media (prefers-reduced-motion:reduce) {
+  *, *::before, *::after {
+    animation-duration:.001ms !important;
+    animation-iteration-count:1 !important;
+    transition-duration:.001ms !important;
+    scroll-behavior:auto !important;
+  }
+  .po-card:hover { transform:none; }
+  .skel::after { display:none; }
+}
+
+/* ================================================================
+   DASHBOARD (app-dashboard.js) — laporan saat index dibuka
+   ================================================================ */
+.dash { padding: var(--sp-5); max-width: 1100px; margin: 0 auto; }
+.dash-head { margin-bottom: var(--sp-5); }
+.dash-title { display:flex; align-items:center; gap:var(--sp-2);
+  font-size: var(--fs-2xl); font-weight: 700; color: var(--text); margin:0; }
+.dash-sub { color: var(--muted); font-size: var(--fs-sm); margin-top: var(--sp-1); }
+
+.dash-section-h { font-size: var(--fs-md); font-weight: 700; color: var(--text);
+  margin: var(--sp-6) 0 var(--sp-3); display:flex; align-items:center;
+  justify-content:space-between; flex-wrap:wrap; gap: var(--sp-2); }
+.dash-section-h:first-of-type { margin-top: var(--sp-2); }
+
+.dash-tiles { display:flex; flex-wrap:wrap; gap: var(--sp-3); margin-bottom: var(--sp-2); }
+.dash-tile { flex:1 1 160px; background: var(--surface); border:1px solid var(--border);
+  border-radius: var(--r-lg); padding: var(--sp-4); box-shadow: var(--sh-2); }
+.dash-tile-lg { flex:1 1 220px; background: var(--primary-soft);
+  border-color: var(--primary-border); }
+.dash-tile-num { font-size: var(--fs-2xl); font-weight: 800; color: var(--text);
+  line-height: 1.1; font-family: var(--font-mono); }
+.dash-tile-lg .dash-tile-num { color: var(--primary); }
+.dash-tile-lbl { color: var(--muted); font-size: var(--fs-sm); margin-top: var(--sp-1);
+  display:flex; align-items:center; gap:4px; }
+.dash-tile-rel .dash-tile-num { color: var(--success); }
+.dash-tile-rej .dash-tile-num { color: var(--danger); }
+
+.dash-range { font-weight: 400; font-size: var(--fs-sm); display:flex;
+  align-items:center; gap: var(--sp-3); color: var(--muted); }
+.dash-range input { font: inherit; padding:4px 8px; border:1px solid var(--border);
+  border-radius: 8px; background: var(--surface); color: var(--text); }
+
+.dash-plant-grid { display:grid; grid-template-columns: repeat(auto-fit,minmax(280px,1fr));
+  gap: var(--sp-3); }
+.dash-cat-card { background: var(--surface); border:1px solid var(--border);
+  border-radius: var(--r-lg); overflow:hidden; }
+.dash-cat-head { background: var(--surface-2); padding: var(--sp-3) var(--sp-4);
+  font-weight: 700; color: var(--text); border-bottom:1px solid var(--border); }
+.dash-cat-row { display:flex; align-items:center; justify-content:space-between;
+  padding: var(--sp-2) var(--sp-4); cursor:pointer; border-bottom:1px solid var(--border);
+  transition: background var(--dur-fast) var(--ease); }
+.dash-cat-row:last-child { border-bottom:none; }
+.dash-cat-row:hover { background: var(--surface-2); }
+.dash-cat-lbl { color: var(--text-2); font-size: var(--fs-sm); }
+.dash-cat-cnt { font-weight: 700; font-family: var(--font-mono); color: var(--text);
+  background: var(--surface-3); border-radius: var(--r-full); padding: 1px 10px;
+  min-width: 28px; text-align:center; }
+.dash-cat-empty, .dash-act-empty { padding: var(--sp-4); color: var(--muted);
+  font-size: var(--fs-sm); }
+
+.dash-act-scroll { overflow-x:auto; border:1px solid var(--border);
+  border-radius: var(--r-lg); }
+table.dash-act { width:100%; border-collapse:collapse; font-size: var(--fs-sm); }
+table.dash-act th { text-align:left; background: var(--surface-2); color: var(--muted);
+  font-weight: 600; padding: var(--sp-2) var(--sp-3); border-bottom:1px solid var(--border);
+  white-space:nowrap; }
+table.dash-act td { padding: var(--sp-2) var(--sp-3); border-bottom:1px solid var(--border);
+  color: var(--text-2); white-space:nowrap; }
+table.dash-act tr:last-child td { border-bottom:none; }
+table.dash-act .mono { font-family: var(--font-mono); color: var(--text); }
+.dash-b { display:inline-block; font-size: var(--fs-xs); font-weight: 700;
+  padding: 2px 9px; border-radius: var(--r-full); }
+.dash-b-rel { background: var(--success-soft); color: var(--success); }
+.dash-b-rej { background: var(--danger-soft); color: var(--danger); }
