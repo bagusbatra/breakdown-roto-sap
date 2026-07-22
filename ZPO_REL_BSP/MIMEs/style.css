@@ -1407,3 +1407,68 @@ body.sb-collapsed .actionbar { left:0; }
   .po-card:hover { transform:none; }
   .skel::after { display:none; }
 }
+
+/* ================================================================
+   DASHBOARD (app-dashboard.js) — laporan saat index dibuka
+   ================================================================ */
+.dash { padding: var(--sp-5); max-width: 1100px; margin: 0 auto; }
+.dash-head { margin-bottom: var(--sp-5); }
+.dash-title { display:flex; align-items:center; gap:var(--sp-2);
+  font-size: var(--fs-2xl); font-weight: 700; color: var(--text); margin:0; }
+.dash-sub { color: var(--muted); font-size: var(--fs-sm); margin-top: var(--sp-1); }
+
+.dash-section-h { font-size: var(--fs-md); font-weight: 700; color: var(--text);
+  margin: var(--sp-6) 0 var(--sp-3); display:flex; align-items:center;
+  justify-content:space-between; flex-wrap:wrap; gap: var(--sp-2); }
+.dash-section-h:first-of-type { margin-top: var(--sp-2); }
+
+.dash-tiles { display:flex; flex-wrap:wrap; gap: var(--sp-3); margin-bottom: var(--sp-2); }
+.dash-tile { flex:1 1 160px; background: var(--surface); border:1px solid var(--border);
+  border-radius: var(--r-lg); padding: var(--sp-4); box-shadow: var(--sh-2); }
+.dash-tile-lg { flex:1 1 220px; background: var(--primary-soft);
+  border-color: var(--primary-border); }
+.dash-tile-num { font-size: var(--fs-2xl); font-weight: 800; color: var(--text);
+  line-height: 1.1; font-family: var(--font-mono); }
+.dash-tile-lg .dash-tile-num { color: var(--primary); }
+.dash-tile-lbl { color: var(--muted); font-size: var(--fs-sm); margin-top: var(--sp-1);
+  display:flex; align-items:center; gap:4px; }
+.dash-tile-rel .dash-tile-num { color: var(--success); }
+.dash-tile-rej .dash-tile-num { color: var(--danger); }
+
+.dash-range { font-weight: 400; font-size: var(--fs-sm); display:flex;
+  align-items:center; gap: var(--sp-3); color: var(--muted); }
+.dash-range input { font: inherit; padding:4px 8px; border:1px solid var(--border);
+  border-radius: 8px; background: var(--surface); color: var(--text); }
+
+.dash-plant-grid { display:grid; grid-template-columns: repeat(auto-fit,minmax(280px,1fr));
+  gap: var(--sp-3); }
+.dash-cat-card { background: var(--surface); border:1px solid var(--border);
+  border-radius: var(--r-lg); overflow:hidden; }
+.dash-cat-head { background: var(--surface-2); padding: var(--sp-3) var(--sp-4);
+  font-weight: 700; color: var(--text); border-bottom:1px solid var(--border); }
+.dash-cat-row { display:flex; align-items:center; justify-content:space-between;
+  padding: var(--sp-2) var(--sp-4); cursor:pointer; border-bottom:1px solid var(--border);
+  transition: background var(--dur-fast) var(--ease); }
+.dash-cat-row:last-child { border-bottom:none; }
+.dash-cat-row:hover { background: var(--surface-2); }
+.dash-cat-lbl { color: var(--text-2); font-size: var(--fs-sm); }
+.dash-cat-cnt { font-weight: 700; font-family: var(--font-mono); color: var(--text);
+  background: var(--surface-3); border-radius: var(--r-full); padding: 1px 10px;
+  min-width: 28px; text-align:center; }
+.dash-cat-empty, .dash-act-empty { padding: var(--sp-4); color: var(--muted);
+  font-size: var(--fs-sm); }
+
+.dash-act-scroll { overflow-x:auto; border:1px solid var(--border);
+  border-radius: var(--r-lg); }
+table.dash-act { width:100%; border-collapse:collapse; font-size: var(--fs-sm); }
+table.dash-act th { text-align:left; background: var(--surface-2); color: var(--muted);
+  font-weight: 600; padding: var(--sp-2) var(--sp-3); border-bottom:1px solid var(--border);
+  white-space:nowrap; }
+table.dash-act td { padding: var(--sp-2) var(--sp-3); border-bottom:1px solid var(--border);
+  color: var(--text-2); white-space:nowrap; }
+table.dash-act tr:last-child td { border-bottom:none; }
+table.dash-act .mono { font-family: var(--font-mono); color: var(--text); }
+.dash-b { display:inline-block; font-size: var(--fs-xs); font-weight: 700;
+  padding: 2px 9px; border-radius: var(--r-full); }
+.dash-b-rel { background: var(--success-soft); color: var(--success); }
+.dash-b-rej { background: var(--danger-soft); color: var(--danger); }

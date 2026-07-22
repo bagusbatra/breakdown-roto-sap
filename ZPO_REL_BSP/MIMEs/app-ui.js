@@ -497,9 +497,11 @@ function init() {
   /* Boot: hanya tarik HITUNGAN badge (ringan) — bukan data list penuh.
      loadSidebarData() -> GET_SIDEBAR (pending), fetchHistCounts() ->
      GET_HISTORY_COUNT (history). Data list plant baru ditarik saat user
-     klik (switchView->fetchList). Landing dipanggil di loadSidebarData. */
+     klik (switchView->fetchList). */
   loadSidebarData();
   fetchHistCounts();
+  /* Halaman awal = dashboard laporan (app-dashboard.js). */
+  showDashboard();
 }
 
 /* ================================================================
@@ -523,7 +525,6 @@ function loadSidebarData() {
     sbCounts.hist_rej[w] = normalizeCatCounts(null,w);
   });
   renderSidebar();
-  landing();
   /* Badge count PENDING selalu tampil sejak boot: svc.htm GET_SIDEBAR
      mengembalikan hitungan (per grup-plant + bsart) dgn kriteria sama
      seperti GET_LIST — ringan (hanya angka, tanpa data list penuh). */
@@ -541,6 +542,10 @@ function loadSidebarData() {
       sbCounts.pending[w] = normalizeCatCounts(raw, w);
     });
     renderSidebar();
+    /* Jika dashboard sedang tampil, segarkan angka pending-nya. */
+    if (curMode === 'dashboard' && typeof dashRenderPending === 'function') {
+      dashRenderPending();
+    }
   });
 }
 
@@ -570,12 +575,10 @@ function showDashboard() {
   curPlant        = '';
   curCategory     = '';
   curBsart        = '';
-  curMode         = '';
+  curMode         = 'dashboard';
   selEbelns       = {};
   filterPanelOpen = false;
-  renderSidebar();
-  closeSidebarMobile();
-  landing();
+  renderDashboard();   /* app-dashboard.js — dashboard laporan */
 }
 
 /* Ambil object {JASA:1,BAHAN:2,...} untuk satu plant, dengan

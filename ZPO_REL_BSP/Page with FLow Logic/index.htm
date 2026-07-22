@@ -9,7 +9,7 @@ DATA: lv_uname2    TYPE syuname,
 * Versi aset statis. Naikkan nilainya setiap kali style.css atau
 * salah satu app-*.js diubah, supaya browser klien tidak menyajikan
 * file lama dari cache. Cukup diubah di SATU tempat ini.
-DATA: lv_ver TYPE string VALUE '20260722f'.
+DATA: lv_ver TYPE string VALUE '20260722g'.
 
 lv_uname2    = sy-uname.
 lv_username2 = sy-uname.
@@ -316,6 +316,7 @@ ENDIF.
 <script src="app-ui.js?v=<%=lv_ver%>"></script>
 <script src="app-list.js?v=<%=lv_ver%>"></script>
 <script src="app-history.js?v=<%=lv_ver%>"></script>
+<script src="app-dashboard.js?v=<%=lv_ver%>"></script>
 <script src="app-detail.js?v=<%=lv_ver%>"></script>
 <script src="app-action.js?v=<%=lv_ver%>"></script>
 
