@@ -483,9 +483,24 @@ function showItemTextModal(ebeln) {
 /* ================================================================
    INIT
    ================================================================ */
+/* Boot: fetchList() (app-list.js, Task 7) mengambil GET_LIST utk
+   KEDUA plant sekaligus (server tidak memfilter plant/potype, lihat
+   komentar header app-list.js), sehingga satu panggilan ini
+   membangun ALL_DATA1/ALL_DATA2 -> buildSbCounts() -> renderSidebar()
+   -> renderList() (badge pending + list awal langsung terisi,
+   walau curPlant/curCategory masih '' saat boot; getFiltered()
+   difilter user via klik sidebar seperti biasa). fetchHistCounts()
+   (app-history.js, Task 8) dipanggil terpisah krn GET_HISTORY_COUNT
+   endpoint sendiri (bukan bagian GET_LIST) — mengisi badge
+   sbCounts.hist_app/hist_rej lalu renderSidebar() lagi. Kedua fungsi
+   forward-ref aman: init() (lewat app-action.js) baru jalan setelah
+   SEMUA <script> (termasuk app-list.js/app-history.js) selesai
+   dimuat (lihat urutan <script> index.htm). */
 function init() {
   updateSidebarAria();
   loadSidebarData();
+  fetchList();
+  fetchHistCounts();
 }
 
 /* ================================================================
@@ -515,10 +530,14 @@ function loadSidebarData() {
 /* Halaman awal. ZPR menampilkan dashboard agregat (app-dashboard.js)
    atau membuka PR dari deep-link notifikasi; keduanya di luar scope
    ZPO (lihat header file ini). Di sini landing cukup menampilkan
-   pesan kosong yang mengarahkan user memilih menu sidebar — tidak
-   memanggil renderList()/renderHistContent() secara otomatis supaya
-   Task 5 tidak perlu menebak plant/kategori default mana yang
-   "benar" (keputusan produk, bukan keputusan port UI). */
+   pesan kosong yang mengarahkan user memilih menu sidebar — landing()
+   sendiri tidak memanggil renderList()/renderHistContent() (tidak
+   menebak plant/kategori default mana yang "benar", keputusan
+   produk, bukan keputusan port UI). Sejak Task 12, init() memanggil
+   fetchList() tepat setelah loadSidebarData(), jadi pesan placeholder
+   ini langsung tertimpa showSkeleton()/renderList() pada boot —
+   landing() efektif hanya terlihat lagi lewat showDashboard() (klik
+   logo/judul, reset eksplisit ke keadaan awal). */
 function landing() {
   showEmpty('Pilih plant dan kategori PO pada sidebar untuk memulai.');
 }
@@ -677,11 +696,18 @@ function switchView(plant,category,mode) {
   closeSidebarMobile();
   showSkeleton();
 
-  /* renderList()/renderHistContent() = forward-ref ke Task 7/8.
-     Aman karena init() (satu-satunya jalur switchView bisa terpanggil
+  /* fetchList()/renderHistContent() = forward-ref ke Task 7/8. Aman
+     karena init() (satu-satunya jalur switchView bisa terpanggil
      otomatis) baru jalan setelah semua <script> termuat; di luar itu
-     switchView hanya dipicu klik user, jauh setelah boot selesai. */
-  if      (mode==='pending')  renderList();
+     switchView hanya dipicu klik user, jauh setelah boot selesai.
+     Mode 'pending' HARUS memanggil fetchList() (bukan renderList()
+     langsung) — renderList() hanya membaca window.ALL_DATA1 yang
+     sudah ada di memori; ia tidak melakukan fetch sendiri, jadi
+     dipanggil langsung di sini list akan selalu kosong sampai ada
+     fetchList() lain (mis. dari init()) mengisi ALL_DATA1 lebih
+     dulu. fetchList() sendiri yang memanggil renderList() setelah
+     GET_LIST selesai (lihat app-list.js). */
+  if      (mode==='pending')  fetchList();
   else if (mode==='hist_app') renderHistContent();
   else if (mode==='hist_rej') renderHistContent();
 }
